@@ -38,6 +38,19 @@ export async function listCredentials(): Promise<
   });
 }
 
+/**
+ * The stored institution id alone, without decrypting the blob, so a caller can
+ * refuse a row naming an unregistered institution before any secret is in memory.
+ */
+export async function getCredentialBankType(id: string): Promise<string> {
+  const row = await db.query.bankCredentials.findFirst({
+    where: eq(bankCredentials.id, id),
+    columns: { bankType: true },
+  });
+  if (!row) throw new CredentialNotFoundError(id);
+  return row.bankType;
+}
+
 export async function getDecryptedCredentials(
   id: string,
 ): Promise<{ bankType: BankType; credentials: Record<string, string> }> {

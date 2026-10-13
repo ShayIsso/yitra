@@ -4,16 +4,18 @@ import { enabledBankEntries, isSecretFieldKind } from "@/lib/bank-registry";
 import { CredentialNotFoundError } from "@/lib/credentials/errors";
 
 vi.mock("@/lib/credentials", () => ({
+  getCredentialBankType: vi.fn(),
   getDecryptedCredentials: vi.fn(),
 }));
 
-import { getDecryptedCredentials } from "@/lib/credentials";
+import { getCredentialBankType, getDecryptedCredentials } from "@/lib/credentials";
 import { GET } from "../route";
 
 const ROW_ID = "3f8a2b1c-4d5e-4f6a-8b7c-9d0e1f2a3b4c";
 const SYNTHETIC_SECRET = "synthetic-secret-value";
 
 async function getPrefill(stored: { bankType: string; credentials: Record<string, string> }) {
+  vi.mocked(getCredentialBankType).mockResolvedValue(stored.bankType);
   vi.mocked(getDecryptedCredentials).mockResolvedValue(
     stored as Awaited<ReturnType<typeof getDecryptedCredentials>>,
   );
@@ -76,8 +78,17 @@ describe("GET /api/credentials/:id", () => {
     expect(JSON.parse(text).safeFields).toEqual({});
   });
 
+  it("never decrypts a row whose institution is no longer registered", async () => {
+    await getPrefill({
+      bankType: "retiredInstitution",
+      credentials: { username: "sample-user", password: SYNTHETIC_SECRET },
+    });
+
+    expect(getDecryptedCredentials).not.toHaveBeenCalled();
+  });
+
   it("answers 404 without detail when the credential does not exist", async () => {
-    vi.mocked(getDecryptedCredentials).mockRejectedValue(new CredentialNotFoundError(ROW_ID));
+    vi.mocked(getCredentialBankType).mockRejectedValue(new CredentialNotFoundError(ROW_ID));
 
     const res = await GET(new NextRequest(`http://localhost/api/credentials/${ROW_ID}`), {
       params: Promise.resolve({ id: ROW_ID }),
