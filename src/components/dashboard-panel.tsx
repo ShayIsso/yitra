@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BankBadge } from "@/components/bank-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
@@ -52,12 +53,6 @@ const HEBREW_MONTHS = [
   "נובמבר",
   "דצמבר",
 ];
-
-const BANK_LABELS: Record<string, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "ויזה כאל",
-};
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -494,9 +489,11 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
                           </p>
                         </div>
                         <div className="text-left">
-                          <Badge variant="outline" className="mb-1 text-xs">
-                            {BANK_LABELS[acc.bankType] ?? acc.bankType}
-                          </Badge>
+                          <BankBadge
+                            bankType={acc.bankType}
+                            variant="outline"
+                            className="mb-1 text-xs"
+                          />
                           {acc.balance !== null ? (
                             <Amount
                               amount={acc.balance}

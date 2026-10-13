@@ -5,8 +5,10 @@ import { Check, X, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BankBadge } from "@/components/bank-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/empty-state";
+import { bankLabel } from "@/lib/bank-registry";
 import {
   approveReconciliationAction,
   rejectReconciliationAction,
@@ -18,7 +20,7 @@ import {
 
 type InboxMember = {
   id: string;
-  bankType: "discount" | "max" | "visaCal";
+  bankType: string;
   credentialDisplayName: string;
   date: string;
   description: string;
@@ -38,12 +40,6 @@ type Props = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const BANK_LABELS: Record<string, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "ויזה כאל",
-};
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("he-IL", {
@@ -96,10 +92,10 @@ function GroupSummary({ members }: { members: InboxMember[] }) {
     return (
       <p className="text-muted-foreground text-sm">
         <span className="text-foreground font-medium">{formatCurrency(a.chargedAmount)}</span>
-        {` ב${BANK_LABELS[a.bankType] ?? a.bankType}`}
+        {` ב${bankLabel(a.bankType)}`}
         <span className="text-muted-foreground"> &#8596; </span>
         <span className="text-foreground font-medium">{formatCurrency(b.chargedAmount)}</span>
-        {` ב${BANK_LABELS[b.bankType] ?? b.bankType}`}
+        {` ב${bankLabel(b.bankType)}`}
         {` (${formatDate(a.date)}). אשר?`}
       </p>
     );
@@ -199,9 +195,7 @@ function GroupCard({
                     {member.categoryName}
                   </Badge>
                 )}
-                <Badge variant="secondary" className="text-xs">
-                  {BANK_LABELS[member.bankType] ?? member.bankType}
-                </Badge>
+                <BankBadge bankType={member.bankType} className="text-xs" />
                 <span
                   className={`text-xs font-semibold tabular-nums ${
                     member.chargedAmount >= 0 ? "text-pos" : "text-neg"
