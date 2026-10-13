@@ -5,7 +5,7 @@ import { CheckCircle2, Circle } from "lucide-react";
 // Not the module's index: its DB-backed exports must not enter a client bundle.
 import {
   deriveOnboardingPath,
-  hasPendingOnboardingStep,
+  shouldShowOnboardingPath,
   type OnboardingPathFacts,
   type OnboardingPathStepId,
 } from "@/lib/onboarding/path";
@@ -24,7 +24,7 @@ const STEP_DEFS: Record<OnboardingPathStepId, { label: string; href: string }> =
 export function OnboardingPath({ facts }: OnboardingPathProps) {
   if (facts === null) return null;
   const steps = deriveOnboardingPath(facts);
-  if (!hasPendingOnboardingStep(steps)) return null;
+  if (!shouldShowOnboardingPath(steps)) return null;
 
   return (
     <section className="border-border rounded-lg border px-4 py-3" aria-label="השלמת ההגדרה">

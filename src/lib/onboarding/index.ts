@@ -30,7 +30,7 @@ export { readSetupState, readLoginView, finishOnboarding, setInitialPassword } f
 export {
   ONBOARDING_PATH_STEPS,
   deriveOnboardingPath,
-  hasPendingOnboardingStep,
+  shouldShowOnboardingPath,
   type OnboardingPathFacts,
   type OnboardingPathStep,
   type OnboardingPathStepId,

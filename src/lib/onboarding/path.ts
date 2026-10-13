@@ -18,16 +18,22 @@ export type OnboardingPathFacts = {
  * Pure derivation (epic #248 §12): each step is re-read from live state, so
  * one that stops being true — the only institution deleted — un-ticks itself.
  * No latch: that would need storage, and a stored "done" can't un-tick.
+ * `review` can't be done before anything was imported.
  */
 export function deriveOnboardingPath(facts: OnboardingPathFacts): OnboardingPathStep[] {
   const done: Record<OnboardingPathStepId, boolean> = {
     connect: facts.hasCredential,
     "first-sync": facts.hasSuccessfulSync,
-    review: facts.uncategorizedCount === 0,
+    review: facts.hasSuccessfulSync && facts.uncategorizedCount === 0,
   };
   return ONBOARDING_PATH_STEPS.map((id) => ({ id, status: done[id] ? "done" : "pending" }));
 }
 
-export function hasPendingOnboardingStep(steps: OnboardingPathStep[]): boolean {
-  return steps.some((step) => step.status === "pending");
+/**
+ * Visibility keys on the first two steps only: an uncategorized backlog is
+ * steady state after any sync and belongs to the attention counters, so it
+ * must not keep a first-run block on the dashboard forever.
+ */
+export function shouldShowOnboardingPath(steps: OnboardingPathStep[]): boolean {
+  return steps.some((step) => step.id !== "review" && step.status === "pending");
 }
