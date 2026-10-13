@@ -52,6 +52,17 @@ type Credential = {
 };
 
 /**
+ * A credential whose institution is still registered. Only these can be
+ * edited: an unregistered institution has no field set to edit against, so its
+ * row offers delete only.
+ */
+type EditableCredential = Credential & { bankType: BankType };
+
+function isEditable(cred: Credential): cred is EditableCredential {
+  return isBankType(cred.bankType);
+}
+
+/**
  * Superset of both per-bank field shapes so a single RHF instance backs the
  * form; the module-owned discriminated-union schema validates only the
  * selected bank's fields.
@@ -125,8 +136,7 @@ export function CredentialsSection() {
     setFormOpen(true);
   }
 
-  async function openEdit(cred: Credential) {
-    if (!isBankType(cred.bankType)) return;
+  async function openEdit(cred: EditableCredential) {
     editModeRef.current = true;
     prefillRef.current = EMPTY_CREDENTIAL_FIELDS;
     setEditing(cred);
@@ -273,8 +283,7 @@ export function CredentialsSection() {
                   <span className="text-sm font-medium">{cred.displayName}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {/* An unregistered institution has no field set to edit against; it can only be deleted. */}
-                  {isBankType(cred.bankType) && (
+                  {isEditable(cred) && (
                     <Button variant="ghost" size="icon-sm" onClick={() => openEdit(cred)}>
                       <Pencil />
                       <span className="sr-only">ערוך</span>
