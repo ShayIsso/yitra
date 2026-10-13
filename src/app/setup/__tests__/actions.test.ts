@@ -67,8 +67,17 @@ describe("setInitialPasswordAction", () => {
     vi.mocked(setInitialPassword).mockResolvedValue("environment-override");
     const result = await setInitialPasswordAction(VALID);
 
-    expect(result.error).toContain("APP_PASSWORD");
+    expect(result.error).toBeTruthy();
     expect(establishSession).not.toHaveBeenCalled();
+  });
+
+  it("refuses identically whether or not the override is set, so an anonymous caller learns nothing", async () => {
+    vi.mocked(setInitialPassword).mockResolvedValueOnce("environment-override");
+    const override = await setInitialPasswordAction(VALID);
+    vi.mocked(setInitialPassword).mockResolvedValueOnce("already-set");
+    const stored = await setInitialPasswordAction(VALID);
+
+    expect(override).toEqual(stored);
   });
 
   it("never echoes the submitted password back", async () => {

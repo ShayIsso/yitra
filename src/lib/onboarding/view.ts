@@ -1,4 +1,4 @@
-import type { PasswordSource } from "@/lib/auth";
+import { signInUrl, type PasswordSource } from "@/lib/auth";
 import type { SetupStep } from "./steps";
 
 export type SetupState = {
@@ -19,7 +19,6 @@ export type SetupView =
   | { readonly kind: "step"; readonly step: SetupStep };
 
 const FIRST_STEP_AFTER_PASSWORD: SetupStep = "categories";
-const SIGN_IN_THEN_SETUP = `/login?next=${encodeURIComponent("/setup")}`;
 
 /**
  * What `/setup` shows. The order of the checks is the security model:
@@ -31,7 +30,7 @@ const SIGN_IN_THEN_SETUP = `/login?next=${encodeURIComponent("/setup")}`;
 export function resolveSetupView(state: SetupState, request: SetupRequest): SetupView {
   if (state.completed) return { kind: "redirect", to: "/" };
   if (state.passwordSource === "none") return { kind: "step", step: "password" };
-  if (!state.hasSession) return { kind: "redirect", to: SIGN_IN_THEN_SETUP };
+  if (!state.hasSession) return { kind: "redirect", to: signInUrl("/setup") };
 
   const resumeStep = request.resumeStep === "password" ? null : request.resumeStep;
   return { kind: "step", step: request.requestedStep ?? resumeStep ?? FIRST_STEP_AFTER_PASSWORD };

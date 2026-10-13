@@ -80,5 +80,10 @@ export async function hasValidSession(): Promise<boolean> {
  */
 export async function requireSession(returnTo?: "/setup"): Promise<void> {
   if (await hasValidSession()) return;
-  redirect(returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : "/login");
+  redirect(signInUrl(returnTo));
+}
+
+/** `/login`, optionally asking it to send the visitor back afterwards. */
+export function signInUrl(returnTo?: "/setup"): string {
+  return returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : "/login";
 }

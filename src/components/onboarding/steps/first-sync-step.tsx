@@ -2,15 +2,15 @@
 
 import { StepFooter } from "../step-footer";
 import { StepPlaceholder } from "../step-placeholder";
-import type { SetupStepProps } from "../step-navigation";
+import type { SetupStepProps, StepMeta } from "../step-navigation";
 
-/**
- * Slot owned by #262: runs the real first sync on the existing SSE stream
- * (epic #248 §10). The last step — `navigation.advance` completes onboarding
- * and enters the app. Change only this file's body; the export name and props
- * are fixed by the frame. Writes go through a guarded Server Action (see
- * `../step-navigation.ts`).
- */
+/** Slot owned by #262: the real first sync on the existing SSE stream (epic #248 §10); the last step, so `navigation.advance` completes onboarding. Contract: `../step-navigation.ts`. */
+export const firstSyncStepMeta: StepMeta = {
+  label: "סנכרון",
+  title: "סנכרון ראשון",
+  description: "נמשוך את התנועות מהחשבון שחיברתם ונציג את ההתקדמות בזמן אמת.",
+};
+
 export function FirstSyncStep({ navigation }: SetupStepProps) {
   return (
     <div className="flex flex-col gap-6">

@@ -2,13 +2,15 @@
 
 import { StepFooter } from "../step-footer";
 import { StepPlaceholder } from "../step-placeholder";
-import type { SetupStepProps } from "../step-navigation";
+import type { SetupStepProps, StepMeta } from "../step-navigation";
 
-/**
- * Slot owned by #259: shows the seeded taxonomy, read-only (epic #248 §10).
- * Change only this file's body; the export name and props are fixed by the
- * frame. Writes go through a guarded Server Action (see `../step-navigation.ts`).
- */
+/** Slot owned by #259: the seeded taxonomy, shown read-only (epic #248 §10). Contract: `../step-navigation.ts`. */
+export const categoriesStepMeta: StepMeta = {
+  label: "קטגוריות",
+  title: "הקטגוריות שלכם",
+  description: "יצרנו רשימת קטגוריות התחלתית לסיווג התנועות. אפשר לשנות אותה בכל עת בהגדרות.",
+};
+
 export function CategoriesStep({ navigation }: SetupStepProps) {
   return (
     <div className="flex flex-col gap-6">

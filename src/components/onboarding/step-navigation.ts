@@ -1,8 +1,9 @@
 /**
  * The contract between the wizard frame and a step body (#258's slot carving).
  * Each later step (#259–#262) owns exactly one file under `./steps/`, exporting
- * one component that takes `SetupStepProps`; the frame owns everything else —
- * order, progress, titles, and where these callbacks lead.
+ * one component that takes `SetupStepProps` and one `StepMeta` with its copy;
+ * the frame owns everything else — order, progress, and where these callbacks
+ * lead. A slot changes only its own file.
  *
  * Step bodies are client components. A step that needs to write must do it
  * through a Server Action whose first statement is
@@ -28,4 +29,12 @@ export type StepNavigation = {
 
 export type SetupStepProps = {
   readonly navigation: StepNavigation;
+};
+
+/** A step's copy, rendered by the frame around the step body. */
+export type StepMeta = {
+  /** Short label for the progress indicator. */
+  readonly label: string;
+  readonly title: string;
+  readonly description: string;
 };

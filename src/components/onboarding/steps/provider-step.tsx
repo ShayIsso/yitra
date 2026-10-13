@@ -2,14 +2,16 @@
 
 import { StepFooter } from "../step-footer";
 import { StepPlaceholder } from "../step-placeholder";
-import type { SetupStepProps } from "../step-navigation";
+import type { SetupStepProps, StepMeta } from "../step-navigation";
 
-/**
- * Slot owned by #261: picks the categorization provider, defaulting to `off`
- * (ADR-0014 §3). Change only this file's body; the export name and props are
- * fixed by the frame. Writes go through a guarded Server Action (see
- * `../step-navigation.ts`).
- */
+/** Slot owned by #261: the categorization provider, defaulting to `off` (ADR-0014 §3). Contract: `../step-navigation.ts`. */
+export const providerStepMeta: StepMeta = {
+  label: "סיווג",
+  title: "סיווג אוטומטי של תנועות",
+  description:
+    "בחרו אם לסווג תנועות באופן אוטומטי. כברירת מחדל הסיווג כבוי, ושום מידע לא יוצא מהמחשב.",
+};
+
 export function ProviderStep({ navigation }: SetupStepProps) {
   return (
     <div className="flex flex-col gap-6">
