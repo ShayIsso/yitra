@@ -67,9 +67,10 @@ export type AccountBalance = {
   bankType: BankType;
   displayName: string;
   /**
-   * Only set for card accounts: the window date carrying the largest absolute
-   * next-debit charge. Null when there is no upcoming debit to estimate. Always
-   * null/absent for a bank account (scraper-truth balance).
+   * Only set for accounts at a card-issuing institution: the window date
+   * carrying the largest absolute next-debit charge. Null when there is no
+   * upcoming debit to estimate. Always null/absent for an account at a bank
+   * institution (scraper-truth balance).
    */
   nextDebitDate?: string | null;
 };
