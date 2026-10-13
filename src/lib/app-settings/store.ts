@@ -1,4 +1,4 @@
-import { isNull } from "drizzle-orm";
+import { and, isNull } from "drizzle-orm";
 import type { AiProviderKind } from "@/lib/ai-categorization";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { projectAppSettings, type AppSettings } from "./settings";
@@ -11,7 +11,19 @@ export type CategorizationSelection = {
 
 export type AppSettingsStore = {
   read(): Promise<AppSettings>;
-  setAppPasswordHash(hash: string): Promise<void>;
+  /**
+   * Stores the first app-password hash, and reports whether this call is the
+   * one that did it. `false` means a hash was already stored or onboarding was
+   * already complete. The write is conditioned on both in the same statement,
+   * because its caller (`/setup`'s password step) runs without a session: an
+   * unconditional writer there would let anyone who can reach the port reset
+   * the password for as long as the wizard is open (ADR-0014 §4).
+   *
+   * There is deliberately no unconditional setter. Changing an existing
+   * password is a different operation — authenticated, and proving the current
+   * password — and belongs to whatever feature introduces it.
+   */
+  claimAppPassword(hash: string): Promise<boolean>;
   /** Reads the bcrypt hash. The only path by which it leaves the store. */
   readAppPasswordHash(): Promise<string | null>;
   /**
@@ -68,10 +80,50 @@ export function buildCompleteOnboardingWrite(
     .returning({ id: appSettings.id });
 }
 
-export function makeDrizzleAppSettingsStore(): AppSettingsStore {
+/**
+ * The write behind `claimAppPassword`, built separately from its execution for
+ * the same reason as `buildCompleteOnboardingWrite`: the predicate is invisible
+ * to a Store fake, and `setWhere` (not the deprecated `where`) is what places it
+ * on the UPDATE rather than on the conflict target.
+ */
+export function buildClaimAppPasswordWrite(
+  { db, appSettings }: Connection,
+  hash: string,
+  now: Date,
+) {
+  return db
+    .insert(appSettings)
+    .values({ id: SINGLETON_ID, appPasswordHash: hash, updatedAt: now })
+    .onConflictDoUpdate({
+      target: appSettings.id,
+      set: { appPasswordHash: hash, updatedAt: now },
+      setWhere: and(isNull(appSettings.appPasswordHash), isNull(appSettings.onboardingCompletedAt)),
+    })
+    .returning({ id: appSettings.id });
+}
+
+/**
+ * Thrown in place of the driver's error when the claim's write fails. Drizzle's
+ * `DrizzleQueryError` carries the statement's bound values — the bcrypt hash —
+ * in its message and `params`, and Next prints an uncaught action error to
+ * stdout, so any database failure would log the hash. This replacement holds
+ * no query, no params and no `cause`; the underlying failure is deliberately
+ * dropped rather than chained.
+ */
+export class AppPasswordWriteError extends Error {
+  constructor() {
+    super("Storing the app password failed");
+    this.name = "AppPasswordWriteError";
+  }
+}
+
+/** `open` is the seam for tests that need a failing connection; production uses the barrel. */
+export function makeDrizzleAppSettingsStore(
+  open: () => Promise<Connection> = connect,
+): AppSettingsStore {
   return {
     async read(): Promise<AppSettings> {
-      const { db, appSettings } = await connect();
+      const { db, appSettings } = await open();
 
       const row = await db.query.appSettings.findFirst();
       if (!row) {
@@ -90,32 +142,31 @@ export function makeDrizzleAppSettingsStore(): AppSettingsStore {
       });
     },
 
-    async setAppPasswordHash(hash: string): Promise<void> {
-      const { db, appSettings } = await connect();
-
-      await db
-        .insert(appSettings)
-        .values({ id: SINGLETON_ID, appPasswordHash: hash, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: appSettings.id,
-          set: { appPasswordHash: hash, updatedAt: new Date() },
-        });
+    async claimAppPassword(hash: string): Promise<boolean> {
+      const connection = await open();
+      let written: { id: number }[];
+      try {
+        written = await buildClaimAppPasswordWrite(connection, hash, new Date());
+      } catch {
+        throw new AppPasswordWriteError();
+      }
+      return written.length > 0;
     },
 
     async readAppPasswordHash(): Promise<string | null> {
-      const { db } = await connect();
+      const { db } = await open();
 
       const row = await db.query.appSettings.findFirst();
       return row?.appPasswordHash ?? null;
     },
 
     async completeOnboarding(completedAt: Date): Promise<boolean> {
-      const written = await buildCompleteOnboardingWrite(await connect(), completedAt, new Date());
+      const written = await buildCompleteOnboardingWrite(await open(), completedAt, new Date());
       return written.length > 0;
     },
 
     async setCategorization(selection: CategorizationSelection): Promise<void> {
-      const { db, appSettings } = await connect();
+      const { db, appSettings } = await open();
 
       const key =
         selection.apiKey === null
@@ -136,7 +187,7 @@ export function makeDrizzleAppSettingsStore(): AppSettingsStore {
     },
 
     async readCategorizationApiKey(): Promise<string | null> {
-      const { db } = await connect();
+      const { db } = await open();
 
       const row = await db.query.appSettings.findFirst();
       const encrypted = row?.categorizationApiKeyEncrypted;

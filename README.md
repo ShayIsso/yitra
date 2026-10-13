@@ -67,7 +67,7 @@ cd yitra
 
 # Copy environment variables
 cp .env.example .env
-# Edit .env with your ENCRYPTION_KEY and APP_PASSWORD
+# Edit .env and set ENCRYPTION_KEY (the command is in .env.example)
 
 # Start PostgreSQL
 docker compose up db -d
@@ -82,15 +82,21 @@ npm run db:migrate
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000) in your browser. On the first visit the setup wizard asks you to choose the app password — there is no hash to generate by hand.
 
 ## Environment Variables
 
-| Variable         | Description                           |
-| ---------------- | ------------------------------------- |
-| `DATABASE_URL`   | PostgreSQL connection string          |
-| `ENCRYPTION_KEY` | 256-bit key for credential encryption |
-| `APP_PASSWORD`   | Bcrypt-hashed password for app access |
+| Variable         | Description                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`   | PostgreSQL connection string                                                                                         |
+| `ENCRYPTION_KEY` | 256-bit key for credential encryption                                                                                |
+| `APP_PASSWORD`   | Optional, legacy. A bcrypt hash that overrides the password chosen in the setup wizard. New installs leave it unset. |
+
+**Upgrading an install that uses `APP_PASSWORD`:** keep the override set, sign in, open `/setup` and finish it (every step after the password can be skipped). That records setup as complete, which closes the wizard's password step for good.
+
+> **Warning:** on an install whose setup is not complete, removing or blanking `APP_PASSWORD` reopens the password step. Until a password is chosen, **anyone who can reach the port can claim the install**, along with the data already in it. Only do this on a machine nobody else can reach, and choose the password immediately.
+
+Once setup is complete, removing `APP_PASSWORD` does not reopen the password step. The wizard cannot reset a password; set the override again instead.
 
 See `.env.example` for the full template.
 
@@ -179,7 +185,7 @@ A mix of global skills (Matt Pocock's set, installed via `npx`) and project-loca
 ## Security
 
 - All bank credentials encrypted at rest (AES-256-GCM, unique IV per record)
-- Password-protected access (bcrypt + HMAC session cookie)
+- Password-protected access (bcrypt hash chosen in the first-run wizard + HMAC session cookie)
 - Zero-leak policy: no credentials or sensitive data in logs
 - Failure screenshots auto-delete after 24 hours
 - Local/Docker deployment only — no cloud exposure
