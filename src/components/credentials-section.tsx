@@ -29,13 +29,7 @@ import {
   applyActionErrors,
 } from "@/components/ui/form";
 import { addCredentialSchema, editCredentialSchema } from "@/lib/credentials/schemas";
-import {
-  bankLabel,
-  enabledBankEntries,
-  enabledBankTypes,
-  isBankType,
-  type BankType,
-} from "@/lib/bank-registry";
+import { bankLabel, enabledBankTypes, isBankType, type BankType } from "@/lib/bank-registry";
 import { BankBadge } from "@/components/bank-badge";
 import {
   addCredentialAction,
@@ -58,8 +52,16 @@ type Credential = {
  */
 type EditableCredential = Credential & { bankType: BankType };
 
-function isEditable(cred: Credential): cred is EditableCredential {
+export function isEditable(cred: Credential): cred is EditableCredential {
   return isBankType(cred.bankType);
+}
+
+/**
+ * The institution picker's menu, in registry order. The trigger labels the
+ * selection through the same `bankLabel`, so menu and trigger cannot disagree.
+ */
+export function bankPickerOptions(): { value: BankType; label: string }[] {
+  return enabledBankTypes().map((value) => ({ value, label: bankLabel(value) }));
 }
 
 /**
@@ -338,9 +340,9 @@ export function CredentialsSection() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {enabledBankEntries().map((entry) => (
-                              <SelectItem key={entry.id} value={entry.id}>
-                                {bankLabel(entry.id)}
+                            {bankPickerOptions().map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
