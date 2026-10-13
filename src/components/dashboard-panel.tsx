@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
 import { SpendingBreakdown } from "@/components/spending-breakdown";
+import { isBankType } from "@/lib/bank-registry";
 import type { Category } from "@/lib/categories";
 import type {
   MonthlySummary,
@@ -171,7 +172,7 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
     topMerchantsRes.ok ? topMerchantsRes.json() : [],
     trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
-    credentialsRes.ok ? (credentialsRes.json() as Promise<unknown[]>) : null,
+    credentialsRes.ok ? (credentialsRes.json() as Promise<{ bankType: string }[]>) : null,
   ]);
 
   return {
@@ -188,7 +189,8 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attention,
     topMerchants,
     trend: trendReport?.months ?? [],
-    credentialCount: credentials?.length ?? null,
+    // A credential for a retired institution cannot sync, so it is not "connected".
+    credentialCount: credentials?.filter((c) => isBankType(c.bankType)).length ?? null,
   };
 }
 
