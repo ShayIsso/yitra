@@ -68,6 +68,12 @@ describe("middleware — boot-env gate (ADR-0014 §1)", () => {
     expect(res.headers.get("x-middleware-rewrite")).toContain("/env-check");
   });
 
+  it("rewrites the setup route too, which cannot work without the database or the key", async () => {
+    setEnv(false);
+    const res = await middleware(request("/setup"));
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/env-check");
+  });
+
   it("answers an API request with a machine-readable failure, not the page", async () => {
     setEnv(false);
     const res = await middleware(request("/api/transactions"));
@@ -119,6 +125,33 @@ describe("middleware — auth gate on a usable environment", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+
+  it.each(["/setup", "/setup/", "/setup?step=categories", "/setup/prototype"])(
+    "lets the setup route %s through unauthenticated",
+    async (path) => {
+      setEnv(true);
+      const res = await middleware(request(path));
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("location")).toBeNull();
+      expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    },
+  );
+
+  it.each(["/setupx", "/setup-anything", "/settings/setup", "/api/setup", "/api/setup/password"])(
+    "does not extend the setup exemption to %s",
+    async (path) => {
+      setEnv(true);
+      const res = await middleware(request(path));
+      expect([307, 401]).toContain(res.status);
+    },
+  );
+
+  it("does not extend the login exemption to a longer path", async () => {
+    setEnv(true);
+    const res = await middleware(request("/loginx"));
+    expect(res.status).toBe(307);
   });
 
   it("redirects a session signed with the wrong key", async () => {

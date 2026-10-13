@@ -1,4 +1,4 @@
-import { isNull } from "drizzle-orm";
+import { and, isNull } from "drizzle-orm";
 import type { AiProviderKind } from "@/lib/ai-categorization";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { projectAppSettings, type AppSettings } from "./settings";
@@ -11,7 +11,19 @@ export type CategorizationSelection = {
 
 export type AppSettingsStore = {
   read(): Promise<AppSettings>;
-  setAppPasswordHash(hash: string): Promise<void>;
+  /**
+   * Stores the first app-password hash, and reports whether this call is the
+   * one that did it. `false` means a hash was already stored or onboarding was
+   * already complete. The write is conditioned on both in the same statement,
+   * because its caller (`/setup`'s password step) runs without a session: an
+   * unconditional writer there would let anyone who can reach the port reset
+   * the password for as long as the wizard is open (ADR-0014 §4).
+   *
+   * There is deliberately no unconditional setter. Changing an existing
+   * password is a different operation — authenticated, and proving the current
+   * password — and belongs to whatever feature introduces it.
+   */
+  claimAppPassword(hash: string): Promise<boolean>;
   /** Reads the bcrypt hash. The only path by which it leaves the store. */
   readAppPasswordHash(): Promise<string | null>;
   /**
@@ -68,6 +80,28 @@ export function buildCompleteOnboardingWrite(
     .returning({ id: appSettings.id });
 }
 
+/**
+ * The write behind `claimAppPassword`, built separately from its execution for
+ * the same reason as `buildCompleteOnboardingWrite`: the predicate is invisible
+ * to a Store fake, and `setWhere` (not the deprecated `where`) is what places it
+ * on the UPDATE rather than on the conflict target.
+ */
+export function buildClaimAppPasswordWrite(
+  { db, appSettings }: Connection,
+  hash: string,
+  now: Date,
+) {
+  return db
+    .insert(appSettings)
+    .values({ id: SINGLETON_ID, appPasswordHash: hash, updatedAt: now })
+    .onConflictDoUpdate({
+      target: appSettings.id,
+      set: { appPasswordHash: hash, updatedAt: now },
+      setWhere: and(isNull(appSettings.appPasswordHash), isNull(appSettings.onboardingCompletedAt)),
+    })
+    .returning({ id: appSettings.id });
+}
+
 export function makeDrizzleAppSettingsStore(): AppSettingsStore {
   return {
     async read(): Promise<AppSettings> {
@@ -90,16 +124,9 @@ export function makeDrizzleAppSettingsStore(): AppSettingsStore {
       });
     },
 
-    async setAppPasswordHash(hash: string): Promise<void> {
-      const { db, appSettings } = await connect();
-
-      await db
-        .insert(appSettings)
-        .values({ id: SINGLETON_ID, appPasswordHash: hash, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: appSettings.id,
-          set: { appPasswordHash: hash, updatedAt: new Date() },
-        });
+    async claimAppPassword(hash: string): Promise<boolean> {
+      const written = await buildClaimAppPasswordWrite(await connect(), hash, new Date());
+      return written.length > 0;
     },
 
     async readAppPasswordHash(): Promise<string | null> {

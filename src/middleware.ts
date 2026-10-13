@@ -40,6 +40,20 @@ async function validateSessionEdge(token: string): Promise<boolean> {
   }
 }
 
+/**
+ * The first-run wizard is exempt unconditionally, as `/login` is: this runtime
+ * cannot read the onboarding flag, so the page redirects itself once setup is
+ * complete (ADR-0014 §4). Exempt means unauthenticated — every Server Action in
+ * `/setup`'s module graph runs without this gate and must guard itself (the
+ * password step by its conditional write, every other action by
+ * `requireSession`). Matched by segment so `/setupx` stays gated.
+ *
+ * Not to be confused with `/env-check`, which is deliberately not exempt.
+ */
+function isSetupPath(pathname: string): boolean {
+  return pathname === "/setup" || pathname.startsWith("/setup/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -60,7 +74,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL(ENV_DIAGNOSTIC_PATH, req.url));
   }
 
-  if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
+  if (pathname === "/login" || pathname.startsWith("/api/auth/") || isSetupPath(pathname)) {
     return NextResponse.next();
   }
 

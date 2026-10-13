@@ -76,10 +76,10 @@ These are non-negotiable:
 - **Credentials** stored in PostgreSQL encrypted with AES-256-GCM. Unique IV per record.
 - **Passwords never returned by API.** The `GET /api/credentials/:id` route strips passwords and returns only safe fields.
 - **Path traversal prevention.** The screenshots module validates filenames with `/^[a-zA-Z0-9_-]+\.png$/`.
-- **`.env` contains only:** `DATABASE_URL`, `ENCRYPTION_KEY`, `APP_PASSWORD`, `CHROMIUM_PATH` (optional), `GEMINI_API_KEY` (optional — AI categorization egress per ADR-0008)
+- **`.env` contains only:** `DATABASE_URL` and `ENCRYPTION_KEY` (required — the only secrets the app cannot ask for, ADR-0014), plus optional `APP_PASSWORD` (legacy override), `CHROMIUM_PATH`, `SCHEDULER_ENABLED`, and the AI categorization variables (`AI_PROVIDER`, `GEMINI_API_KEY`, `OLLAMA_ENDPOINT`, `OLLAMA_MODEL` — egress per ADR-0008). `src/lib/env.ts` is the authoritative list.
 - **Never commit** `.env`, `node_modules`, `.DS_Store`, or the screenshots directory.
 - **Failure screenshots** auto-delete after 24 hours. Directory is gitignored.
-- **App auth:** Simple password gate with bcrypt hash. HTTP-only HMAC-signed session cookie.
+- **App auth:** Simple password gate with bcrypt hash. HTTP-only HMAC-signed session cookie. The password is chosen in the first-run wizard (`/setup`) and its hash stored in `app_settings`; `APP_PASSWORD` is a legacy override that **wins when set** (ADR-0014 §2). `/login` and `/setup` are exempt from the auth gate, so every Server Action in their module graphs must call `requireSession()` first — the first-password claim alone is guarded by its conditional write instead (`setup-action-guard.test.ts` enforces this).
 - **Session HMAC key must be hex-decoded.** Both `createSession` and `validateSessionEdge` decode `ENCRYPTION_KEY` from hex before HMAC.
 
 ## Database Schema (Drizzle ORM)
@@ -178,8 +178,8 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents
 - **CI uses `npm install`, not `npm ci`.** Lock file is generated on macOS ARM64 and `npm ci` rejects it on Linux CI runners. Do not change CI back to `npm ci`.
 - **Never add `os=any` or `cpu=any` to `.npmrc`.** This corrupts native bindings on macOS. If the lock file needs regenerating: `rm -rf node_modules package-lock.json && npm install`.
 - **Test runner is Vitest.** `npm test` runs all tests. `npm run test:watch` for watch mode. Config in `vitest.config.ts` with `@/*` path alias.
-- **`APP_PASSWORD` in `.env` must escape `$` as `\$`.** Next.js's dotenv parser expands `$VAR` — bcrypt hashes contain `$2b$12$...` which gets mangled. Always write `\$2b\$12\$...` in `.env`.
-- **`APP_PASSWORD` in Docker `.env` must escape `$` as `$$`.** Docker Compose interprets `$` as variable substitution.
+- **Legacy `APP_PASSWORD` override only: escape `$` as `\$` in `.env`.** New installs leave `APP_PASSWORD` unset and choose the password in the setup wizard, so neither escaping trap applies to them. Where the override is used, Next.js's dotenv parser expands `$VAR` — bcrypt hashes contain `$2b$12$...` which gets mangled. Write `\$2b\$12\$...`.
+- **Legacy `APP_PASSWORD` override only: escape `$` as `$$` in the `.env` Docker Compose reads.** Docker Compose interprets `$` as variable substitution.
 - **Session HMAC key must be hex-decoded.** `createSession` and `validateSessionEdge` both decode `ENCRYPTION_KEY` from hex to raw bytes before using it as the HMAC key. If one uses the raw string and the other decodes it, tokens will never validate.
 - **Middleware file must be `src/middleware.ts` exporting `middleware`.** Next.js 16 shows a deprecation warning suggesting `proxy.ts`, but `proxy.ts` does not reliably intercept requests — routes will be unprotected. Ignore the warning and keep `middleware.ts`.
 - **`puppeteer-core` version mismatch.** The scraper library bundles its own puppeteer-core. We use `as unknown as ScraperBrowser` to bridge types. Pin versions when possible.

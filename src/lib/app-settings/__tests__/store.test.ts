@@ -20,8 +20,10 @@ function makeInMemoryStore(seed: AppSettingsRow | null = null) {
     async read() {
       return projectAppSettings(row);
     },
-    async setAppPasswordHash(hash) {
+    async claimAppPassword(hash) {
+      if (row?.appPasswordHash || row?.onboardingCompletedAt) return false;
       row = { ...blank(), ...row, appPasswordHash: hash };
+      return true;
     },
     async readAppPasswordHash() {
       return row?.appPasswordHash ?? null;
@@ -72,7 +74,7 @@ describe("AppSettingsStore contract", () => {
 
   it("reports a written app password as set without exposing its hash", async () => {
     const { store } = makeInMemoryStore();
-    await store.setAppPasswordHash("bcrypt-hash-placeholder");
+    await store.claimAppPassword("bcrypt-hash-placeholder");
 
     const settings = await store.read();
     expect(settings.hasAppPassword).toBe(true);
@@ -81,15 +83,29 @@ describe("AppSettingsStore contract", () => {
 
   it("returns the hash only through the dedicated read", async () => {
     const { store } = makeInMemoryStore();
-    await store.setAppPasswordHash("bcrypt-hash-placeholder");
+    await store.claimAppPassword("bcrypt-hash-placeholder");
     expect(await store.readAppPasswordHash()).toBe("bcrypt-hash-placeholder");
   });
 
-  it("replaces the app-password hash rather than accumulating rows", async () => {
+  it("claims the app password on the first call", async () => {
+    const { store } = makeInMemoryStore();
+    expect(await store.claimAppPassword("bcrypt-hash-placeholder")).toBe(true);
+  });
+
+  it("refuses a second claim and keeps the first hash", async () => {
     const { store, currentRow } = makeInMemoryStore();
-    await store.setAppPasswordHash("first-hash-placeholder");
-    await store.setAppPasswordHash("second-hash-placeholder");
-    expect(currentRow()?.appPasswordHash).toBe("second-hash-placeholder");
+    await store.claimAppPassword("first-hash-placeholder");
+
+    expect(await store.claimAppPassword("second-hash-placeholder")).toBe(false);
+    expect(currentRow()?.appPasswordHash).toBe("first-hash-placeholder");
+  });
+
+  it("refuses a claim once onboarding is complete", async () => {
+    const { store } = makeInMemoryStore();
+    await store.completeOnboarding(new Date("2026-03-04T00:00:00.000Z"));
+
+    expect(await store.claimAppPassword("bcrypt-hash-placeholder")).toBe(false);
+    expect((await store.read()).hasAppPassword).toBe(false);
   });
 
   it("records the onboarding completion timestamp on the first call", async () => {
@@ -110,7 +126,7 @@ describe("AppSettingsStore contract", () => {
 
   it("keeps the password hash when onboarding completion is recorded", async () => {
     const { store } = makeInMemoryStore();
-    await store.setAppPasswordHash("bcrypt-hash-placeholder");
+    await store.claimAppPassword("bcrypt-hash-placeholder");
     await store.completeOnboarding(new Date("2026-03-04T00:00:00.000Z"));
     expect(await store.readAppPasswordHash()).toBe("bcrypt-hash-placeholder");
   });
