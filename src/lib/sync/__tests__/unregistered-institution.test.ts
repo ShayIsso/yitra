@@ -68,8 +68,13 @@ async function drain(): Promise<unknown[]> {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listCredentials).mockResolvedValue([
-    { id: RETIRED_CRED, bankType: RETIRED_ID, displayName: "x", createdAt: new Date(0) },
-    { id: LIVE_CRED, bankType: "max", displayName: "y", createdAt: new Date(0) },
+    {
+      id: RETIRED_CRED,
+      bankType: RETIRED_ID,
+      displayName: "retired account",
+      createdAt: new Date(0),
+    },
+    { id: LIVE_CRED, bankType: "max", displayName: "live account", createdAt: new Date(0) },
   ]);
   vi.mocked(getDecryptedCredentials).mockImplementation(async (id) => ({
     bankType: id === RETIRED_CRED ? RETIRED_ID : "max",

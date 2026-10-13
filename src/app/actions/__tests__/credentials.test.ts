@@ -103,9 +103,9 @@ describe("addCredentialAction", () => {
   });
 
   it("rejects an institution id absent from the registry at the Zod boundary, though the column accepts any text", async () => {
-    // The column is plain text since the bank_type enum was dropped (ADR-0013
-    // §4), so the database no longer refuses an unknown id — the registry-backed
-    // Zod boundary is now the only thing that does.
+    // The column does not enforce this: an enum or CHECK listing institution ids
+    // would be a second source of truth beside the registry (ADR-0013 §4), so
+    // the registry-backed Zod boundary is the only place an unknown id is refused.
     const { isBankType } = await import("@/lib/bank-registry");
     const { bankCredentials } = await import("@/db/schema");
     const { getTableColumns } = await import("drizzle-orm");

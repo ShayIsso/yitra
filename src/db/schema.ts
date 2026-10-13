@@ -186,6 +186,7 @@ export const syncRuns = pgTable("sync_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   startedAt: timestamp("started_at").notNull().defaultNow(),
   finishedAt: timestamp("finished_at"),
+  /** Institution id — unconstrained text, see `bankCredentials.bankType`. */
   bank: text("bank").notNull(),
   status: syncRunStatusEnum("status").notNull().default("success"),
   transactionsImported: integer("transactions_imported").notNull().default(0),
