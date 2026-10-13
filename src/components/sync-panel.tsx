@@ -4,11 +4,12 @@ import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { BankBadge } from "@/components/bank-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
+import { bankLabel } from "@/lib/bank-registry";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
 export type BankSyncState = {
@@ -55,12 +56,6 @@ type Bank = {
   id: string;
   bankType: string;
   displayName: string;
-};
-
-const BANK_LABELS: Record<string, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "Cal",
 };
 
 const STATUS_TEXT: Record<string, string> = {
@@ -470,7 +465,7 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
               <CardContent className="space-y-3 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Badge variant="secondary">{BANK_LABELS[bank.bankType] ?? bank.bankType}</Badge>
+                    <BankBadge bankType={bank.bankType} />
                     <span className="font-medium">{bank.displayName}</span>
                   </div>
 
@@ -636,7 +631,7 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
               <div className="space-y-1">
                 {Object.entries(summary.byBank).map(([bank, count]) => (
                   <p key={bank} className="text-sm">
-                    {BANK_LABELS[bank] ?? bank}: {count} תנועות
+                    {bankLabel(bank)}: {count} תנועות
                   </p>
                 ))}
               </div>

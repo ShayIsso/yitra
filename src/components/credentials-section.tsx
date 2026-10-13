@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Pencil, Trash2, Landmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -30,26 +29,40 @@ import {
   applyActionErrors,
 } from "@/components/ui/form";
 import { addCredentialSchema, editCredentialSchema } from "@/lib/credentials/schemas";
+import { bankLabel, enabledBankTypes, isBankType, type BankType } from "@/lib/bank-registry";
+import { BankBadge } from "@/components/bank-badge";
 import {
   addCredentialAction,
   updateCredentialAction,
   deleteCredentialAction,
 } from "@/app/actions/credentials";
 
-type BankType = "discount" | "max" | "visaCal";
-
 type Credential = {
   id: string;
-  bankType: BankType;
+  /** Stored text, so it may name an institution no longer registered (ADR-0013 §4). */
+  bankType: string;
   displayName: string;
   createdAt: string;
 };
 
-const BANK_LABELS: Record<BankType, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "Cal",
-};
+/**
+ * A credential whose institution is still registered. Only these can be
+ * edited: an unregistered institution has no field set to edit against, so its
+ * row offers delete only.
+ */
+type EditableCredential = Credential & { bankType: BankType };
+
+export function isEditable(cred: Credential): cred is EditableCredential {
+  return isBankType(cred.bankType);
+}
+
+/**
+ * The institution picker's menu, in registry order. The trigger labels the
+ * selection through the same `bankLabel`, so menu and trigger cannot disagree.
+ */
+export function bankPickerOptions(): { value: BankType; label: string }[] {
+  return enabledBankTypes().map((value) => ({ value, label: bankLabel(value) }));
+}
 
 /**
  * Superset of both per-bank field shapes so a single RHF instance backs the
@@ -65,7 +78,7 @@ type CredentialFormValues = {
 const EMPTY_CREDENTIAL_FIELDS = { id: "", num: "", username: "", password: "" };
 
 const EMPTY_FORM: CredentialFormValues = {
-  bankType: "discount",
+  bankType: enabledBankTypes()[0],
   displayName: "",
   credentials: EMPTY_CREDENTIAL_FIELDS,
 };
@@ -125,7 +138,7 @@ export function CredentialsSection() {
     setFormOpen(true);
   }
 
-  async function openEdit(cred: Credential) {
+  async function openEdit(cred: EditableCredential) {
     editModeRef.current = true;
     prefillRef.current = EMPTY_CREDENTIAL_FIELDS;
     setEditing(cred);
@@ -268,14 +281,16 @@ export function CredentialsSection() {
             <Card key={cred.id} size="sm">
               <CardContent className="flex items-center justify-between py-3">
                 <div className="flex items-center gap-3">
-                  <Badge variant="secondary">{BANK_LABELS[cred.bankType]}</Badge>
+                  <BankBadge bankType={cred.bankType} />
                   <span className="text-sm font-medium">{cred.displayName}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon-sm" onClick={() => openEdit(cred)}>
-                    <Pencil />
-                    <span className="sr-only">ערוך</span>
-                  </Button>
+                  {isEditable(cred) && (
+                    <Button variant="ghost" size="icon-sm" onClick={() => openEdit(cred)}>
+                      <Pencil />
+                      <span className="sr-only">ערוך</span>
+                    </Button>
+                  )}
                   <Button variant="ghost" size="icon-sm" onClick={() => openDelete(cred)}>
                     <Trash2 className="text-destructive" />
                     <span className="sr-only">מחק</span>
@@ -321,13 +336,15 @@ export function CredentialsSection() {
                         >
                           <FormControl>
                             <SelectTrigger className="w-full">
-                              <span>{BANK_LABELS[field.value]}</span>
+                              <span>{bankLabel(field.value)}</span>
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="discount">Bank Discount</SelectItem>
-                            <SelectItem value="max">Max</SelectItem>
-                            <SelectItem value="visaCal">Cal</SelectItem>
+                            {bankPickerOptions().map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
