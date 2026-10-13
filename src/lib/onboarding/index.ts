@@ -12,6 +12,14 @@ export {
   type SetupStep,
 } from "./steps";
 export {
+  ONBOARDING_PATH_STEPS,
+  deriveOnboardingPath,
+  shouldShowOnboardingPath,
+  type OnboardingPathFacts,
+  type OnboardingPathStep,
+  type OnboardingPathStepId,
+} from "./path";
+export {
   resolveSetupView,
   resolveLoginView,
   loginDestination,
@@ -27,11 +35,3 @@ export {
 } from "./password";
 export { initialPasswordSchema, MIN_PASSWORD_LENGTH, type InitialPasswordInput } from "./schemas";
 export { readSetupState, readLoginView, finishOnboarding, setInitialPassword } from "./db";
-export {
-  ONBOARDING_PATH_STEPS,
-  deriveOnboardingPath,
-  shouldShowOnboardingPath,
-  type OnboardingPathFacts,
-  type OnboardingPathStep,
-  type OnboardingPathStepId,
-} from "./path";
