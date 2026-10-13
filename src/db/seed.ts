@@ -1,12 +1,17 @@
-import "dotenv/config";
 import { db } from "./index";
 import { categories } from "./schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { TAXONOMY_V2, DEFAULT_GROUPS } from "./taxonomy";
 
-async function seed() {
-  console.log("Seeding default categories...");
+export type SeedResult = {
+  inserted: number;
+  alreadyExisted: number;
+  groupsInserted: number;
+  linked: number;
+};
 
+/** Callable from application code: never exits the process, never loads its own environment. */
+export async function seedDefaultCategories(): Promise<SeedResult> {
   const existing = await db
     .select({ name: categories.name })
     .from(categories)
@@ -57,14 +62,5 @@ async function seed() {
     }
   }
 
-  console.log(
-    `Seeded ${inserted} leaf categories (${existingNames.size} already existed), ` +
-      `${groupsInserted} groups, linked ${linked} leaves.`,
-  );
-  process.exit(0);
+  return { inserted, alreadyExisted: existingNames.size, groupsInserted, linked };
 }
-
-seed().catch((err) => {
-  console.error("Seed failed:", err);
-  process.exit(1);
-});

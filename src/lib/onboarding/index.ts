@@ -27,3 +27,5 @@ export {
 } from "./password";
 export { initialPasswordSchema, MIN_PASSWORD_LENGTH, type InitialPasswordInput } from "./schemas";
 export { readSetupState, readLoginView, finishOnboarding, setInitialPassword } from "./db";
+export { ensureDefaultCategories, readTaxonomyView } from "./categories";
+export type { TaxonomyView, TaxonomyEntry } from "./taxonomy-view";

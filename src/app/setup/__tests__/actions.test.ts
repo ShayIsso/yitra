@@ -11,7 +11,13 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/onboarding", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/onboarding")>();
-  return { ...actual, setInitialPassword: vi.fn(), finishOnboarding: vi.fn() };
+  return {
+    ...actual,
+    setInitialPassword: vi.fn(),
+    finishOnboarding: vi.fn(),
+    ensureDefaultCategories: vi.fn(),
+    readTaxonomyView: vi.fn(),
+  };
 });
 
 vi.mock("@/lib/auth", async (importOriginal) => {
@@ -20,9 +26,15 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 });
 
 import { redirect } from "next/navigation";
-import { finishOnboarding, setInitialPassword } from "@/lib/onboarding";
+import {
+  ensureDefaultCategories,
+  finishOnboarding,
+  readTaxonomyView,
+  setInitialPassword,
+} from "@/lib/onboarding";
 import { establishSession, requireSession } from "@/lib/auth";
 import { completeOnboardingAction, setInitialPasswordAction } from "../actions";
+import { loadDefaultCategoriesAction } from "../categories-actions";
 
 const VALID = { password: "synthetic-password", confirmation: "synthetic-password" };
 
@@ -103,7 +115,27 @@ describe("completeOnboardingAction", () => {
     await expect(completeOnboardingAction()).rejects.toBe(signInRedirect);
     expect(requireSession).toHaveBeenCalledWith("/setup");
     expect(finishOnboarding).not.toHaveBeenCalled();
+    expect(ensureDefaultCategories).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("seeds the default categories before recording completion, whatever steps were skipped", async () => {
+    vi.mocked(requireSession).mockResolvedValue(undefined);
+    vi.mocked(finishOnboarding).mockResolvedValue(true);
+
+    await completeOnboardingAction();
+    expect(ensureDefaultCategories).toHaveBeenCalledOnce();
+    expect(vi.mocked(ensureDefaultCategories).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(finishOnboarding).mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does not record completion when seeding fails", async () => {
+    vi.mocked(requireSession).mockResolvedValue(undefined);
+    vi.mocked(ensureDefaultCategories).mockRejectedValueOnce(new Error("seed failed"));
+
+    await expect(completeOnboardingAction()).rejects.toThrow("seed failed");
+    expect(finishOnboarding).not.toHaveBeenCalled();
   });
 
   it("records completion and enters the app", async () => {
@@ -121,5 +153,27 @@ describe("completeOnboardingAction", () => {
 
     await completeOnboardingAction();
     expect(redirect).toHaveBeenCalledWith("/");
+  });
+});
+
+describe("loadDefaultCategoriesAction", () => {
+  it("refuses without a session, before seeding anything", async () => {
+    const signInRedirect = new Error("NEXT_REDIRECT");
+    vi.mocked(requireSession).mockRejectedValue(signInRedirect);
+
+    await expect(loadDefaultCategoriesAction()).rejects.toBe(signInRedirect);
+    expect(requireSession).toHaveBeenCalledWith("/setup");
+    expect(ensureDefaultCategories).not.toHaveBeenCalled();
+  });
+
+  it("seeds, then returns the taxonomy that now exists", async () => {
+    const view = { groups: [], standalone: [] };
+    vi.mocked(requireSession).mockResolvedValue(undefined);
+    vi.mocked(readTaxonomyView).mockResolvedValue(view);
+
+    expect(await loadDefaultCategoriesAction()).toBe(view);
+    expect(vi.mocked(ensureDefaultCategories).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(readTaxonomyView).mock.invocationCallOrder[0],
+    );
   });
 });

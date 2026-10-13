@@ -13,7 +13,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "npx tsx src/db/seed.ts",
+    "db:seed": "npx tsx src/db/seed-cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "patch-package"
