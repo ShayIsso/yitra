@@ -14,5 +14,4 @@ export {
   establishSession,
   hasValidSession,
   requireSession,
-  UnauthenticatedError,
 } from "./session";

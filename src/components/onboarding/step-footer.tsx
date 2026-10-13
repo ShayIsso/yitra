@@ -2,8 +2,6 @@
 
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { useFrameVariant } from "./setup-frame";
 import type { StepNavigation } from "./step-navigation";
 
 export type StepFooterPrimary = {
@@ -27,13 +25,12 @@ export type StepFooterProps = {
  * is leftward, hence the arrow choice.
  */
 export function StepFooter({ navigation, primary = {} }: StepFooterProps) {
-  const variant = useFrameVariant();
   const busy = navigation.pending || primary.pending === true;
   const label = primary.label ?? (navigation.isLast ? "סיום וכניסה לאפליקציה" : "המשך");
   const type = primary.type ?? "button";
 
-  const buttons = (
-    <>
+  return (
+    <div className="border-border flex flex-wrap-reverse items-center justify-between gap-2 border-t pt-4">
       <div>
         {navigation.back && (
           <Button variant="ghost" size="lg" onClick={navigation.back} disabled={busy}>
@@ -42,7 +39,7 @@ export function StepFooter({ navigation, primary = {} }: StepFooterProps) {
           </Button>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="ms-auto flex items-center gap-2">
         {navigation.skip && (
           <Button variant="ghost" size="lg" onClick={navigation.skip} disabled={busy}>
             דילוג
@@ -60,27 +57,6 @@ export function StepFooter({ navigation, primary = {} }: StepFooterProps) {
           {!busy && <ArrowLeft />}
         </Button>
       </div>
-    </>
-  );
-
-  if (variant === "focus") {
-    return (
-      <div className="bg-background border-border fixed inset-x-0 bottom-0 border-t">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
-          {buttons}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "border-border flex items-center justify-between border-t pt-4",
-        variant === "stepper" && "mt-2",
-      )}
-    >
-      {buttons}
     </div>
   );
 }

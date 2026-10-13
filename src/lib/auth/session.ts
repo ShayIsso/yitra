@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 
 export const SESSION_COOKIE = "yitra-session";
@@ -64,20 +65,20 @@ export async function hasValidSession(): Promise<boolean> {
   return token !== undefined && validateSession(token);
 }
 
-export class UnauthenticatedError extends Error {
-  constructor() {
-    super("Unauthenticated");
-    this.name = "UnauthenticatedError";
-  }
-}
-
 /**
  * The session check for code the middleware does not gate. A Server Action is
  * POSTed to the path of the page that rendered it, so every action in the
  * module graph of an auth-exempt page (`/login`, `/setup`) runs with no
  * middleware session check at all. Such an action must call this first.
- * Throwing rather than returning a flag means a caller cannot ignore it.
+ *
+ * Without a valid session it ends the request in a redirect to sign in, and
+ * `redirect` throws, so nothing after the call runs: it fails closed, and a
+ * session that expired mid-wizard lands on the login form rather than a 500.
+ * The throw is a control-flow signal a surrounding `catch` would swallow,
+ * which is why the call must be the action's first statement and never inside
+ * a `try` (`setup-action-guard.test.ts` enforces both).
  */
-export async function requireSession(): Promise<void> {
-  if (!(await hasValidSession())) throw new UnauthenticatedError();
+export async function requireSession(returnTo?: "/setup"): Promise<void> {
+  if (await hasValidSession()) return;
+  redirect(returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : "/login");
 }

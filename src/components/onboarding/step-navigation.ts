@@ -5,11 +5,13 @@
  * order, progress, titles, and where these callbacks lead.
  *
  * Step bodies are client components. A step that needs to write must do it
- * through a Server Action that calls `requireSession()` as its first statement:
- * `/setup` is exempt from the auth gate, so nothing in its module graph is
- * protected by the middleware (`setup-action-guard.test.ts` enforces this). Do
- * not import an existing Settings action into a step — wrap the library call
- * in a guarded setup-local action instead. Reads can use the existing `/api/*`
+ * through a Server Action whose first statement is
+ * `await requireSession("/setup")` — never inside a `try`: `/setup` is exempt
+ * from the auth gate, so nothing in its module graph is protected by the
+ * middleware (`setup-action-guard.test.ts` enforces this). Without a session
+ * the call redirects to sign-in and back, and nothing after it runs. Do not
+ * import an existing Settings action into a step — wrap the library call in a
+ * guarded setup-local action instead. Reads can use the existing `/api/*`
  * routes, which stay behind the gate; the visitor is signed in by then.
  */
 export type StepNavigation = {

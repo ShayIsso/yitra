@@ -127,7 +127,7 @@ describe("middleware — auth gate on a usable environment", () => {
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
   });
 
-  it.each(["/setup", "/setup/", "/setup?step=categories", "/setup/prototype"])(
+  it.each(["/setup", "/setup/", "/setup?step=categories", "/setup/step"])(
     "lets the setup route %s through unauthenticated",
     async (path) => {
       setEnv(true);

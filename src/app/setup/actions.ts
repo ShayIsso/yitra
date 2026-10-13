@@ -13,8 +13,8 @@ import {
 /*
  * `/setup` is exempt from the auth gate, and a Server Action is POSTed to the
  * page that rendered it — so nothing here is behind the middleware. Every
- * action in this file, and in any file `/setup` imports, must call
- * `requireSession()` first. The single exception is the password step, which
+ * action in this file, and in any file `/setup` imports, must begin with
+ * `await requireSession("/setup")`. The single exception is the password step, which
  * runs before any session can exist and is guarded instead by its conditional
  * write (ADR-0014 §4). `setup-action-guard.test.ts` enforces this.
  */
@@ -40,7 +40,7 @@ export async function setInitialPasswordAction(
 }
 
 export async function completeOnboardingAction(): Promise<void> {
-  await requireSession();
+  await requireSession("/setup");
   await finishOnboarding();
   redirect("/");
 }

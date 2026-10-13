@@ -4,7 +4,7 @@ import type { ComponentType } from "react";
 import type { PasswordSource } from "@/lib/auth";
 import { stepAfter, stepBefore, type SetupStep } from "@/lib/onboarding/steps";
 import { PasswordStep, type SubmitPassword } from "./password-step";
-import { SetupFrame, type FrameVariant } from "./setup-frame";
+import { SetupFrame } from "./setup-frame";
 import type { SetupStepProps, StepNavigation } from "./step-navigation";
 import { CategoriesStep } from "./steps/categories-step";
 import { FirstSyncStep } from "./steps/first-sync-step";
@@ -19,7 +19,6 @@ const STEP_BODIES: Record<Exclude<SetupStep, "password">, ComponentType<SetupSte
 };
 
 export type WizardShellProps = {
-  readonly variant: FrameVariant;
   readonly step: SetupStep;
   readonly passwordSource: PasswordSource;
   readonly pending: boolean;
@@ -31,7 +30,6 @@ export type WizardShellProps = {
 };
 
 export function WizardShell({
-  variant,
   step,
   passwordSource,
   pending,
@@ -55,12 +53,7 @@ export function WizardShell({
   const Body = step === "password" ? null : STEP_BODIES[step];
 
   return (
-    <SetupFrame
-      variant={variant}
-      step={step}
-      passwordDone={passwordSource !== "none"}
-      exitHref={exitHref}
-    >
+    <SetupFrame step={step} passwordDone={passwordSource !== "none"} exitHref={exitHref}>
       {Body ? (
         <Body navigation={navigation} />
       ) : (

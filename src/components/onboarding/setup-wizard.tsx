@@ -36,7 +36,6 @@ export function SetupWizard({
 
   return (
     <WizardShell
-      variant="stepper"
       step={step}
       passwordSource={passwordSource}
       pending={pending}

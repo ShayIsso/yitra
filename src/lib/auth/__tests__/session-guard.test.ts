@@ -13,6 +13,14 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+class RedirectSignal extends Error {}
+
+vi.mock("next/navigation", () => ({
+  redirect: (url: string) => {
+    throw new RedirectSignal(url);
+  },
+}));
+
 import {
   SESSION_COOKIE,
   createSession,
@@ -22,7 +30,6 @@ import {
   requireSession,
   resolvePasswordSource,
   sessionCookie,
-  UnauthenticatedError,
   validateSession,
 } from "..";
 
@@ -77,19 +84,25 @@ describe("requireSession", () => {
     await expect(hasValidSession()).resolves.toBe(true);
   });
 
-  it("rejects a request with no session cookie", async () => {
-    await expect(requireSession()).rejects.toBeInstanceOf(UnauthenticatedError);
+  it("ends a request with no session cookie in a redirect to sign in", async () => {
+    await expect(requireSession()).rejects.toEqual(new RedirectSignal("/login"));
     await expect(hasValidSession()).resolves.toBe(false);
   });
 
-  it("rejects a session whose signature was forged", async () => {
-    const [data] = createSession().split(".");
-    cookieJar.set(SESSION_COOKIE, `${data}.${"0".repeat(64)}`);
-    await expect(requireSession()).rejects.toBeInstanceOf(UnauthenticatedError);
+  it("sends the visitor back to the wizard after signing in when asked to", async () => {
+    await expect(requireSession("/setup")).rejects.toEqual(
+      new RedirectSignal("/login?next=%2Fsetup"),
+    );
   });
 
-  it("rejects a cookie that is not a token at all", async () => {
+  it("redirects a session whose signature was forged", async () => {
+    const [data] = createSession().split(".");
+    cookieJar.set(SESSION_COOKIE, `${data}.${"0".repeat(64)}`);
+    await expect(requireSession()).rejects.toBeInstanceOf(RedirectSignal);
+  });
+
+  it("redirects a cookie that is not a token at all", async () => {
     cookieJar.set(SESSION_COOKIE, "not-a-token");
-    await expect(requireSession()).rejects.toBeInstanceOf(UnauthenticatedError);
+    await expect(requireSession()).rejects.toBeInstanceOf(RedirectSignal);
   });
 });

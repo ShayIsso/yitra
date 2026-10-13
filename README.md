@@ -92,6 +92,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. On the firs
 | `ENCRYPTION_KEY` | 256-bit key for credential encryption                                                                                |
 | `APP_PASSWORD`   | Optional, legacy. A bcrypt hash that overrides the password chosen in the setup wizard. New installs leave it unset. |
 
+Once setup is complete, removing `APP_PASSWORD` does not reopen the wizard's password step — the wizard cannot be used to reset a password. To move a legacy install onto a password chosen in the app, remove the override before finishing setup.
+
 See `.env.example` for the full template.
 
 ## Project Structure

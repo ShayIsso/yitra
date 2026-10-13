@@ -8,7 +8,9 @@ import ts from "typescript";
  * POSTs a Server Action to the page that rendered it — so every Server Action
  * reachable from those pages' module graphs runs with no session check unless
  * it performs one itself. This walks those graphs from source and fails if any
- * reachable Server Action does not begin with `await requireSession()`.
+ * reachable Server Action does not begin with `await requireSession()`. Being
+ * the first statement also keeps it out of any `try`, whose `catch` would
+ * swallow the redirect it throws and let the action carry on unauthenticated.
  *
  * It exists for the wizard's later steps (#259–#262): importing an existing
  * Settings action (e.g. adding a credential) into a step would silently publish
@@ -202,6 +204,11 @@ describe("the guard walk itself", () => {
       export default function Page() {
         async function save() { "use server"; await doWrite(); }
         async function guardedSave() { "use server"; await requireSession(); await doWrite(); }
+        async function swallowedSave() {
+          "use server";
+          try { await requireSession(); } catch {}
+          await doWrite();
+        }
         return null;
       }`;
     const file = path.join(SRC, "app/setup/synthetic.tsx");
@@ -210,6 +217,7 @@ describe("the guard walk itself", () => {
     expect(serverActions(file, source)).toEqual([
       { id: "app/setup/synthetic.tsx#save", guarded: false },
       { id: "app/setup/synthetic.tsx#guardedSave", guarded: true },
+      { id: "app/setup/synthetic.tsx#swallowedSave", guarded: false },
     ]);
   });
 });

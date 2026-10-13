@@ -21,7 +21,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 
 import { redirect } from "next/navigation";
 import { finishOnboarding, setInitialPassword } from "@/lib/onboarding";
-import { establishSession, requireSession, UnauthenticatedError } from "@/lib/auth";
+import { establishSession, requireSession } from "@/lib/auth";
 import { completeOnboardingAction, setInitialPasswordAction } from "../actions";
 
 const VALID = { password: "synthetic-password", confirmation: "synthetic-password" };
@@ -88,9 +88,11 @@ describe("setInitialPasswordAction", () => {
 
 describe("completeOnboardingAction", () => {
   it("refuses without a session, before recording anything", async () => {
-    vi.mocked(requireSession).mockRejectedValue(new UnauthenticatedError());
+    const signInRedirect = new Error("NEXT_REDIRECT");
+    vi.mocked(requireSession).mockRejectedValue(signInRedirect);
 
-    await expect(completeOnboardingAction()).rejects.toBeInstanceOf(UnauthenticatedError);
+    await expect(completeOnboardingAction()).rejects.toBe(signInRedirect);
+    expect(requireSession).toHaveBeenCalledWith("/setup");
     expect(finishOnboarding).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
   });
