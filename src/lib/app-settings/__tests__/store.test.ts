@@ -34,6 +34,10 @@ function makeInMemoryStore(seed: AppSettingsRow | null = null) {
       return true;
     },
     async setCategorization({ provider, apiKey }) {
+      if (apiKey === undefined) {
+        row = { ...blank(), ...row, categorizationProvider: provider };
+        return;
+      }
       plaintextKey = apiKey;
       row = {
         ...blank(),
@@ -144,6 +148,15 @@ describe("AppSettingsStore contract", () => {
   it("returns the stored key only through the dedicated read", async () => {
     const { store } = makeInMemoryStore();
     await store.setCategorization({ provider: "gemini", apiKey: "synthetic-key-value" });
+    expect(await store.readCategorizationApiKey()).toBe("synthetic-key-value");
+  });
+
+  it("keeps the stored key when a selection omits it", async () => {
+    const { store } = makeInMemoryStore();
+    await store.setCategorization({ provider: "gemini", apiKey: "synthetic-key-value" });
+    await store.setCategorization({ provider: "gemini" });
+
+    expect((await store.read()).hasCategorizationApiKey).toBe(true);
     expect(await store.readCategorizationApiKey()).toBe("synthetic-key-value");
   });
 

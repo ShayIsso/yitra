@@ -164,7 +164,7 @@ describe("runAiSyncStep", () => {
 
     const events = await collect(
       runAiSyncStep({
-        createProvider: () => null,
+        createProvider: async () => null,
         aiStore,
         memoryStore,
         transferRouter: fakeRouter(),
@@ -198,7 +198,7 @@ describe("runAiSyncStep", () => {
 
     const events = await collect(
       runAiSyncStep({
-        createProvider: () => scriptedProvider([]),
+        createProvider: async () => scriptedProvider([]),
         aiStore,
         memoryStore,
         transferRouter: fakeRouter(),
@@ -214,6 +214,19 @@ describe("runAiSyncStep", () => {
         createProvider: () => {
           throw new Error("bad config");
         },
+        aiStore,
+        memoryStore,
+        transferRouter: fakeRouter(),
+      }),
+    );
+    expect(events).toEqual([]);
+  });
+
+  it("swallows a rejected provider construction, such as a stored key that fails to decrypt", async () => {
+    const { aiStore, memoryStore } = makeStores({ txns: [], categories: CATS });
+    const events = await collect(
+      runAiSyncStep({
+        createProvider: () => Promise.reject(new Error("unable to authenticate data")),
         aiStore,
         memoryStore,
         transferRouter: fakeRouter(),
@@ -247,7 +260,7 @@ describe("runAiSyncStep", () => {
 
     const events = await collect(
       runAiSyncStep({
-        createProvider: () => provider,
+        createProvider: async () => provider,
         aiStore,
         memoryStore,
         transferRouter: router,
@@ -283,7 +296,7 @@ describe("runAiSyncStep", () => {
 
     const events = await collect(
       runAiSyncStep({
-        createProvider: () => scriptedProvider([]),
+        createProvider: async () => scriptedProvider([]),
         aiStore,
         memoryStore,
         transferRouter: router,

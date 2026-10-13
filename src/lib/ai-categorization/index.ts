@@ -35,8 +35,32 @@ export type { GeminiProviderConfig, GeminiModel } from "./gemini";
 export { createGeminiProvider, GEMINI_DEFAULT_MODEL } from "./gemini";
 export type { OllamaProviderConfig } from "./ollama";
 export { createOllamaProvider, OLLAMA_DEFAULT_MODEL, OLLAMA_DEFAULT_ENDPOINT } from "./ollama";
-export type { AiProviderKind, AiCategorizationConfig, ProviderResolution } from "./config";
-export { resolveCategorizationProvider, createConfiguredProvider } from "./config";
+export type {
+  AiProviderKind,
+  AiCategorizationConfig,
+  GeminiKeySource,
+  ProviderResolution,
+  ProviderEnvironment,
+  ProviderSources,
+  StoredProviderSelection,
+} from "./config";
+export {
+  resolveCategorizationProvider,
+  categorizationConfigFrom,
+  createConfiguredProvider,
+} from "./config";
+export type {
+  ProviderSettingsView,
+  ProviderSelectionInput,
+  SaveProviderOutcome,
+} from "./provider-settings";
+export {
+  describeProviderSettings,
+  providerSelectionSchema,
+  readProviderSettings,
+  saveProviderSelection,
+  clearStoredProviderKey,
+} from "./provider-settings";
 export type {
   ReviewSuggestionStatus,
   PendingSuggestionRow,

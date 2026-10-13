@@ -3,10 +3,14 @@ import type { AiProviderKind } from "@/lib/ai-categorization";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { projectAppSettings, type AppSettings } from "./settings";
 
-/** A provider choice and the key it needs; `null` clears any stored key. */
+/**
+ * A provider choice and what to do with the stored key: a string replaces it,
+ * `null` clears it, and omitting it leaves the stored key as it is — so
+ * re-saving a selection never needs the plaintext key back out of the store.
+ */
 export type CategorizationSelection = {
   readonly provider: AiProviderKind;
-  readonly apiKey: string | null;
+  readonly apiKey?: string | null;
 };
 
 export type AppSettingsStore = {
@@ -34,6 +38,10 @@ export type AppSettingsStore = {
    * (ADR-0014 §4).
    */
   completeOnboarding(completedAt: Date): Promise<boolean>;
+  /**
+   * The key is encrypted before the write is built, so its plaintext is never
+   * a bound value; a failed write rejects with `CategorizationWriteError`.
+   */
   setCategorization(selection: CategorizationSelection): Promise<void>;
   /** Decrypts the stored key. The only path by which it leaves the store. */
   readCategorizationApiKey(): Promise<string | null>;
@@ -117,6 +125,29 @@ export class AppPasswordWriteError extends Error {
   }
 }
 
+/**
+ * Thrown in place of any failure while storing the categorization selection,
+ * for the reason `AppPasswordWriteError` exists: Drizzle's error carries the
+ * bound key ciphertext in its message and `params`, and Next prints an uncaught
+ * action error to stdout. It holds no query, no params and no `cause`.
+ */
+export class CategorizationWriteError extends Error {
+  constructor() {
+    super("Storing the categorization provider failed");
+    this.name = "CategorizationWriteError";
+  }
+}
+
+function keyColumns(apiKey: string | null | undefined) {
+  if (apiKey === undefined) return {};
+  const key = apiKey === null ? { encrypted: null, iv: null, authTag: null } : encrypt(apiKey);
+  return {
+    categorizationApiKeyEncrypted: key.encrypted,
+    categorizationApiKeyIv: key.iv,
+    categorizationApiKeyAuthTag: key.authTag,
+  };
+}
+
 /** `open` is the seam for tests that need a failing connection; production uses the barrel. */
 export function makeDrizzleAppSettingsStore(
   open: () => Promise<Connection> = connect,
@@ -168,22 +199,20 @@ export function makeDrizzleAppSettingsStore(
     async setCategorization(selection: CategorizationSelection): Promise<void> {
       const { db, appSettings } = await open();
 
-      const key =
-        selection.apiKey === null
-          ? { encrypted: null, iv: null, authTag: null }
-          : encrypt(selection.apiKey);
-      const columns = {
-        categorizationProvider: selection.provider,
-        categorizationApiKeyEncrypted: key.encrypted,
-        categorizationApiKeyIv: key.iv,
-        categorizationApiKeyAuthTag: key.authTag,
-        updatedAt: new Date(),
-      };
+      try {
+        const columns = {
+          categorizationProvider: selection.provider,
+          ...keyColumns(selection.apiKey),
+          updatedAt: new Date(),
+        };
 
-      await db
-        .insert(appSettings)
-        .values({ id: SINGLETON_ID, ...columns })
-        .onConflictDoUpdate({ target: appSettings.id, set: columns });
+        await db
+          .insert(appSettings)
+          .values({ id: SINGLETON_ID, ...columns })
+          .onConflictDoUpdate({ target: appSettings.id, set: columns });
+      } catch {
+        throw new CategorizationWriteError();
+      }
     },
 
     async readCategorizationApiKey(): Promise<string | null> {

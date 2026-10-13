@@ -7,7 +7,8 @@
  * the real seam: env resolution → adapter → the core module's redaction,
  * prompt assembly, and parser.
  *
- * Run (from the repo root, with AI_PROVIDER + a key/endpoint set in .env):
+ * Run (from the repo root, with a provider chosen in .env or in the app's
+ * settings — the environment wins when both are set, ADR-0014 §3):
  *   npx tsx scripts/smoke-ai-provider.ts
  *
  * Expected output shape (values vary by model):
@@ -35,7 +36,7 @@ const CATEGORIES = [
 const BATCH = ["קפה ג'ו סניף מרכז", "רמי לוי שיווק", "פז תחנת דלק"];
 
 async function main(): Promise<void> {
-  const provider = createConfiguredProvider();
+  const provider = await createConfiguredProvider();
   if (!provider) {
     console.log("provider: off (no external call made)");
     return;
@@ -60,9 +61,14 @@ async function main(): Promise<void> {
   console.log("failures:", parsed.failures.length);
 }
 
-main().catch((err) => {
-  // Surface only the error's shape (ProviderError messages are body-free by
-  // construction); never dump an arbitrary object that might carry a payload.
-  console.error(err instanceof Error ? `${err.name}: ${err.message}` : "unknown error");
-  process.exit(1);
-});
+// The stored selection is read through the database pool, whose idle
+// connections would otherwise keep the process alive after `main` resolves.
+main().then(
+  () => process.exit(0),
+  (err) => {
+    // Surface only the error's shape (ProviderError messages are body-free by
+    // construction); never dump an arbitrary object that might carry a payload.
+    console.error(err instanceof Error ? `${err.name}: ${err.message}` : "unknown error");
+    process.exit(1);
+  },
+);
