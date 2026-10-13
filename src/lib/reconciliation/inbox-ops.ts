@@ -5,7 +5,7 @@
  */
 
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
-import type { BankType } from "@/lib/bank-registry";
+import { bankKindOf, type BankType } from "@/lib/bank-registry";
 
 export type InboxTransaction = {
   id: string;
@@ -44,15 +44,21 @@ export type InboxStore = {
  * Heuristic (in priority order):
  * 1. If one row has description containing "ביט" (Bit) markers, that is the cardSide;
  *    the other is bankSide.
- * 2. If both or neither have markers, prefer bankType === "discount" as bankSide
- *    (Discount is our canonical bank account; Max/Cal are credit/card accounts).
- * 3. If both same bankType, pick the row with earlier createdAt as bankSide
- *    (deterministic tie-break).
+ * 2. If both or neither have markers, prefer the row whose institution's registry
+ *    `kind` is "bank" over one that is not.
+ * 3. If that still does not separate them, pick the row with earlier createdAt as
+ *    bankSide (deterministic tie-break).
  *
  * Rationale: A future PR may add an explicit role-side column — this heuristic
  * bridges the gap until then.
+ *
+ * `kindOf` exists so a test can stand in a registry entry that does not exist yet;
+ * production callers take the registry default.
  */
-export function identifyBankSide(members: InboxTransaction[]): InboxTransaction | null {
+export function identifyBankSide(
+  members: InboxTransaction[],
+  kindOf: typeof bankKindOf = bankKindOf,
+): InboxTransaction | null {
   // A singleton suspected-transfer group (AI-step routing, #148): its only member
   // is the side to flip to the transfer category on approve. Genuine pairs below.
   if (members.length === 1) return members[0];
@@ -67,9 +73,11 @@ export function identifyBankSide(members: InboxTransaction[]): InboxTransaction 
   if (aHasBit && !bHasBit) return b;
   if (bHasBit && !aHasBit) return a;
 
-  // Rule 2: prefer discount as bankSide
-  if (a.bankType === "discount" && b.bankType !== "discount") return a;
-  if (b.bankType === "discount" && a.bankType !== "discount") return b;
+  // Rule 2: prefer the bank-kind row as bankSide
+  const aIsBank = kindOf(a.bankType) === "bank";
+  const bIsBank = kindOf(b.bankType) === "bank";
+  if (aIsBank && !bIsBank) return a;
+  if (bIsBank && !aIsBank) return b;
 
   // Rule 3: deterministic tie-break — earlier createdAt is bankSide
   return a.createdAt <= b.createdAt ? a : b;
