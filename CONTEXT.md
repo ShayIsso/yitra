@@ -69,7 +69,7 @@ Always say "settlement charge" or "The Paradox" — these names are used in BACK
 
 ### `OTP` (one-time password)
 
-Which institutions issue an OTP during scraping is a `bank registry` fact — each entry's `issuesOtp`, read through `bankIssuesOtp` — not prose to keep in sync here. No code branches on it to decide whether to prompt: the flow is **event-driven**. Every scrape is handed an `otpCodeRetriever`, and only an institution whose login actually challenges for a code calls it; that call is what raises `otp_required`. The OTP arrives as an SMS to the user; the UI prompts them to enter it within a 3-minute window (`/api/sync/otp` POST endpoint, promise-bridged to the scraper). On timeout the per-bank scrape fails and the next bank starts (per ADR-0003). Scheduled runs answer the same event with `skip()` and record `otp_skipped`.
+Which institutions issue an OTP during scraping is a `bank registry` fact — each entry's `issuesOtp`, exposed by `bankIssuesOtp` — not prose to keep in sync here. No code branches on it to decide whether to prompt: the flow is **event-driven**. Every scrape is handed an `otpCodeRetriever`, and only an institution whose login actually challenges for a code calls it; that call is what raises `otp_required`. The OTP arrives as an SMS to the user; the UI prompts them to enter it within a 3-minute window (`/api/sync/otp` POST endpoint, promise-bridged to the scraper). On timeout the per-bank scrape fails and the next bank starts (per ADR-0003). Scheduled runs answer the same event with `skip()` and record `otp_skipped`.
 
 ### `sync claim` — load-bearing
 
