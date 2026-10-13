@@ -1,6 +1,16 @@
 import { z } from "zod";
 import type { BankRegistryEntry } from "./entries";
-import { credentialFieldRule } from "./fields";
+import { credentialFieldRule, isSecretFieldKind, type CredentialFieldDescriptor } from "./fields";
+
+export interface CredentialSchemaOptions {
+  /**
+   * Let a secret-kind field be blank (it must still be present). This is the
+   * edit form's "blank means keep the stored value" contract, derived from the
+   * field kind rather than forked per institution; every non-secret field keeps
+   * its full rule, so a prefilled value cannot be cleared.
+   */
+  readonly allowBlankSecrets?: boolean;
+}
 
 /**
  * The credential schema for one institution, replacing the per-institution Zod
@@ -10,10 +20,32 @@ import { credentialFieldRule } from "./fields";
  */
 export function credentialSchemaFor(
   entry: BankRegistryEntry,
+  options: CredentialSchemaOptions = {},
 ): z.ZodObject<Record<string, z.ZodString>> {
   const shape: Record<string, z.ZodString> = {};
   for (const field of entry.credentialFields) {
-    shape[field.key] = credentialFieldRule(field);
+    shape[field.key] =
+      options.allowBlankSecrets && isSecretFieldKind(field.kind)
+        ? z.string()
+        : credentialFieldRule(field);
   }
   return z.object(shape);
+}
+
+/**
+ * The stored credential values that may leave the server: the declared fields
+ * whose kind is not secret (ADR-0013 §2). An allowlist over the declared fields,
+ * not a denylist over the stored keys, so a stored key no field declares — or
+ * any field of an unregistered institution — is never exposed.
+ */
+export function nonSecretCredentialValues(
+  fields: readonly CredentialFieldDescriptor[],
+  stored: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const safe: Record<string, string> = {};
+  for (const field of fields) {
+    const value = stored[field.key];
+    if (!isSecretFieldKind(field.kind) && typeof value === "string") safe[field.key] = value;
+  }
+  return safe;
 }

@@ -3,11 +3,11 @@ import { db } from "@/db";
 import { bankCredentials } from "@/db/schema";
 import { encrypt, decrypt } from "@/lib/crypto";
 import type { BankType } from "@/lib/bank-registry";
-import { credentialSchemas } from "./schemas";
+import { storedCredentialSchema } from "./schemas";
 import { CredentialNotFoundError } from "./errors";
 
-function validateCredentials(bankType: BankType, raw: Record<string, string>): void {
-  credentialSchemas[bankType].parse(raw);
+function validateCredentials(bankType: string, raw: Record<string, string>): void {
+  storedCredentialSchema(bankType).parse(raw);
 }
 
 export async function addCredential(

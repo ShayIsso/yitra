@@ -23,6 +23,12 @@ export interface CredentialFieldDescriptor {
   readonly key: string;
   readonly kind: CredentialFieldKind;
   readonly label: string;
+  /**
+   * Shown inside the empty input when the label alone could be misread — an
+   * institution's internet username is not the national id. Display only; it
+   * never reaches validation messages.
+   */
+  readonly hint?: string;
 }
 
 /** Everything a generic credential form needs to render a field without branching on its kind. */
