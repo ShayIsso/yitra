@@ -107,6 +107,13 @@ describe("sync of a credential whose institution is no longer registered", () =>
     );
   });
 
+  it("never decrypts that row's credentials", async () => {
+    await drain();
+
+    expect(getDecryptedCredentials).not.toHaveBeenCalledWith(RETIRED_CRED);
+    expect(getDecryptedCredentials).toHaveBeenCalledWith(LIVE_CRED);
+  });
+
   it("still syncs the registered institutions after it", async () => {
     await drain();
 

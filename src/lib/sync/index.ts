@@ -87,15 +87,14 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
   let total = 0;
 
   for (const cred of credentials) {
-    const { bankType: storedId, credentials: rawCreds } = await getDecryptedCredentials(cred.id);
-
     // The stored id is unconstrained text (ADR-0013 §4); one the registry no
-    // longer knows has no scraper mapping, so it is reported, not attempted.
-    const institution = bankTypeSchema.safeParse(storedId);
+    // longer knows has no scraper mapping, so it is reported, not attempted —
+    // and checked before decryption so its unusable secrets never enter memory.
+    const institution = bankTypeSchema.safeParse(cred.bankType);
     if (!institution.success) {
       yield {
         type: "bank_error",
-        bank: storedId,
+        bank: cred.bankType,
         error: institution.error.issues[0].message,
         hasScreenshot: false,
         _credentialId: cred.id,
@@ -103,6 +102,7 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
       continue;
     }
     const bankType = institution.data;
+    const { credentials: rawCreds } = await getDecryptedCredentials(cred.id);
 
     const existingAccount = await db.query.bankAccounts.findFirst({
       where: eq(bankAccounts.credentialId, cred.id),
