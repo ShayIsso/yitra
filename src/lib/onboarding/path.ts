@@ -15,10 +15,9 @@ export type OnboardingPathFacts = {
 };
 
 /**
- * Pure derivation (D13, epic #248 §12): each step is re-read from live state,
- * so one that stops being true — the only institution deleted — un-ticks
- * itself. A latch would need storage; the owner chose honesty over "never
- * returns" (2026-10-13).
+ * Pure derivation (epic #248 §12): each step is re-read from live state, so
+ * one that stops being true — the only institution deleted — un-ticks itself.
+ * No latch: that would need storage, and a stored "done" can't un-tick.
  */
 export function deriveOnboardingPath(facts: OnboardingPathFacts): OnboardingPathStep[] {
   const done: Record<OnboardingPathStepId, boolean> = {

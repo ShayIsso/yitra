@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { CheckCircle2, Circle } from "lucide-react";
+// Not the module's index: its DB-backed exports must not enter a client bundle.
 import {
   deriveOnboardingPath,
   hasPendingOnboardingStep,
   type OnboardingPathFacts,
   type OnboardingPathStepId,
 } from "@/lib/onboarding/path";
-
-// Not the module's index: its DB-backed exports must not enter a client bundle.
 
 export type OnboardingPathProps = {
   /** Null while any fact is unknown (a fetch failed) — the nudge stays out rather than guess. */
@@ -51,7 +50,11 @@ export function OnboardingPath({ facts }: OnboardingPathProps) {
                 href={href}
                 className="text-foreground press hover:bg-muted -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium transition-colors"
               >
-                <Circle className="text-muted-foreground size-4 shrink-0" strokeWidth={1.5} />
+                <Circle
+                  className="text-muted-foreground size-4 shrink-0"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
                 <span>{label}</span>
               </Link>
             </li>
