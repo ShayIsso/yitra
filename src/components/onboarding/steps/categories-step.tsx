@@ -38,29 +38,26 @@ function Entry({ entry }: { entry: TaxonomyEntry }) {
   );
 }
 
+function Section({ title, entries }: { title: string; entries: TaxonomyEntry[] }) {
+  return (
+    <section className="border-border rounded-lg border">
+      <h3 className="bg-muted/50 px-4 py-2 text-sm font-semibold">{title}</h3>
+      <ul className="flex flex-col gap-2 px-4 py-3">
+        {entries.map((entry) => (
+          <Entry key={entry.name} entry={entry} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function Taxonomy({ view }: { view: TaxonomyView }) {
   return (
     <div className="flex flex-col gap-4">
       {view.groups.map((group) => (
-        <section key={group.name} className="border-border rounded-lg border">
-          <h3 className="bg-muted/50 px-4 py-2 text-sm font-semibold">{group.name}</h3>
-          <ul className="flex flex-col gap-2 px-4 py-3">
-            {group.children.map((child) => (
-              <Entry key={child.name} entry={child} />
-            ))}
-          </ul>
-        </section>
+        <Section key={group.name} title={group.name} entries={group.children} />
       ))}
-      {view.standalone.length > 0 && (
-        <section className="border-border rounded-lg border">
-          <h3 className="bg-muted/50 px-4 py-2 text-sm font-semibold">קטגוריות נוספות</h3>
-          <ul className="flex flex-col gap-2 px-4 py-3">
-            {view.standalone.map((entry) => (
-              <Entry key={entry.name} entry={entry} />
-            ))}
-          </ul>
-        </section>
-      )}
+      {view.standalone.length > 0 && <Section title="קטגוריות נוספות" entries={view.standalone} />}
     </div>
   );
 }
@@ -71,8 +68,11 @@ export function CategoriesStep({ navigation }: SetupStepProps) {
   useEffect(() => {
     let cancelled = false;
     loadDefaultCategoriesAction()
-      .then((view) => !cancelled && setLoad({ status: "ready", view }))
-      .catch(() => !cancelled && setLoad({ status: "error" }));
+      .then((view): Load => ({ status: "ready", view }))
+      .catch((): Load => ({ status: "error" }))
+      .then((next) => {
+        if (!cancelled) setLoad(next);
+      });
     return () => {
       cancelled = true;
     };

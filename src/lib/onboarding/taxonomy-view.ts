@@ -17,14 +17,16 @@ export type TaxonomyView = {
 
 const entry = ({ name, type, color }: TaxonomyRow): TaxonomyEntry => ({ name, type, color });
 
-const SEED_ORDER = [...DEFAULT_GROUPS.map((g) => g.name), ...TAXONOMY_V2.map((c) => c.name)];
+const SEED_RANK = new Map(
+  [...DEFAULT_GROUPS.map((g) => g.name), ...TAXONOMY_V2.map((c) => c.name)].map((name, i) => [
+    name,
+    i,
+  ]),
+);
 
 /** Rows come back in table order; the seed's own order reads better and is stable. */
 const bySeedOrder = (a: TaxonomyRow, b: TaxonomyRow) => {
-  const rank = (r: TaxonomyRow) => {
-    const i = SEED_ORDER.indexOf(r.name);
-    return i === -1 ? SEED_ORDER.length : i;
-  };
+  const rank = (r: TaxonomyRow) => SEED_RANK.get(r.name) ?? SEED_RANK.size;
   return rank(a) - rank(b);
 };
 
@@ -33,7 +35,9 @@ export function buildTaxonomyView(rows: readonly TaxonomyRow[]): TaxonomyView {
   const childrenOf = new Map<string, TaxonomyRow[]>();
   for (const row of rows) {
     if (row.parentId === null) continue;
-    childrenOf.set(row.parentId, [...(childrenOf.get(row.parentId) ?? []), row]);
+    const siblings = childrenOf.get(row.parentId) ?? [];
+    siblings.push(row);
+    childrenOf.set(row.parentId, siblings);
   }
 
   const roots = rows.filter((r) => r.parentId === null).sort(bySeedOrder);
