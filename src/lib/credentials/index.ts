@@ -2,12 +2,14 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bankCredentials } from "@/db/schema";
 import { encrypt, decrypt } from "@/lib/crypto";
-import type { BankType } from "@/lib/bank-registry";
+import { bankTypeSchema, type BankType } from "@/lib/bank-registry";
 import { credentialSchemas } from "./schemas";
 import { CredentialNotFoundError } from "./errors";
 
-function validateCredentials(bankType: BankType, raw: Record<string, string>): void {
-  credentialSchemas[bankType].parse(raw);
+// Takes `string` because the stored id is unconstrained text (ADR-0013 §4): a row
+// naming a de-registered institution fails here with the boundary's own error.
+function validateCredentials(bankType: string, raw: Record<string, string>): void {
+  credentialSchemas[bankTypeSchema.parse(bankType)].parse(raw);
 }
 
 export async function addCredential(
@@ -35,7 +37,7 @@ export async function listCredentials(): Promise<
 
 export async function getDecryptedCredentials(
   id: string,
-): Promise<{ bankType: BankType; credentials: Record<string, string> }> {
+): Promise<{ bankType: string; credentials: Record<string, string> }> {
   const row = await db.query.bankCredentials.findFirst({
     where: eq(bankCredentials.id, id),
   });

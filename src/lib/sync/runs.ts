@@ -11,7 +11,7 @@ export type SyncRunRow = {
   id: string;
   startedAt: Date;
   finishedAt: Date | null;
-  bank: BankType;
+  bank: string;
   status: SyncRunStatus;
   transactionsImported: number;
   errorMessage: string | null;
@@ -20,7 +20,7 @@ export type SyncRunRow = {
 
 export type SyncRunSummary = {
   id: string;
-  bank: BankType;
+  bank: string;
   status: SyncRunStatus;
   transactionsImported: number;
   startedAt: Date;

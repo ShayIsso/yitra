@@ -13,12 +13,11 @@ import { parseCategorizationResponse } from "./parse";
 import { routeConfidence } from "./router";
 import { planPacing, type PacingPolicy } from "./pacing";
 import type { CategorizationProvider, GenerationOptions } from "./provider";
-import type { BankType } from "@/lib/bank-registry";
 
 export interface UncategorizedTxn {
   readonly id: string;
   readonly description: string;
-  readonly bankType: BankType;
+  readonly bankType: string;
 }
 
 /** A category as the store hands it out: id for applying, name+description for the prompt. */
@@ -141,7 +140,7 @@ const GENERATION: GenerationOptions = { temperature: 0, json: true };
 const MEMORY_CACHE_MODEL = "memory";
 const MEMORY_CACHE_CONFIDENCE = 6;
 
-function transferKindsFor(bankType: BankType): TransferDescriptorKind[] {
+function transferKindsFor(bankType: string): TransferDescriptorKind[] {
   return bankType === "discount"
     ? ["inter_account", "bit_mirror", "card_settlement"]
     : ["inter_account", "bit_mirror"];

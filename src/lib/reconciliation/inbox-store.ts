@@ -14,14 +14,13 @@ import {
 import { eq, isNull, isNotNull, inArray, asc } from "drizzle-orm";
 import type { InboxStore, InboxTransaction } from "./inbox-ops";
 import type { CategoryRule } from "@/lib/categories/rules";
-import type { BankType } from "@/lib/bank-registry";
 
 // ── Row shape returned by the inbox query ───────────────────────────────────
 
 export type InboxRow = {
   id: string;
   bankAccountId: string;
-  bankType: BankType;
+  bankType: string;
   accountNumber: string;
   credentialDisplayName: string;
   date: string;
@@ -113,7 +112,7 @@ export async function getPendingGroupCount(): Promise<number> {
 function rowToInboxTxn(r: {
   id: string;
   bankAccountId: string;
-  bankType: BankType;
+  bankType: string;
   date: string;
   description: string;
   chargedAmount: unknown;
