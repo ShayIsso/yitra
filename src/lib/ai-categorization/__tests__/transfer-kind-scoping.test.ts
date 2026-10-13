@@ -1,21 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { runAiCategorization, type AiCategorizationStore, type UncategorizedTxn } from "../run";
 import type { CategorizationProvider } from "../provider";
 import type { MerchantMemoryStore } from "@/lib/merchant-memory";
-import { bankKindOf, type BankKind, type BankType } from "@/lib/bank-registry";
+import {
+  HYPOTHETICAL_BANK,
+  HYPOTHETICAL_CARD,
+  UNREGISTERED,
+} from "@/lib/bank-registry/__tests__/hypothetical-institutions";
 
-// Ids no registry entry carries. Transaction rows are typed by the registered
-// union, so the ids are widened through `string`; the resolver below is the only
-// thing that gives them a kind, standing in for a future registry entry.
-const EXTRA_CARD = "hypothetical-card-issuer" as string as BankType;
-const EXTRA_BANK = "hypothetical-account-bank" as string as BankType;
-const UNKNOWN = "institution-with-no-entry" as string as BankType;
-
-function withHypotheticalInstitutions(id: string): BankKind | undefined {
-  if (id === EXTRA_CARD) return "card";
-  if (id === EXTRA_BANK) return "bank";
-  return bankKindOf(id);
-}
+vi.mock("@/lib/bank-registry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bank-registry")>();
+  const { withHypotheticalInstitutions } =
+    await import("@/lib/bank-registry/__tests__/hypothetical-institutions");
+  return { ...actual, bankKindOf: withHypotheticalInstitutions(actual.bankKindOf) };
+});
 
 const SETTLEMENT_SHAPED = "חיוב חודשי";
 const INTER_ACCOUNT_SHAPED = "העברה לחיסכון";
@@ -70,7 +68,6 @@ async function guardedIds(txns: UncategorizedTxn[]) {
   const summary = await runAiCategorization({
     ...storesServing(txns),
     provider,
-    kindOf: withHypotheticalInstitutions,
   });
   return { guarded: summary.transferSkippedIds, prompts: provider.prompts };
 }
@@ -78,7 +75,7 @@ async function guardedIds(txns: UncategorizedTxn[]) {
 describe("runAiCategorization — transfer-guard kind scoping follows registry kind", () => {
   it("guards a settlement-shaped description from a bank institution added to the registry", async () => {
     const { guarded, prompts } = await guardedIds([
-      { id: "t-bank", description: SETTLEMENT_SHAPED, bankType: EXTRA_BANK },
+      { id: "t-bank", description: SETTLEMENT_SHAPED, bankType: HYPOTHETICAL_BANK },
     ]);
 
     expect(guarded).toEqual(["t-bank"]);
@@ -87,7 +84,7 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("sends a settlement-shaped description from a card institution added to the registry to the provider", async () => {
     const { guarded, prompts } = await guardedIds([
-      { id: "t-card", description: SETTLEMENT_SHAPED, bankType: EXTRA_CARD },
+      { id: "t-card", description: SETTLEMENT_SHAPED, bankType: HYPOTHETICAL_CARD },
     ]);
 
     expect(guarded).toEqual([]);
@@ -96,7 +93,7 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("still guards a cross-account description from a card institution added to the registry", async () => {
     const { guarded } = await guardedIds([
-      { id: "t-card", description: INTER_ACCOUNT_SHAPED, bankType: EXTRA_CARD },
+      { id: "t-card", description: INTER_ACCOUNT_SHAPED, bankType: HYPOTHETICAL_CARD },
     ]);
 
     expect(guarded).toEqual(["t-card"]);
@@ -104,8 +101,8 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("scopes an institution of unknown kind like a card, never widening its guard", async () => {
     const { guarded } = await guardedIds([
-      { id: "t-settle", description: SETTLEMENT_SHAPED, bankType: UNKNOWN },
-      { id: "t-xfer", description: INTER_ACCOUNT_SHAPED, bankType: UNKNOWN },
+      { id: "t-settle", description: SETTLEMENT_SHAPED, bankType: UNREGISTERED },
+      { id: "t-xfer", description: INTER_ACCOUNT_SHAPED, bankType: UNREGISTERED },
     ]);
 
     expect(guarded).toEqual(["t-xfer"]);

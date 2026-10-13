@@ -518,39 +518,52 @@ export async function getSpendingRollup(
   return rollUpSpendingByGroup(spending, rollupCategories);
 }
 
-/**
- * Card issuers' scrapers don't reliably report account balance, so a card-kind
- * account displays the next-debit estimate instead. An institution of unknown
- * kind keeps its reported balance.
- */
-function estimatesNextDebit(bankType: string, kindOf: typeof bankKindOf): boolean {
-  return kindOf(bankType) === "card";
-}
-
 /** An account as stored, before the next-debit estimate is substituted for card accounts. */
 export type ReportedAccountBalance = Omit<AccountBalance, "nextDebitDate">;
 
 /**
- * `upcomingByAccount` needs entries only for card-kind accounts. `kindOf` exists so
- * a test can stand in a registry entry that does not exist yet; production callers
- * take the registry default.
+ * Card issuers' scrapers don't reliably report account balance, so a card-kind
+ * account displays the next-debit estimate instead. An institution of unknown
+ * kind keeps its reported balance. The one selector both the upcoming-charges
+ * fetch and the projection read, so the two cannot disagree on which accounts
+ * are estimated.
  */
+function nextDebitAccountIds(accounts: readonly ReportedAccountBalance[]): ReadonlySet<string> {
+  return new Set(accounts.filter((a) => bankKindOf(a.bankType) === "card").map((a) => a.id));
+}
+
+/** `upcomingByAccount` needs entries only for card-kind accounts. */
 export function projectAccountBalances(
   accounts: readonly ReportedAccountBalance[],
   upcomingByAccount: ReadonlyMap<string, NextDebitTransaction[]>,
   today: string,
-  kindOf: typeof bankKindOf = bankKindOf,
 ): AccountBalance[] {
+  const estimated = nextDebitAccountIds(accounts);
+
   return accounts.map((account) => {
-    if (estimatesNextDebit(account.bankType, kindOf)) {
+    if (estimated.has(account.id)) {
       const { estimate, nextDebitDate } = computeNextDebitEstimate(
         upcomingByAccount.get(account.id) ?? [],
         today,
       );
-      return { ...account, balance: estimate, nextDebitDate };
+      return {
+        id: account.id,
+        accountNumber: account.accountNumber,
+        balance: estimate,
+        bankType: account.bankType,
+        displayName: account.displayName,
+        nextDebitDate,
+      };
     }
 
-    return { ...account, nextDebitDate: null };
+    return {
+      id: account.id,
+      accountNumber: account.accountNumber,
+      balance: account.balance,
+      bankType: account.bankType,
+      displayName: account.displayName,
+      nextDebitDate: null,
+    };
   });
 }
 
@@ -574,9 +587,7 @@ export async function getAccountBalances(): Promise<AccountBalance[]> {
     displayName: r.displayName,
   }));
 
-  const cardAccountIds = accounts
-    .filter((a) => estimatesNextDebit(a.bankType, bankKindOf))
-    .map((a) => a.id);
+  const cardAccountIds = [...nextDebitAccountIds(accounts)];
 
   // Computed once here, then threaded into the pure function — see
   // computeNextDebitEstimate's doc comment for why it never calls Date itself.

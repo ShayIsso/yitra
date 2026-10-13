@@ -1,20 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { detectP1Settlement } from "../detect-p1";
 import { identifyBankSide, type InboxTransaction } from "../inbox-ops";
 import type { ReconciliationTransaction } from "../types";
-import { bankKindOf, type BankKind, type BankType } from "@/lib/bank-registry";
+import {
+  HYPOTHETICAL_BANK,
+  HYPOTHETICAL_CARD,
+  UNREGISTERED,
+} from "@/lib/bank-registry/__tests__/hypothetical-institutions";
 
-// Ids no registry entry carries. Consumer rows are typed by the registered union,
-// so the ids are widened through `string`; the resolver below is the only thing
-// that gives them a kind, standing in for a future registry entry.
-const EXTRA_CARD = "hypothetical-card-issuer" as string as BankType;
-const EXTRA_BANK = "hypothetical-account-bank" as string as BankType;
-
-function withHypotheticalInstitutions(id: string): BankKind | undefined {
-  if (id === EXTRA_CARD) return "card";
-  if (id === EXTRA_BANK) return "bank";
-  return bankKindOf(id);
-}
+vi.mock("@/lib/bank-registry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bank-registry")>();
+  const { withHypotheticalInstitutions } =
+    await import("@/lib/bank-registry/__tests__/hypothetical-institutions");
+  return { ...actual, bankKindOf: withHypotheticalInstitutions(actual.bankKindOf) };
+});
 
 let idCounter = 0;
 function tx(overrides: Partial<ReconciliationTransaction> = {}): ReconciliationTransaction {
@@ -35,10 +34,10 @@ function tx(overrides: Partial<ReconciliationTransaction> = {}): ReconciliationT
 describe("detectP1Settlement — institution selection follows registry kind", () => {
   it("matches a bank lump against card rows from a card institution added to the registry", () => {
     const lump = tx({ description: "חיוב ויזה", chargedAmount: -300 });
-    const card1 = tx({ bankType: EXTRA_CARD, description: "קפה", chargedAmount: -100 });
-    const card2 = tx({ bankType: EXTRA_CARD, description: "מסעדה", chargedAmount: -200 });
+    const card1 = tx({ bankType: HYPOTHETICAL_CARD, description: "קפה", chargedAmount: -100 });
+    const card2 = tx({ bankType: HYPOTHETICAL_CARD, description: "מסעדה", chargedAmount: -200 });
 
-    const result = detectP1Settlement([lump, card1, card2], withHypotheticalInstitutions);
+    const result = detectP1Settlement([lump, card1, card2]);
 
     expect(result).toHaveLength(1);
     expect(result[0].bankLump.id).toBe(lump.id);
@@ -48,21 +47,20 @@ describe("detectP1Settlement — institution selection follows registry kind", (
   });
 
   it("takes the settlement lump from a bank institution added to the registry", () => {
-    const lump = tx({ bankType: EXTRA_BANK, description: "חיוב ויזה", chargedAmount: -300 });
+    const lump = tx({ bankType: HYPOTHETICAL_BANK, description: "חיוב ויזה", chargedAmount: -300 });
     const card = tx({ bankType: "max", description: "קפה", chargedAmount: -300 });
 
-    const result = detectP1Settlement([lump, card], withHypotheticalInstitutions);
+    const result = detectP1Settlement([lump, card]);
 
     expect(result).toHaveLength(1);
     expect(result[0].bankLump.id).toBe(lump.id);
   });
 
   it("never treats rows from an institution of unknown kind as either side", () => {
-    const unknown = "institution-with-no-entry" as string as BankType;
-    const lump = tx({ bankType: unknown, description: "חיוב ויזה", chargedAmount: -300 });
-    const card = tx({ bankType: unknown, description: "קפה", chargedAmount: -300 });
+    const lump = tx({ bankType: UNREGISTERED, description: "חיוב ויזה", chargedAmount: -300 });
+    const card = tx({ bankType: UNREGISTERED, description: "קפה", chargedAmount: -300 });
 
-    expect(detectP1Settlement([lump, card], withHypotheticalInstitutions)).toEqual([]);
+    expect(detectP1Settlement([lump, card])).toEqual([]);
   });
 });
 
@@ -93,17 +91,17 @@ describe("identifyBankSide — the unmarked tiebreak follows registry kind", () 
     });
     const bankRow = pairMember({
       id: "bank-row",
-      bankType: EXTRA_BANK,
+      bankType: HYPOTHETICAL_BANK,
       createdAt: new Date("2026-01-15T11:00:00Z"),
     });
 
-    expect(identifyBankSide([cardRow, bankRow], withHypotheticalInstitutions)?.id).toBe("bank-row");
+    expect(identifyBankSide([cardRow, bankRow])?.id).toBe("bank-row");
   });
 
   it("picks the bank row over a row from a card institution added to the registry", () => {
     const cardRow = pairMember({
       id: "card-row",
-      bankType: EXTRA_CARD,
+      bankType: HYPOTHETICAL_CARD,
       createdAt: new Date("2026-01-15T09:00:00Z"),
     });
     const bankRow = pairMember({
@@ -112,7 +110,7 @@ describe("identifyBankSide — the unmarked tiebreak follows registry kind", () 
       createdAt: new Date("2026-01-15T11:00:00Z"),
     });
 
-    expect(identifyBankSide([cardRow, bankRow], withHypotheticalInstitutions)?.id).toBe("bank-row");
+    expect(identifyBankSide([cardRow, bankRow])?.id).toBe("bank-row");
   });
 
   it("falls back to the earlier row when both sides are of the same kind", () => {
@@ -123,10 +121,10 @@ describe("identifyBankSide — the unmarked tiebreak follows registry kind", () 
     });
     const earlier = pairMember({
       id: "earlier",
-      bankType: EXTRA_BANK,
+      bankType: HYPOTHETICAL_BANK,
       createdAt: new Date("2026-01-15T09:00:00Z"),
     });
 
-    expect(identifyBankSide([later, earlier], withHypotheticalInstitutions)?.id).toBe("earlier");
+    expect(identifyBankSide([later, earlier])?.id).toBe("earlier");
   });
 });

@@ -13,7 +13,7 @@ import { parseCategorizationResponse } from "./parse";
 import { routeConfidence } from "./router";
 import { planPacing, type PacingPolicy } from "./pacing";
 import type { CategorizationProvider, GenerationOptions } from "./provider";
-import { bankKindOf, type BankKind, type BankType } from "@/lib/bank-registry";
+import { bankKindOf, type BankType } from "@/lib/bank-registry";
 
 export interface UncategorizedTxn {
   readonly id: string;
@@ -123,8 +123,6 @@ export interface RunDeps {
   readonly provider: CategorizationProvider;
   readonly options?: RunOptions;
   readonly pacing?: BatchPacing;
-  /** Stands in a registry entry that does not exist yet; production omits it for the registry default. */
-  readonly kindOf?: typeof bankKindOf;
 }
 
 // Locked by the benchmark shape (#144): deterministic JSON output, not caller-tunable.
@@ -144,8 +142,8 @@ const MEMORY_CACHE_CONFIDENCE = 6;
  * (owner-adjudicated, PR #150). Mirrors reconciliation P1's kind gate. An
  * institution of unknown kind gets the narrower card scope.
  */
-function transferKindsFor(kind: BankKind | undefined): TransferDescriptorKind[] {
-  return kind === "bank"
+function transferKindsFor(bankType: BankType): TransferDescriptorKind[] {
+  return bankKindOf(bankType) === "bank"
     ? ["inter_account", "bit_mirror", "card_settlement"]
     : ["inter_account", "bit_mirror"];
 }
@@ -164,7 +162,7 @@ export async function runAiCategorization(
   deps: RunDeps,
   now: Date = new Date(),
 ): Promise<AiCategorizationSummary> {
-  const { aiStore, memoryStore, provider, kindOf = bankKindOf } = deps;
+  const { aiStore, memoryStore, provider } = deps;
   const batchSize = deps.options?.batchSize ?? BATCH_SIZE;
 
   const all = await aiStore.getUncategorizedTransactions();
@@ -230,7 +228,7 @@ export async function runAiCategorization(
   const afterTransfer: UncategorizedTxn[] = [];
   const transferSkippedIds: string[] = [];
   for (const txn of afterMemory) {
-    if (matchesTransferDescriptor(txn.description, transferKindsFor(kindOf(txn.bankType)))) {
+    if (matchesTransferDescriptor(txn.description, transferKindsFor(txn.bankType))) {
       transferSkipped++;
       transferSkippedIds.push(txn.id);
     } else {

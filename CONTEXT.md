@@ -83,7 +83,7 @@ The `israeli-bank-scrapers-core` library exposes a `futureDebits` array on credi
 
 ### `next-debit estimate` — load-bearing
 
-What the dashboard shows as a card account's "balance" — any account whose institution's registry `kind` is `card`: an estimate of the upcoming charge (החיוב הקרוב) against the bank account, **derived from stored transactions**, not read from the scraper. Decided in issue #102, shipped in PR #127.
+What the dashboard shows as the "balance" of a card account (any account whose institution's registry `kind` is `card`): an estimate of the upcoming charge (החיוב הקרוב) against the bank account, **derived from stored transactions**, not read from the scraper. Decided in issue #102, shipped in PR #127.
 
 The rule: sum of `chargedAmount` over the card's transactions with `processedDate` in `(today, today + 31 days]` — exclusive of today, inclusive at +31 days. Transaction status and type are deliberately ignored; the date predicate alone decides. Empty window → ₪0 (never "—"). The debit-date hint shown next to it is the in-window date carrying the largest absolute summed charge, so a small off-cycle straggler can't outrank the main billing-cycle date.
 

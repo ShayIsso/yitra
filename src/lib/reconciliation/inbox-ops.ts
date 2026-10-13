@@ -51,14 +51,8 @@ export type InboxStore = {
  *
  * Rationale: A future PR may add an explicit role-side column — this heuristic
  * bridges the gap until then.
- *
- * `kindOf` exists so a test can stand in a registry entry that does not exist yet;
- * production callers take the registry default.
  */
-export function identifyBankSide(
-  members: InboxTransaction[],
-  kindOf: typeof bankKindOf = bankKindOf,
-): InboxTransaction | null {
+export function identifyBankSide(members: InboxTransaction[]): InboxTransaction | null {
   // A singleton suspected-transfer group (AI-step routing, #148): its only member
   // is the side to flip to the transfer category on approve. Genuine pairs below.
   if (members.length === 1) return members[0];
@@ -74,8 +68,8 @@ export function identifyBankSide(
   if (bHasBit && !aHasBit) return a;
 
   // Rule 2: prefer the bank-kind row as bankSide
-  const aIsBank = kindOf(a.bankType) === "bank";
-  const bIsBank = kindOf(b.bankType) === "bank";
+  const aIsBank = bankKindOf(a.bankType) === "bank";
+  const bIsBank = bankKindOf(b.bankType) === "bank";
   if (aIsBank && !bIsBank) return a;
   if (bIsBank && !aIsBank) return b;
 

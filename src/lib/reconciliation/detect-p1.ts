@@ -7,8 +7,8 @@ const CYCLE_WINDOW_DAYS = 35;
 const OVERLAP_PENALTY = 0.25;
 const MIN_CONFIDENCE = 0.7;
 
-function isBankLumpCandidate(tx: ReconciliationTransaction, kindOf: typeof bankKindOf): boolean {
-  if (kindOf(tx.bankType) !== "bank") return false;
+function isBankLumpCandidate(tx: ReconciliationTransaction): boolean {
+  if (bankKindOf(tx.bankType) !== "bank") return false;
   return matchesTransferDescriptor(tx.description, ["card_settlement"]);
 }
 
@@ -17,19 +17,14 @@ function parseDate(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00Z`);
 }
 
-/**
- * `kindOf` exists so a test can stand in a registry entry that does not exist yet;
- * production callers take the registry default. An institution of unknown kind
- * lands on neither side.
- */
+/** A row from an institution of unknown kind lands on neither side. */
 export function detectP1Settlement(
   transactions: ReconciliationTransaction[],
-  kindOf: typeof bankKindOf = bankKindOf,
 ): ReconciliationCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
-  const bankLumps = unreconciled.filter((tx) => isBankLumpCandidate(tx, kindOf));
-  const cardTxns = unreconciled.filter((tx) => kindOf(tx.bankType) === "card");
+  const bankLumps = unreconciled.filter(isBankLumpCandidate);
+  const cardTxns = unreconciled.filter((tx) => bankKindOf(tx.bankType) === "card");
 
   if (bankLumps.length === 0 || cardTxns.length === 0) return [];
 
