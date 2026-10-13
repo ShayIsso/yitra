@@ -18,9 +18,9 @@ export type AiProviderKind = "gemini" | "ollama" | "off";
  * (zero-leak policy).
  */
 export interface AiCategorizationConfig {
-  /** `AI_PROVIDER`. */
+  /** The environment's selection (`AI_PROVIDER`), unlike `storedProvider`. */
   readonly provider?: AiProviderKind;
-  /** Whether `GEMINI_API_KEY` is set. */
+  /** The environment's key (`GEMINI_API_KEY`), unlike `hasStoredGeminiKey`. */
   readonly hasGeminiKey: boolean;
   readonly ollamaEndpoint?: string;
   readonly ollamaModel?: string;
