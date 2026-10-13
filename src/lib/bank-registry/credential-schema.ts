@@ -4,7 +4,7 @@ import { credentialFieldRule, isSecretFieldKind, type CredentialFieldDescriptor 
 
 export interface CredentialSchemaOptions {
   /**
-   * Let a secret-kind field be blank (it must still be present). This is the
+   * Let a secret-kind field be empty (it must still be present). This is the
    * edit form's "blank means keep the stored value" contract, derived from the
    * field kind rather than forked per institution; every non-secret field keeps
    * its full rule, so a prefilled value cannot be cleared.
@@ -17,6 +17,9 @@ export interface CredentialSchemaOptions {
  * declarations. Takes a resolved entry rather than an id on purpose: for an
  * unregistered id there are no fields, and a schema over no fields would accept
  * any credential payload instead of rejecting it.
+ *
+ * Undeclared keys are dropped from the parsed value (Zod's default object
+ * behaviour), so callers must persist the parse result, never their input.
  */
 export function credentialSchemaFor(
   entry: BankRegistryEntry,
@@ -24,10 +27,9 @@ export function credentialSchemaFor(
 ): z.ZodObject<Record<string, z.ZodString>> {
   const shape: Record<string, z.ZodString> = {};
   for (const field of entry.credentialFields) {
-    shape[field.key] =
-      options.allowBlankSecrets && isSecretFieldKind(field.kind)
-        ? z.string()
-        : credentialFieldRule(field);
+    shape[field.key] = credentialFieldRule(field, {
+      allowBlank: options.allowBlankSecrets === true && isSecretFieldKind(field.kind),
+    });
   }
   return z.object(shape);
 }

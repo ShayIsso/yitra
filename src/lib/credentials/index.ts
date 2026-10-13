@@ -6,8 +6,13 @@ import type { BankType } from "@/lib/bank-registry";
 import { storedCredentialSchema } from "./schemas";
 import { CredentialNotFoundError } from "./errors";
 
-function validateCredentials(bankType: string, raw: Record<string, string>): void {
-  storedCredentialSchema(bankType).parse(raw);
+// Returns the parsed value, which drops undeclared keys: only that is ever
+// encrypted, since the whole blob is handed to the scraper at sync time.
+function validateCredentials(
+  bankType: string,
+  raw: Record<string, string>,
+): Record<string, string> {
+  return storedCredentialSchema(bankType).parse(raw);
 }
 
 export async function addCredential(
@@ -15,8 +20,8 @@ export async function addCredential(
   displayName: string,
   rawCredentials: Record<string, string>,
 ): Promise<string> {
-  validateCredentials(bankType, rawCredentials);
-  const { encrypted, iv, authTag } = encrypt(JSON.stringify(rawCredentials));
+  const credentials = validateCredentials(bankType, rawCredentials);
+  const { encrypted, iv, authTag } = encrypt(JSON.stringify(credentials));
   const [row] = await db
     .insert(bankCredentials)
     .values({ bankType, displayName, encryptedCredentials: encrypted, iv, authTag })
@@ -58,8 +63,8 @@ export async function updateCredential(
       columns: { bankType: true },
     });
     if (!row) throw new CredentialNotFoundError(id);
-    validateCredentials(row.bankType, update.rawCredentials);
-    const { encrypted, iv, authTag } = encrypt(JSON.stringify(update.rawCredentials));
+    const credentials = validateCredentials(row.bankType, update.rawCredentials);
+    const { encrypted, iv, authTag } = encrypt(JSON.stringify(credentials));
     values.encryptedCredentials = encrypted;
     values.iv = iv;
     values.authTag = authTag;

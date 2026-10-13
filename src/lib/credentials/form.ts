@@ -1,10 +1,8 @@
-import { isSecretFieldKind, type BankRegistryEntry } from "@/lib/bank-registry";
+// Pure helpers behind the generic credential form. DB-free so the client
+// component can import them; they decide everything from the entry's field list
+// and each field's kind, never from the institution id.
 
-/**
- * Pure helpers behind the generic credential form. DB-free so the client
- * component can import them; they decide everything from the entry's field list
- * and each field's kind, never from the institution id.
- */
+import { isSecretFieldKind, type BankRegistryEntry } from "@/lib/bank-registry";
 
 export type CredentialValues = Record<string, string>;
 

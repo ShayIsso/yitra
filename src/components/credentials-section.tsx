@@ -112,6 +112,10 @@ export function CredentialsSection() {
   // Snapshot of the edit form's prefilled non-secret fields, to detect
   // changes that would be silently dropped without a replacement password.
   const prefillRef = React.useRef<CredentialValues>({});
+  // Bumped whenever the dialog opens or closes, so a prefill response that
+  // arrives after the owner moved on cannot write one credential's fields into
+  // another's form.
+  const prefillRequestRef = React.useRef(0);
   const resolver = React.useMemo<Resolver<CredentialFormValues>>(() => {
     // The union's input type is narrower per-branch than the generic form
     // values, hence the cast; the schemas are module-owned and shared with
@@ -142,7 +146,13 @@ export function CredentialsSection() {
     fetchCredentials();
   }, []);
 
+  function setDialogOpen(open: boolean) {
+    if (!open) prefillRequestRef.current++;
+    setFormOpen(open);
+  }
+
   function openAdd() {
+    prefillRequestRef.current++;
     editModeRef.current = false;
     setEditing(null);
     form.reset(emptyForm());
@@ -152,6 +162,7 @@ export function CredentialsSection() {
   async function openEdit(cred: EditableCredential) {
     const entry = findBankEntry(cred.bankType);
     if (!entry) return;
+    const request = ++prefillRequestRef.current;
     editModeRef.current = true;
     prefillRef.current = {};
     setEditing(cred);
@@ -167,6 +178,7 @@ export function CredentialsSection() {
     const res = await fetch(`/api/credentials/${cred.id}`);
     if (res.ok) {
       const data = await res.json();
+      if (request !== prefillRequestRef.current) return;
       const prefill = nonSecretCredentialValues(entry.credentialFields, data.safeFields ?? {});
       prefillRef.current = prefill;
       for (const [key, value] of Object.entries(prefill)) {
@@ -220,7 +232,7 @@ export function CredentialsSection() {
         return;
       }
 
-      setFormOpen(false);
+      setDialogOpen(false);
       await fetchCredentials();
     });
   }
@@ -300,7 +312,7 @@ export function CredentialsSection() {
       )}
 
       {/* Add / Edit Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog open={formOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? "ערוך חשבון בנק" : "הוסף חשבון בנק"}</DialogTitle>
@@ -371,7 +383,7 @@ export function CredentialsSection() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setFormOpen(false)}
+                  onClick={() => setDialogOpen(false)}
                   disabled={isPending}
                 >
                   ביטול

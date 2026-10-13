@@ -96,6 +96,27 @@ describe("credentialSchemaFor", () => {
     expect(result.success).toBe(false);
   });
 
+  it("names a missing field in Hebrew rather than with a generic type error", () => {
+    const result = credentialSchemaFor(registered("max")).safeParse({ username: "sample-user" });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["סיסמה חובה"]);
+  });
+
+  it("rejects a whitespace-only secret as blank", () => {
+    const result = credentialSchemaFor(registered("max")).safeParse({
+      username: "sample-user",
+      password: "   ",
+    });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["סיסמה חובה"]);
+  });
+
+  it("keeps a secret's surrounding spaces, since a password may legitimately contain them", () => {
+    const parsed = credentialSchemaFor(registered("max")).parse({
+      username: "sample-user",
+      password: " sample secret ",
+    });
+    expect(parsed.password).toBe(" sample secret ");
+  });
+
   it("accepts a card issuer's internet username and password", () => {
     const result = credentialSchemaFor(registered("visaCal")).safeParse({
       username: "sample-user",
@@ -124,6 +145,11 @@ describe("credentialSchemaFor with blank secrets allowed", () => {
   it("accepts a blank secret-kind field", () => {
     const result = editSchema().safeParse({ id: "000000001", password: "", num: "000123" });
     expect(result.success).toBe(true);
+  });
+
+  it("still rejects a whitespace-only secret, which would otherwise replace the stored one", () => {
+    const result = editSchema().safeParse({ id: "000000001", password: "  ", num: "000123" });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["סיסמה חובה"]);
   });
 
   it("still requires every non-secret field, with its Hebrew message", () => {

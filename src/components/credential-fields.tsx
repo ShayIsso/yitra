@@ -44,8 +44,10 @@ export function CredentialFields({
                 value={field.value ?? ""}
                 type={rendering.inputType}
                 inputMode={rendering.inputMode}
-                // Keeps the browser from offering the saved app password here.
-                autoComplete={secret ? "new-password" : "off"}
+                // "one-time-code", not "new-password": browsers neither fill a
+                // saved password (the app's own) into it nor offer to generate one,
+                // which would store a password the bank does not know.
+                autoComplete={secret ? "one-time-code" : "off"}
                 placeholder={secret && mode === "edit" ? "ללא שינוי" : descriptor.hint}
               />
             </FormControl>
