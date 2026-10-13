@@ -31,15 +31,22 @@ export async function seedDefaultCategories(): Promise<SeedResult> {
     let inserted = 0;
     for (const category of TAXONOMY_V2) {
       if (!existingNames.has(category.name)) {
-        await tx.insert(categories).values({ ...category, isDefault: true });
-        inserted++;
+        const created = await tx
+          .insert(categories)
+          .values({ ...category, isDefault: true })
+          .onConflictDoNothing({ target: categories.name })
+          .returning({ id: categories.id });
+        inserted += created.length;
       }
     }
 
+    // A user category that already took a default's name wins (the insert above
+    // yields to it), so setup can always finish.
+    //
     // Default grouping (ADR-0011 §7): seed each expense group, then backfill its
-    // children's parent_id by name. Idempotent and safe to re-run — a child is
-    // only linked while it is still a root leaf, so a user who has since detached
-    // or regrouped a leaf is never overridden.
+    // children's parent_id by name. The backfill links ANY root leaf of that
+    // name, so it would undo a user's detach: callers run this only during
+    // setup (and the CLI), never after onboarding completes.
     let groupsInserted = 0;
     let linked = 0;
     for (const group of DEFAULT_GROUPS) {

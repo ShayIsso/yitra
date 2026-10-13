@@ -17,6 +17,7 @@ vi.mock("@/lib/onboarding", async (importOriginal) => {
     finishOnboarding: vi.fn(),
     ensureDefaultCategories: vi.fn(),
     readTaxonomyView: vi.fn(),
+    readSetupState: vi.fn(),
   };
 });
 
@@ -29,6 +30,7 @@ import { redirect } from "next/navigation";
 import {
   ensureDefaultCategories,
   finishOnboarding,
+  readSetupState,
   readTaxonomyView,
   setInitialPassword,
 } from "@/lib/onboarding";
@@ -38,8 +40,15 @@ import { loadDefaultCategoriesAction } from "../categories-actions";
 
 const VALID = { password: "synthetic-password", confirmation: "synthetic-password" };
 
+const setupState = (completed: boolean) => ({
+  completed,
+  passwordSource: "stored" as const,
+  hasSession: true,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(readSetupState).mockResolvedValue(setupState(false));
 });
 
 describe("setInitialPasswordAction", () => {
@@ -130,6 +139,16 @@ describe("completeOnboardingAction", () => {
     );
   });
 
+  it("does not reseed when onboarding already completed, so a stale tab cannot undo Settings edits", async () => {
+    vi.mocked(requireSession).mockResolvedValue(undefined);
+    vi.mocked(readSetupState).mockResolvedValue(setupState(true));
+    vi.mocked(finishOnboarding).mockResolvedValue(false);
+
+    await completeOnboardingAction();
+    expect(ensureDefaultCategories).not.toHaveBeenCalled();
+    expect(redirect).toHaveBeenCalledWith("/");
+  });
+
   it("does not record completion when seeding fails", async () => {
     vi.mocked(requireSession).mockResolvedValue(undefined);
     vi.mocked(ensureDefaultCategories).mockRejectedValueOnce(new Error("seed failed"));
@@ -163,6 +182,16 @@ describe("loadDefaultCategoriesAction", () => {
 
     await expect(loadDefaultCategoriesAction()).rejects.toBe(signInRedirect);
     expect(requireSession).toHaveBeenCalledWith("/setup");
+    expect(ensureDefaultCategories).not.toHaveBeenCalled();
+  });
+
+  it("returns the taxonomy without seeding once onboarding is completed", async () => {
+    const view = { groups: [], standalone: [] };
+    vi.mocked(requireSession).mockResolvedValue(undefined);
+    vi.mocked(readSetupState).mockResolvedValue(setupState(true));
+    vi.mocked(readTaxonomyView).mockResolvedValue(view);
+
+    expect(await loadDefaultCategoriesAction()).toBe(view);
     expect(ensureDefaultCategories).not.toHaveBeenCalled();
   });
 

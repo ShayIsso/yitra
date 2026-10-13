@@ -7,6 +7,7 @@ import {
   ensureDefaultCategories,
   finishOnboarding,
   initialPasswordSchema,
+  readSetupState,
   setInitialPassword,
 } from "@/lib/onboarding";
 
@@ -39,7 +40,7 @@ export async function setInitialPasswordAction(
 
 export async function completeOnboardingAction(): Promise<void> {
   await requireSession("/setup");
-  await ensureDefaultCategories();
+  if (!(await readSetupState(true)).completed) await ensureDefaultCategories();
   await finishOnboarding();
   redirect("/");
 }
