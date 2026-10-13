@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { EMPTY_APP_SETTINGS, type AppSettings } from "@/lib/app-settings";
 import { establishInitialPassword, initialPasswordSchema } from "..";
 
 /**
@@ -7,8 +8,11 @@ import { establishInitialPassword, initialPasswordSchema } from "..";
  * cases pin what wraps it: the override check that must refuse before any
  * write, and how a refused claim is reported.
  */
-function claimingStore(claimed: boolean) {
-  return { claimAppPassword: vi.fn(async () => claimed) };
+function claimingStore(claimed: boolean, settings: Partial<AppSettings> = {}) {
+  return {
+    read: vi.fn(async () => ({ ...EMPTY_APP_SETTINGS, ...settings })),
+    claimAppPassword: vi.fn(async () => claimed),
+  };
 }
 
 const fakeHash = vi.fn(async (password: string) => `hashed:${password.length}`);
@@ -45,6 +49,56 @@ describe("establishInitialPassword", () => {
 
     expect(outcome).toBe("environment-override");
     expect(store.claimAppPassword).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a password is already stored", { hasAppPassword: true }],
+    ["onboarding is already complete", { onboardingCompletedAt: new Date("2026-03-04T00:00:00Z") }],
+  ])("refuses before hashing when %s", async (_case, settings) => {
+    const hash = vi.fn(async (password: string) => `hashed:${password.length}`);
+    const store = claimingStore(true, settings);
+    const outcome = await establishInitialPassword("synthetic-password", {
+      hasEnvironmentOverride: false,
+      store,
+      hash,
+    });
+
+    expect(outcome).toBe("already-set");
+    expect(hash).not.toHaveBeenCalled();
+    expect(store.claimAppPassword).not.toHaveBeenCalled();
+  });
+
+  it("does the same work to refuse an override install as a stored one, so timing cannot tell them apart", async () => {
+    const hash = vi.fn(async (password: string) => `hashed:${password.length}`);
+    const override = claimingStore(true);
+    const stored = claimingStore(true, { hasAppPassword: true });
+
+    await establishInitialPassword("synthetic-password", {
+      hasEnvironmentOverride: true,
+      store: override,
+      hash,
+    });
+    await establishInitialPassword("synthetic-password", {
+      hasEnvironmentOverride: false,
+      store: stored,
+      hash,
+    });
+
+    expect(override.read).toHaveBeenCalledOnce();
+    expect(stored.read).toHaveBeenCalledOnce();
+    expect(hash).not.toHaveBeenCalled();
+  });
+
+  it("still relies on the conditional write when the pre-check passes but the claim loses a race", async () => {
+    const store = claimingStore(false);
+    const outcome = await establishInitialPassword("synthetic-password", {
+      hasEnvironmentOverride: false,
+      store,
+      hash: fakeHash,
+    });
+
+    expect(store.claimAppPassword).toHaveBeenCalledOnce();
+    expect(outcome).toBe("already-set");
   });
 
   it("hashes with bcrypt by default", async () => {

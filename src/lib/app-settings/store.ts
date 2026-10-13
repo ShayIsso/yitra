@@ -102,10 +102,28 @@ export function buildClaimAppPasswordWrite(
     .returning({ id: appSettings.id });
 }
 
-export function makeDrizzleAppSettingsStore(): AppSettingsStore {
+/**
+ * Thrown in place of the driver's error when the claim's write fails. Drizzle's
+ * `DrizzleQueryError` carries the statement's bound values — the bcrypt hash —
+ * in its message and `params`, and Next prints an uncaught action error to
+ * stdout, so any database failure would log the hash. This replacement holds
+ * no query, no params and no `cause`; the underlying failure is deliberately
+ * dropped rather than chained.
+ */
+export class AppPasswordWriteError extends Error {
+  constructor() {
+    super("Storing the app password failed");
+    this.name = "AppPasswordWriteError";
+  }
+}
+
+/** `open` is the seam for tests that need a failing connection; production uses the barrel. */
+export function makeDrizzleAppSettingsStore(
+  open: () => Promise<Connection> = connect,
+): AppSettingsStore {
   return {
     async read(): Promise<AppSettings> {
-      const { db, appSettings } = await connect();
+      const { db, appSettings } = await open();
 
       const row = await db.query.appSettings.findFirst();
       if (!row) {
@@ -125,24 +143,30 @@ export function makeDrizzleAppSettingsStore(): AppSettingsStore {
     },
 
     async claimAppPassword(hash: string): Promise<boolean> {
-      const written = await buildClaimAppPasswordWrite(await connect(), hash, new Date());
+      const connection = await open();
+      let written: { id: number }[];
+      try {
+        written = await buildClaimAppPasswordWrite(connection, hash, new Date());
+      } catch {
+        throw new AppPasswordWriteError();
+      }
       return written.length > 0;
     },
 
     async readAppPasswordHash(): Promise<string | null> {
-      const { db } = await connect();
+      const { db } = await open();
 
       const row = await db.query.appSettings.findFirst();
       return row?.appPasswordHash ?? null;
     },
 
     async completeOnboarding(completedAt: Date): Promise<boolean> {
-      const written = await buildCompleteOnboardingWrite(await connect(), completedAt, new Date());
+      const written = await buildCompleteOnboardingWrite(await open(), completedAt, new Date());
       return written.length > 0;
     },
 
     async setCategorization(selection: CategorizationSelection): Promise<void> {
-      const { db, appSettings } = await connect();
+      const { db, appSettings } = await open();
 
       const key =
         selection.apiKey === null
@@ -163,7 +187,7 @@ export function makeDrizzleAppSettingsStore(): AppSettingsStore {
     },
 
     async readCategorizationApiKey(): Promise<string | null> {
-      const { db } = await connect();
+      const { db } = await open();
 
       const row = await db.query.appSettings.findFirst();
       const encrypted = row?.categorizationApiKeyEncrypted;

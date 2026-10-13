@@ -32,7 +32,7 @@ export async function readLoginView(
 
 export async function setInitialPassword(
   password: string,
-  store: Pick<AppSettingsStore, "claimAppPassword"> = drizzleAppSettingsStore,
+  store: Pick<AppSettingsStore, "read" | "claimAppPassword"> = drizzleAppSettingsStore,
 ): Promise<PasswordClaimOutcome> {
   return establishInitialPassword(password, {
     hasEnvironmentOverride: hasEnvironmentPasswordOverride(),

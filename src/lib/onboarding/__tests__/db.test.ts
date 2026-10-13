@@ -66,7 +66,7 @@ describe("readSetupState", () => {
 describe("setInitialPassword", () => {
   it("refuses without writing on an override install", async () => {
     const { setInitialPassword } = await loadOnboarding(OVERRIDE);
-    const store = { claimAppPassword: vi.fn(async () => true) };
+    const store = { ...settingsStore(), claimAppPassword: vi.fn(async () => true) };
 
     expect(await setInitialPassword("synthetic-password", store)).toBe("environment-override");
     expect(store.claimAppPassword).not.toHaveBeenCalled();
