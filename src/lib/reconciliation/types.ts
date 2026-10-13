@@ -1,7 +1,9 @@
+import type { BankType } from "@/lib/bank-registry";
+
 export type ReconciliationTransaction = {
   id: string;
   bankAccountId: string;
-  bankType: "discount" | "max" | "visaCal";
+  bankType: BankType;
   date: string; // YYYY-MM-DD
   chargedAmount: number;
   description: string;

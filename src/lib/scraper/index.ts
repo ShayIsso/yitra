@@ -7,6 +7,7 @@ import { createOtpBridge } from "./otp";
 import { mapAccount } from "./mapper";
 import type { SyncEvent, OtpHandler } from "./types";
 import { getEnv } from "@/lib/env";
+import type { BankType } from "@/lib/bank-registry";
 
 const SCREENSHOT_DIR = "/tmp/scraper-failures";
 mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -28,7 +29,7 @@ export function getSyncStartDate(isFirstSync: boolean): Date {
 
 export async function* syncBank(
   credentials: Record<string, string>,
-  bankType: "discount" | "max" | "visaCal",
+  bankType: BankType,
   options: { startDate: Date; isFirstSync: boolean },
 ): AsyncGenerator<SyncEvent> {
   const companyId = BANK_COMPANY_MAP[bankType];

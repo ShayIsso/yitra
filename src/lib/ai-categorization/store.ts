@@ -18,7 +18,6 @@ import type {
   AiCorrectionRow,
   SuppressedPair,
   SuggestionInsert,
-  BankType,
 } from "./run";
 
 type DbClient = Pick<typeof db, "select" | "insert">;
@@ -46,11 +45,7 @@ export function createAiCategorizationStore(client: DbClient = db): AiCategoriza
         .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
         .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
         .where(isNull(transactions.categoryId));
-      return rows.map((r) => ({
-        id: r.id,
-        description: r.description,
-        bankType: r.bankType as BankType,
-      }));
+      return rows;
     },
 
     async getPromptCategories(): Promise<PromptCategoryRow[]> {

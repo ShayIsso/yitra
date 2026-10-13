@@ -1,5 +1,6 @@
 import { redact } from "@/lib/logging";
 import type { SyncEvent } from "@/lib/scraper";
+import type { BankType } from "@/lib/bank-registry";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -10,7 +11,7 @@ export type SyncRunRow = {
   id: string;
   startedAt: Date;
   finishedAt: Date | null;
-  bank: "discount" | "max" | "visaCal";
+  bank: BankType;
   status: SyncRunStatus;
   transactionsImported: number;
   errorMessage: string | null;
@@ -19,7 +20,7 @@ export type SyncRunRow = {
 
 export type SyncRunSummary = {
   id: string;
-  bank: "discount" | "max" | "visaCal";
+  bank: BankType;
   status: SyncRunStatus;
   transactionsImported: number;
   startedAt: Date;
@@ -88,7 +89,7 @@ export function makeDrizzleSyncRunStore(): SyncRunStore {
         .from(syncRuns)
         .orderBy(syncRuns.bank, desc(syncRuns.startedAt));
 
-      return rows as SyncRunSummary[];
+      return rows;
     },
   };
 }
@@ -109,7 +110,7 @@ function randomUuid(): string {
  */
 export async function startSyncRun(
   store: SyncRunStore,
-  opts: { bank: "discount" | "max" | "visaCal"; triggeredBy?: SyncTrigger },
+  opts: { bank: BankType; triggeredBy?: SyncTrigger },
 ): Promise<string> {
   const id = randomUuid();
   const row: SyncRunRow = {

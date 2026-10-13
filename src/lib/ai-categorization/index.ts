@@ -14,7 +14,6 @@ export { routeConfidence } from "./router";
 export type { PacingPolicy, PacingOutcome, PacingDecision } from "./pacing";
 export { planPacing, backoffDelayMs } from "./pacing";
 export type {
-  BankType,
   UncategorizedTxn,
   PromptCategoryRow,
   FewShotRow,

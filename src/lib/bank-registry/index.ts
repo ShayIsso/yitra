@@ -33,6 +33,7 @@ export type {
 export { credentialFieldKinds, isSecretFieldKind, credentialFieldRendering } from "./fields";
 
 export { credentialSchemaFor } from "./credential-schema";
+export { bankTypeSchema } from "./bank-type-schema";
 
 export type { BankTrust, BankTrustInput } from "./trust";
 export { resolveBankTrust } from "./trust";

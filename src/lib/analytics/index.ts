@@ -7,6 +7,7 @@ import {
   canonicalizeMerchant,
   matchesTransferDescriptor,
 } from "@/lib/transaction-matching";
+import type { BankType } from "@/lib/bank-registry";
 
 export { monthDateRange } from "./month-window";
 
@@ -63,12 +64,13 @@ export type AccountBalance = {
   id: string;
   accountNumber: string;
   balance: number | null;
-  bankType: "discount" | "max" | "visaCal";
+  bankType: BankType;
   displayName: string;
   /**
-   * Only set for card accounts (max/visaCal): the window date carrying the
-   * largest absolute next-debit charge. Null when there is no upcoming debit
-   * to estimate. Always null/absent for Discount (scraper-truth balance).
+   * Only set for accounts at a card-issuing institution: the window date
+   * carrying the largest absolute next-debit charge. Null when there is no
+   * upcoming debit to estimate. Always null/absent for an account at a bank
+   * institution (scraper-truth balance).
    */
   nextDebitDate?: string | null;
 };
