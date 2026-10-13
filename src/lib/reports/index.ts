@@ -17,7 +17,7 @@ import {
   type TrendsReport,
 } from "./trends";
 
-export type { ReportRow, BankType, CategoryType, CategorySource, TransactionStatus } from "./csv";
+export type { ReportRow, CategoryType, CategorySource, TransactionStatus } from "./csv";
 export { CSV_HEADERS, buildCsv, buildCsvWithBom } from "./csv";
 export type { ReportsStore, ReportMonth, BudgetConfigRow, RangeTransactionRow } from "./store";
 export { buildTrendsReport, enumerateMonthRange } from "./trends";

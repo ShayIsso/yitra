@@ -14,13 +14,14 @@ import {
 import { eq, isNull, isNotNull, inArray, asc } from "drizzle-orm";
 import type { InboxStore, InboxTransaction } from "./inbox-ops";
 import type { CategoryRule } from "@/lib/categories/rules";
+import type { BankType } from "@/lib/bank-registry";
 
 // ── Row shape returned by the inbox query ───────────────────────────────────
 
 export type InboxRow = {
   id: string;
   bankAccountId: string;
-  bankType: "discount" | "max" | "visaCal";
+  bankType: BankType;
   accountNumber: string;
   credentialDisplayName: string;
   date: string;
@@ -74,7 +75,7 @@ export async function getPendingInboxRows(): Promise<InboxRow[]> {
     .map((r) => ({
       id: r.id,
       bankAccountId: r.bankAccountId,
-      bankType: r.bankType as "discount" | "max" | "visaCal",
+      bankType: r.bankType,
       accountNumber: r.accountNumber,
       credentialDisplayName: r.credentialDisplayName,
       date: r.date,
@@ -112,7 +113,7 @@ export async function getPendingGroupCount(): Promise<number> {
 function rowToInboxTxn(r: {
   id: string;
   bankAccountId: string;
-  bankType: string;
+  bankType: BankType;
   date: string;
   description: string;
   chargedAmount: unknown;
@@ -126,7 +127,7 @@ function rowToInboxTxn(r: {
   return {
     id: r.id,
     bankAccountId: r.bankAccountId,
-    bankType: r.bankType as "discount" | "max" | "visaCal",
+    bankType: r.bankType,
     date: r.date,
     description: r.description,
     chargedAmount: Number(r.chargedAmount),
@@ -229,7 +230,7 @@ export const drizzleInboxStore: InboxStore = {
           members.map((m) => ({
             id: m.id,
             bankAccountId: "",
-            bankType: m.bankType as "discount" | "max" | "visaCal",
+            bankType: m.bankType,
             date: "",
             description: m.description,
             chargedAmount: 0,

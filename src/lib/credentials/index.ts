@@ -2,10 +2,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bankCredentials } from "@/db/schema";
 import { encrypt, decrypt } from "@/lib/crypto";
+import type { BankType } from "@/lib/bank-registry";
 import { credentialSchemas } from "./schemas";
 import { CredentialNotFoundError } from "./errors";
-
-type BankType = "discount" | "max" | "visaCal";
 
 function validateCredentials(bankType: BankType, raw: Record<string, string>): void {
   credentialSchemas[bankType].parse(raw);
@@ -36,7 +35,7 @@ export async function listCredentials(): Promise<
 
 export async function getDecryptedCredentials(
   id: string,
-): Promise<{ bankType: string; credentials: Record<string, string> }> {
+): Promise<{ bankType: BankType; credentials: Record<string, string> }> {
   const row = await db.query.bankCredentials.findFirst({
     where: eq(bankCredentials.id, id),
   });

@@ -160,6 +160,24 @@ describe("buildCsv", () => {
     expect(fields[15]).toBe("זיכרון בית עסק");
   });
 
+  it("writes each institution's Hebrew name, byte for byte, in the מוסד column", () => {
+    const csv = buildCsv([
+      baseRow({ bankType: "discount" }),
+      baseRow({ bankType: "max" }),
+      baseRow({ bankType: "visaCal" }),
+    ]);
+    const institutions = csv
+      .split("\r\n")
+      .slice(1, 4)
+      .map((line) => line.split(",")[4]);
+    expect(institutions).toEqual(["דיסקונט", "מקס", "ויזה כאל"]);
+  });
+
+  it("names an institution that is no longer registered as unknown rather than leaving it blank", () => {
+    const csv = buildCsv([baseRow({ bankType: "institution-that-was-removed" })]);
+    expect(csv.split("\r\n")[1].split(",")[4]).toBe("מוסד לא ידוע");
+  });
+
   it("carries the memo field through as הערות", () => {
     const csv = buildCsv([baseRow({ memo: "תשלום דו-חודשי" })]);
     expect(csv.split("\r\n")[1].split(",")[16]).toBe("תשלום דו-חודשי");

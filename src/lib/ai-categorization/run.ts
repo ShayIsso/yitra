@@ -13,8 +13,7 @@ import { parseCategorizationResponse } from "./parse";
 import { routeConfidence } from "./router";
 import { planPacing, type PacingPolicy } from "./pacing";
 import type { CategorizationProvider, GenerationOptions } from "./provider";
-
-export type BankType = "discount" | "max" | "visaCal";
+import type { BankType } from "@/lib/bank-registry";
 
 export interface UncategorizedTxn {
   readonly id: string;

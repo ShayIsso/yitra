@@ -72,7 +72,7 @@ export const drizzleReconciliationStore: ReconciliationStore = {
     return rows.map((row) => ({
       id: row.id,
       bankAccountId: row.bankAccountId,
-      bankType: row.bankType as "discount" | "max" | "visaCal",
+      bankType: row.bankType,
       date: row.date,
       chargedAmount: Number(row.chargedAmount),
       description: row.description,

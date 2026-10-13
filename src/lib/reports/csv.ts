@@ -9,7 +9,8 @@
  * is the column a consumer filters on to reproduce the app's own totals.
  */
 
-export type BankType = "discount" | "max" | "visaCal";
+import { bankLabel } from "@/lib/bank-registry";
+
 export type CategoryType = "income" | "expense" | "investment" | "transfer" | "ignore";
 export type CategorySource = "rule" | "memory" | "ai" | "user";
 export type TransactionStatus = "completed" | "pending";
@@ -25,7 +26,11 @@ export type ReportRow = {
   processedDate: string;
   description: string;
   customDescription: string | null;
-  bankType: BankType;
+  /**
+   * `string`, not the registry's union: this id only ever becomes a label, and
+   * a stored institution id may no longer be registered (ADR-0013 §4).
+   */
+  bankType: string;
   accountNumber: string;
   categoryName: string | null;
   categoryType: CategoryType | null;
@@ -60,12 +65,6 @@ export const CSV_HEADERS = [
   "מקור סיווג",
   "הערות",
 ] as const;
-
-const BANK_LABELS: Record<BankType, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "ויזה כאל",
-};
 
 const CATEGORY_TYPE_LABELS: Record<CategoryType, string> = {
   income: "הכנסה",
@@ -120,7 +119,7 @@ function toCsvFields(row: ReportRow): string[] {
     // raw bank string (CONTEXT.md "transaction" — description never modified).
     row.customDescription ?? row.description,
     row.description,
-    BANK_LABELS[row.bankType],
+    bankLabel(row.bankType),
     row.accountNumber,
     row.categoryName ?? "",
     row.groupName ?? "",

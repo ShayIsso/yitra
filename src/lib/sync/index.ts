@@ -97,14 +97,11 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
 
     // Record the start of this per-bank sync run (optimistic: status=success)
     const runId = await startSyncRun(drizzleSyncRunStore, {
-      bank: bankType as "discount" | "max" | "visaCal",
+      bank: bankType,
       triggeredBy,
     }).catch(() => null); // Never let sync_runs write abort the sync loop
 
-    const generator = syncBank(rawCreds, bankType as "discount" | "max" | "visaCal", {
-      startDate,
-      isFirstSync,
-    });
+    const generator = syncBank(rawCreds, bankType, { startDate, isFirstSync });
 
     let bankImported = 0;
     // Terminal outcome flag: set true once this run's sync_runs row has been
