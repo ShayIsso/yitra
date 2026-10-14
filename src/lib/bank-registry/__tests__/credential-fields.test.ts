@@ -4,6 +4,7 @@ import {
   isSecretFieldKind,
   credentialFieldRendering,
   credentialSchemaFor,
+  nonSecretCredentialValues,
   type BankRegistryEntry,
 } from "../index";
 import { registered } from "./registered";
@@ -95,6 +96,27 @@ describe("credentialSchemaFor", () => {
     expect(result.success).toBe(false);
   });
 
+  it("names a missing field in Hebrew rather than with a generic type error", () => {
+    const result = credentialSchemaFor(registered("max")).safeParse({ username: "sample-user" });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["סיסמה חובה"]);
+  });
+
+  it("rejects a whitespace-only secret as blank", () => {
+    const result = credentialSchemaFor(registered("max")).safeParse({
+      username: "sample-user",
+      password: "   ",
+    });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["סיסמה חובה"]);
+  });
+
+  it("keeps a secret's surrounding spaces, since a password may legitimately contain them", () => {
+    const parsed = credentialSchemaFor(registered("max")).parse({
+      username: "sample-user",
+      password: " sample secret ",
+    });
+    expect(parsed.password).toBe(" sample secret ");
+  });
+
   it("accepts a card issuer's internet username and password", () => {
     const result = credentialSchemaFor(registered("visaCal")).safeParse({
       username: "sample-user",
@@ -114,5 +136,89 @@ describe("credentialSchemaFor", () => {
   it("rejects a blank six-digit field with a Hebrew message naming that field", () => {
     const result = credentialSchemaFor(sixDigitEntry).safeParse({ card6: "" });
     expect(result.error?.issues[0]?.message).toBe("שש ספרות אחרונות חייב להכיל שש ספרות");
+  });
+});
+
+describe("credentialSchemaFor with blank secrets allowed", () => {
+  const editSchema = () => credentialSchemaFor(registered("discount"), { allowBlankSecrets: true });
+
+  it("accepts a blank secret-kind field", () => {
+    const result = editSchema().safeParse({ id: "000000001", password: "", num: "000123" });
+    expect(result.success).toBe(true);
+  });
+
+  it("still rejects a whitespace-only secret, which would otherwise replace the stored one", () => {
+    const result = editSchema().safeParse({ id: "000000001", password: "  ", num: "000123" });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["סיסמה חובה"]);
+  });
+
+  it("still requires every non-secret field, with its Hebrew message", () => {
+    const result = editSchema().safeParse({ id: "", password: "", num: "000123" });
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["תעודת זהות חובה"]);
+  });
+
+  it("still rejects a missing secret-kind field rather than defaulting it", () => {
+    const result = editSchema().safeParse({ id: "000000001", num: "000123" });
+    expect(result.success).toBe(false);
+  });
+
+  it("keeps a non-secret kind's shape rule, so a six-digit field stays exactly six digits", () => {
+    const schema = credentialSchemaFor(
+      {
+        ...sixDigitEntry,
+        credentialFields: [
+          ...sixDigitEntry.credentialFields,
+          { key: "password", kind: "password", label: "סיסמה" },
+        ],
+      },
+      { allowBlankSecrets: true },
+    );
+    expect(schema.safeParse({ card6: "000000", password: "" }).success).toBe(true);
+    expect(schema.safeParse({ card6: "0000", password: "" }).success).toBe(false);
+  });
+});
+
+describe("nonSecretCredentialValues", () => {
+  const SYNTHETIC_SECRET = "synthetic-secret-value";
+
+  it("returns exactly the institution's non-secret fields and never its password", () => {
+    const stored = { id: "000000001", password: SYNTHETIC_SECRET, num: "000123" };
+    const safe = nonSecretCredentialValues(registered("discount").credentialFields, stored);
+    expect(safe).toEqual({ id: "000000001", num: "000123" });
+    expect(JSON.stringify(safe)).not.toContain(SYNTHETIC_SECRET);
+  });
+
+  it("strips by field kind whatever the secret field is keyed as", () => {
+    const fields = [
+      { key: "card6", kind: "card-6-digits", label: "שש ספרות אחרונות" },
+      { key: "userCode", kind: "text", label: "קוד משתמש" },
+      { key: "loginSecret", kind: "password", label: "סיסמה" },
+    ] as const;
+    const safe = nonSecretCredentialValues(fields, {
+      card6: "000000",
+      userCode: "sample-code",
+      loginSecret: SYNTHETIC_SECRET,
+    });
+    expect(safe).toEqual({ card6: "000000", userCode: "sample-code" });
+  });
+
+  it("drops stored keys the institution does not declare, so only declared fields can leak", () => {
+    const safe = nonSecretCredentialValues(registered("max").credentialFields, {
+      username: "sample-user",
+      password: SYNTHETIC_SECRET,
+      legacyToken: SYNTHETIC_SECRET,
+    });
+    expect(safe).toEqual({ username: "sample-user" });
+  });
+
+  it("returns nothing for an institution with no declared fields", () => {
+    expect(nonSecretCredentialValues([], { username: "sample-user" })).toEqual({});
+  });
+
+  it("omits a declared field the stored row does not carry instead of inventing a value", () => {
+    const safe = nonSecretCredentialValues(registered("discount").credentialFields, {
+      id: "000000001",
+    });
+    expect(safe).toEqual({ id: "000000001" });
   });
 });

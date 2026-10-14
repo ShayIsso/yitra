@@ -23,6 +23,12 @@ export interface CredentialFieldDescriptor {
   readonly key: string;
   readonly kind: CredentialFieldKind;
   readonly label: string;
+  /**
+   * Shown inside the empty input when the label alone could be misread — an
+   * institution's internet username is not the national id. Display only; it
+   * never reaches validation messages.
+   */
+  readonly hint?: string;
 }
 
 /** Everything a generic credential form needs to render a field without branching on its kind. */
@@ -43,7 +49,17 @@ interface CredentialFieldKindSpec {
   readonly rule: (label: string) => z.ZodString;
 }
 
-const required = (label: string) => z.string().min(1, `${label} חובה`);
+/** A missing key reports the field's Hebrew message rather than Zod's English type error. */
+const present = (label: string) => z.string({ error: `${label} חובה` });
+
+const required = (label: string) => present(label).min(1, `${label} חובה`);
+
+/**
+ * Whitespace alone is blank, but the value is never trimmed: a bank password may
+ * legitimately begin or end with a space, and trimming would store a different one.
+ */
+const requiredSecret = (label: string) =>
+  present(label).refine((value) => value.trim() !== "", `${label} חובה`);
 
 /**
  * Only `card-6-digits` constrains its value's shape. The other four validate
@@ -60,7 +76,7 @@ const CREDENTIAL_FIELD_KINDS: Record<CredentialFieldKind, CredentialFieldKindSpe
   password: {
     secret: true,
     rendering: { inputType: "password", inputMode: "text" },
-    rule: required,
+    rule: requiredSecret,
   },
   "national-id": {
     secret: false,
@@ -75,7 +91,7 @@ const CREDENTIAL_FIELD_KINDS: Record<CredentialFieldKind, CredentialFieldKindSpe
   "card-6-digits": {
     secret: false,
     rendering: { inputType: "text", inputMode: "numeric" },
-    rule: (label) => z.string().regex(/^\d{6}$/, `${label} חייב להכיל שש ספרות`),
+    rule: (label) => present(label).regex(/^\d{6}$/, `${label} חייב להכיל שש ספרות`),
   },
 };
 
@@ -91,6 +107,21 @@ export function credentialFieldRendering(kind: CredentialFieldKind): CredentialF
   return CREDENTIAL_FIELD_KINDS[kind].rendering;
 }
 
-export function credentialFieldRule(field: CredentialFieldDescriptor): z.ZodString {
-  return CREDENTIAL_FIELD_KINDS[field.kind].rule(field.label);
+/**
+ * With `allowBlank`, the empty string passes and any other value must still pass
+ * the kind's full rule — so a whitespace-only secret is refused rather than
+ * mistaken for "keep the stored value".
+ */
+export function credentialFieldRule(
+  field: CredentialFieldDescriptor,
+  options: { allowBlank?: boolean } = {},
+): z.ZodString {
+  const rule = CREDENTIAL_FIELD_KINDS[field.kind].rule(field.label);
+  if (!options.allowBlank) return rule;
+  return present(field.label).superRefine((value, ctx) => {
+    if (value === "") return;
+    for (const issue of rule.safeParse(value).error?.issues ?? []) {
+      ctx.addIssue({ code: "custom", message: issue.message });
+    }
+  });
 }
