@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The institution picker shared by Settings' add-credential dialog and the
- * first-run wizard. It owns three things a consumer should not re-derive:
+ * The institution picker for every form that connects an institution —
+ * Settings' add-credential dialog, and the first-run wizard. It owns three things a consumer should not re-derive:
  * the options (every enabled registry entry under `bankLabel`, in registry
  * order, trigger and menu labelled alike), a trust badge per option, and the
  * acknowledgment an experimental institution requires before the consuming
@@ -20,6 +20,9 @@
  *   const onInvalid = () => picker.confirmCleared(form.getValues("bankType"));
  *
  *   <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
+ *
+ * An acknowledgment belongs to one form session: call `picker.reset()` wherever
+ * the form itself is reset for a fresh entry, or it carries over to the next one.
  *
  *   <FormField control={form.control} name="bankType" render={({ field }) => (
  *     <FormItem>
@@ -99,6 +102,8 @@ export interface InstitutionPickerState {
   isCleared(id: string): boolean;
   /** `isCleared`, and when false also reveals the acknowledgment prompt's error. */
   confirmCleared(id: string): boolean;
+  /** Forgets any acknowledgment and its error, for a fresh form session. */
+  reset(): void;
   /** For `<InstitutionPicker>`; consumers read the methods above. */
   readonly acknowledgment: {
     readonly acknowledgedId: string | null;
@@ -144,6 +149,10 @@ export function useInstitutionPicker(
         const cleared = isCleared(id);
         setMissingFor(cleared ? null : id);
         return cleared;
+      },
+      reset() {
+        setAcknowledgedId(null);
+        setMissingFor(null);
       },
       acknowledgment: {
         acknowledgedId,

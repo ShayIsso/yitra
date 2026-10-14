@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Check, FlaskConical } from "lucide-react";
+import { Check, FlaskConical, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { bankLabel, type BankTrust } from "@/lib/bank-registry";
@@ -10,9 +10,16 @@ import { bankLabel, type BankTrust } from "@/lib/bank-registry";
  * trust are presentational only — this module and the institution picker are
  * where they are read; scraping, import and categorization never see them.
  */
-const TRUST_BADGE: Record<Exclude<BankTrust, "verified">, { text: string; title: string }> = {
-  experimental: { text: "ניסיוני", title: "מוסד שעדיין לא נבדק על ידינו" },
-  observed: { text: "סונכרן כאן", title: "מוסד ניסיוני שכבר סונכרן בהצלחה בהתקנה זו" },
+const TRUST_BADGE: Record<
+  Exclude<BankTrust, "verified">,
+  { text: string; title: string; icon: LucideIcon }
+> = {
+  experimental: { text: "ניסיוני", title: "מוסד שעדיין לא נבדק על ידינו", icon: FlaskConical },
+  observed: {
+    text: "סונכרן כאן",
+    title: "מוסד ניסיוני שכבר סונכרן בהצלחה בהתקנה זו",
+    icon: Check,
+  },
 };
 
 export function InstitutionTrustBadge({
@@ -21,8 +28,7 @@ export function InstitutionTrustBadge({
   ...props
 }: { trust: BankTrust | undefined } & Omit<ComponentProps<typeof Badge>, "children">) {
   if (trust === undefined || trust === "verified") return null;
-  const { text, title } = TRUST_BADGE[trust];
-  const Icon = trust === "experimental" ? FlaskConical : Check;
+  const { text, title, icon: Icon } = TRUST_BADGE[trust];
   return (
     <Badge
       variant="outline"

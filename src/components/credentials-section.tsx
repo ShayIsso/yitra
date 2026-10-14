@@ -148,6 +148,7 @@ export function CredentialsSection() {
     editModeRef.current = false;
     setEditing(null);
     form.reset(emptyForm());
+    picker.reset();
     setFormOpen(true);
   }
 

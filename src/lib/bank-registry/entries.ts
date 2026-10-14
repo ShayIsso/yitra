@@ -33,7 +33,7 @@ export const excludedInstitutions = Object.freeze([
 type ExcludedCompany = (typeof excludedInstitutions)[number]["company"];
 
 /** Typed so an entry naming an excluded company does not compile. */
-export type SupportedCompany = Exclude<CompanyTypes, ExcludedCompany>;
+type SupportedCompany = Exclude<CompanyTypes, ExcludedCompany>;
 
 export interface BankRegistryEntry {
   readonly id: string;
@@ -41,8 +41,8 @@ export interface BankRegistryEntry {
   readonly nameEn: string;
   readonly kind: BankKind;
   /**
-   * Whether the library's scraper for this company consumes the OTP retriever.
-   * Display only: the OTP flow is event-driven, so no code branches on it.
+   * Whether the library's scraper for this company asks for an OTP code. It does
+   * not decide whether the sync prompts: that is event-driven (CONTEXT.md, OTP).
    */
   readonly issuesOtp: boolean;
   readonly company: SupportedCompany;

@@ -166,21 +166,6 @@ type SyncPanelProps = {
   observedInstitutions?: readonly string[];
 };
 
-/**
- * This install's evidence, plus any institution that completed in the live run
- * on screen: `bank_complete` reaches the client only after its import succeeded,
- * so the caveat retires without waiting for a reload.
- */
-export function observedWithLiveRun(
-  recorded: readonly string[],
-  liveStates: Record<string, BankSyncState>,
-): ReadonlySet<string> {
-  const completed = Object.entries(liveStates)
-    .filter(([, state]) => state.status === "complete")
-    .map(([bank]) => bank);
-  return new Set([...recorded, ...completed]);
-}
-
 function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPanelProps) {
   const searchParams = useSearchParams();
   // ?bank=<bankType> deep-link target — highlights the flagged bank card
@@ -219,10 +204,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   const [otpCodes, setOtpCodes] = useState<Record<string, string>>({});
   const [otpCountdowns, setOtpCountdowns] = useState<Record<string, number>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
-  const observed = useMemo(
-    () => observedWithLiveRun(observedInstitutions, bankStates),
-    [observedInstitutions, bankStates],
-  );
+  const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
   const countdownIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   useEffect(() => {

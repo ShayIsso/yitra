@@ -11,7 +11,8 @@ import path from "path";
  * the bare word.
  */
 const SRC = path.resolve(__dirname, "../../..");
-const GUARDED_ROOTS = ["lib", "app/api", "app/actions"];
+/** Under `app`, only `.ts` modules: route handlers and Server Actions, not pages. */
+const GUARDED_ROOTS = ["lib", "app"];
 const OWN_MODULE = path.join(SRC, "lib/bank-registry");
 const TRUST_READS = [
   /\bresolveBankTrust\b/,
@@ -32,11 +33,15 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-const files = GUARDED_ROOTS.flatMap((root) => sourceFiles(path.join(SRC, root)));
+const files = GUARDED_ROOTS.flatMap((root) => sourceFiles(path.join(SRC, root))).filter(
+  (file) => !file.startsWith(path.join(SRC, "app")) || file.endsWith(".ts"),
+);
 
 describe("institution trust stays out of every code path", () => {
   it("scans the scraper, import, categorization and sync modules", () => {
     const scanned = files.map((file) => path.relative(SRC, file));
+    expect(scanned).toContain("app/setup/actions.ts");
+    expect(scanned).toContain("app/api/sync-runs/evidence/route.ts");
     for (const dir of [
       "lib/scraper/",
       "lib/transactions/",

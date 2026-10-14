@@ -10,7 +10,7 @@
  * branches on a registry property (`kind`, `issuesOtp`, a field's `kind`) rather
  * than on an institution id.
  */
-export type { BankKind, BankTier, BankRegistryEntry, BankType, SupportedCompany } from "./entries";
+export type { BankKind, BankTier, BankRegistryEntry, BankType } from "./entries";
 export {
   bankRegistry,
   excludedInstitutions,

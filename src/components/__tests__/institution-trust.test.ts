@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SyncPanel, observedWithLiveRun } from "@/components/sync-panel";
+import { SyncPanel } from "@/components/sync-panel";
 import { unverifiedFailureNote } from "@/components/institution-trust";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
@@ -69,20 +69,5 @@ describe("a failed run on the sync page", () => {
     expect(html).toContain(ERROR_TEXT);
     expect(html).not.toContain(UNVERIFIED);
     expect(html).not.toContain("ניסיוני");
-  });
-});
-
-describe("observedWithLiveRun", () => {
-  it("counts an institution that completed in the run on screen", () => {
-    expect(
-      observedWithLiveRun(["leumi"], {
-        isracard: { status: "complete" },
-        amex: { status: "error" },
-      }),
-    ).toEqual(new Set(["leumi", "isracard"]));
-  });
-
-  it("does not count one still in progress", () => {
-    expect(observedWithLiveRun([], { isracard: { status: "scraping" } })).toEqual(new Set());
   });
 });
