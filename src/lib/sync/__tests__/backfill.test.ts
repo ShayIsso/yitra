@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runCategorizationBackfill, type BackfillDeps } from "../backfill";
+import { startCategorizationBackfill, type BackfillDeps } from "../backfill";
 import { createSyncClaim, acquireAndRelease } from "../claim";
 import { runAiSyncStep, type AiStepDeps, type AiStepEvent } from "../ai-step";
 import { EMPTY_APP_SETTINGS } from "@/lib/app-settings";
@@ -34,12 +34,25 @@ function deps(overrides: Partial<BackfillDeps> = {}): BackfillDeps {
   };
 }
 
-describe("runCategorizationBackfill", () => {
+/** Starts a backfill and, if it started, waits for its result. */
+async function settle(backfillDeps: BackfillDeps) {
+  const start = await startCategorizationBackfill(backfillDeps);
+  return start.status === "started" ? start.result : start;
+}
+
+function offStore(stored: Partial<typeof EMPTY_APP_SETTINGS> = {}) {
+  return {
+    read: vi.fn(async () => ({ ...EMPTY_APP_SETTINGS, ...stored })),
+    readCategorizationApiKey: vi.fn(async (): Promise<string | null> => null),
+  };
+}
+
+describe("startCategorizationBackfill", () => {
   it("runs the sync's AI step with the deps it was given and reports that step's summary", async () => {
     const ai = aiDeps();
     const runAiStep = stepYielding(SUMMARY);
 
-    const outcome = await runCategorizationBackfill(deps({ ai, runAiStep }));
+    const outcome = await settle(deps({ ai, runAiStep }));
 
     expect(runAiStep).toHaveBeenCalledTimes(1);
     expect(runAiStep).toHaveBeenCalledWith(ai);
@@ -56,7 +69,7 @@ describe("runCategorizationBackfill", () => {
       const ai = aiDeps();
       const runAiStep = stepYielding(SUMMARY);
 
-      const outcome = await runCategorizationBackfill(
+      const outcome = await settle(
         deps({ claim, ai, runAiStep, isProviderConfigured: async () => false }),
       );
 
@@ -67,17 +80,14 @@ describe("runCategorizationBackfill", () => {
     });
 
     it("never constructs an adapter or reads a key when composed with the real resolution", async () => {
-      const store = {
-        read: vi.fn(async () => EMPTY_APP_SETTINGS),
-        readCategorizationApiKey: vi.fn(async () => null),
-      };
+      const store = offStore();
       const adapters = { gemini: vi.fn(), ollama: vi.fn() };
       const ai: AiStepDeps = {
         ...aiDeps(),
         createProvider: () => createConfiguredProvider({ env: {}, store, adapters }),
       };
 
-      const outcome = await runCategorizationBackfill({
+      const outcome = await startCategorizationBackfill({
         claim: createSyncClaim(),
         isProviderConfigured: () => isProviderConfigured({ env: {}, store }),
         runAiStep: runAiSyncStep,
@@ -91,13 +101,65 @@ describe("runCategorizationBackfill", () => {
     });
   });
 
+  describe("when the provider stops resolving after the presence check", () => {
+    function realResolution(store: ReturnType<typeof offStore>) {
+      const adapters = { gemini: vi.fn(), ollama: vi.fn() };
+      const ai: AiStepDeps = {
+        ...aiDeps(),
+        createProvider: () => createConfiguredProvider({ env: {}, store, adapters }),
+      };
+      return { adapters, ai };
+    }
+
+    it("ends incomplete with no adapter when the provider was switched off meanwhile", async () => {
+      const store = offStore();
+      const { adapters, ai } = realResolution(store);
+
+      const outcome = await settle(deps({ ai, runAiStep: runAiSyncStep }));
+
+      expect(outcome).toEqual({ status: "incomplete" });
+      expect(adapters.gemini).not.toHaveBeenCalled();
+      expect(adapters.ollama).not.toHaveBeenCalled();
+    });
+
+    it("ends incomplete with no adapter when the stored key cannot be decrypted", async () => {
+      const store = offStore({ categorizationProvider: "gemini", hasCategorizationApiKey: true });
+      store.readCategorizationApiKey.mockRejectedValue(new Error("synthetic auth-tag mismatch"));
+      const { adapters, ai } = realResolution(store);
+
+      const outcome = await settle(deps({ ai, runAiStep: runAiSyncStep }));
+
+      expect(outcome).toEqual({ status: "incomplete" });
+      expect(store.readCategorizationApiKey).toHaveBeenCalled();
+      expect(adapters.gemini).not.toHaveBeenCalled();
+      expect(adapters.ollama).not.toHaveBeenCalled();
+    });
+  });
+
   describe("sharing the sync's process claim", () => {
+    it("answers started before the run ends, and releases the claim when the run ends unobserved", async () => {
+      const claim = createSyncClaim();
+      let finish!: () => void;
+      const gate = new Promise<void>((resolve) => (finish = resolve));
+      const runAiStep = vi.fn(async function* (): AsyncGenerator<AiStepEvent> {
+        await gate;
+        yield SUMMARY;
+      });
+
+      const start = await startCategorizationBackfill(deps({ claim, runAiStep }));
+
+      expect(start.status).toBe("started");
+      expect(claim.isHeld()).toBe(true);
+      finish();
+      await vi.waitFor(() => expect(claim.isHeld()).toBe(false));
+    });
+
     it("refuses while a sync holds the claim, leaving that sync's claim untouched", async () => {
       const claim = createSyncClaim();
       claim.acquire();
       const runAiStep = stepYielding(SUMMARY);
 
-      const outcome = await runCategorizationBackfill(deps({ claim, runAiStep }));
+      const outcome = await settle(deps({ claim, runAiStep }));
 
       expect(outcome).toEqual({ status: "sync_running" });
       expect(runAiStep).not.toHaveBeenCalled();
@@ -112,7 +174,7 @@ describe("runCategorizationBackfill", () => {
         yield SUMMARY;
       });
 
-      await runCategorizationBackfill(deps({ claim, runAiStep }));
+      await settle(deps({ claim, runAiStep }));
 
       expect(syncDuringRun).toBeNull();
     });
@@ -120,7 +182,7 @@ describe("runCategorizationBackfill", () => {
     it("releases the claim once the run completes", async () => {
       const claim = createSyncClaim();
 
-      await runCategorizationBackfill(deps({ claim }));
+      await settle(deps({ claim }));
 
       expect(claim.isHeld()).toBe(false);
     });
@@ -131,7 +193,7 @@ describe("runCategorizationBackfill", () => {
         throw new Error("synthetic step failure");
       });
 
-      const outcome = await runCategorizationBackfill(deps({ claim, runAiStep }));
+      const outcome = await settle(deps({ claim, runAiStep }));
 
       expect(outcome).toEqual({ status: "incomplete" });
       expect(claim.isHeld()).toBe(false);
@@ -141,18 +203,18 @@ describe("runCategorizationBackfill", () => {
       const claim = createSyncClaim();
       let second: unknown;
       const runAiStep = vi.fn(async function* (): AsyncGenerator<AiStepEvent> {
-        second = await runCategorizationBackfill(deps({ claim, runAiStep: stepYielding(SUMMARY) }));
+        second = await settle(deps({ claim, runAiStep: stepYielding(SUMMARY) }));
         yield SUMMARY;
       });
 
-      await runCategorizationBackfill(deps({ claim, runAiStep }));
+      await settle(deps({ claim, runAiStep }));
 
       expect(second).toEqual({ status: "sync_running" });
     });
   });
 
   it("reports an incomplete run when the step ends without a summary", async () => {
-    const outcome = await runCategorizationBackfill(deps({ runAiStep: stepYielding() }));
+    const outcome = await settle(deps({ runAiStep: stepYielding() }));
 
     expect(outcome).toEqual({ status: "incomplete" });
   });

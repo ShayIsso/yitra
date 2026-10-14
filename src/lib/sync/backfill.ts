@@ -1,11 +1,26 @@
-import { acquireAndRelease, type SyncClaim } from "./claim";
+import { acquireAndRelease, type ClaimedRun, type SyncClaim } from "./claim";
 import type { AiStepDeps, AiStepEvent, AiSummary } from "./ai-step";
 
-export type BackfillOutcome =
-  | { readonly status: "completed"; readonly summary: AiSummary }
+/** Known before any run starts, so no claim is taken and no step begins. */
+export type BackfillRefusal =
   | { readonly status: "provider_off" }
-  | { readonly status: "sync_running" }
+  | { readonly status: "sync_running" };
+
+export type BackfillResult =
+  | { readonly status: "completed"; readonly summary: AiSummary }
   | { readonly status: "incomplete" };
+
+export type BackfillStart =
+  | BackfillRefusal
+  /** `result` never rejects. */
+  | { readonly status: "started"; readonly result: Promise<BackfillResult> };
+
+/** The wire events of the backfill route's stream, one per SSE `data:` frame. */
+export type BackfillStreamEvent =
+  | { readonly type: "started" }
+  | { readonly type: "heartbeat" }
+  | { readonly type: "completed"; readonly summary: AiSummary }
+  | { readonly type: "incomplete"; readonly error: string };
 
 export interface BackfillDeps {
   readonly claim: SyncClaim;
@@ -25,13 +40,21 @@ export interface BackfillDeps {
  * routing and pacing are a post-sync run's by construction (ADR-0008, ADR-0010).
  * It holds the sync's process claim for its whole duration: both write the same
  * uncategorized rows, so neither may start while the other runs.
+ *
+ * Answers as soon as the run has started rather than when it ends: the run is
+ * not tied to whoever asked for it, so a caller that goes away (a dropped
+ * connection) neither stops it nor keeps the claim from releasing when it ends.
  */
-export async function runCategorizationBackfill(deps: BackfillDeps): Promise<BackfillOutcome> {
+export async function startCategorizationBackfill(deps: BackfillDeps): Promise<BackfillStart> {
   if (!(await deps.isProviderConfigured())) return { status: "provider_off" };
 
   const claimed = acquireAndRelease(deps.claim, () => deps.runAiStep(deps.ai));
   if (claimed === null) return { status: "sync_running" };
 
+  return { status: "started", result: drain(claimed) };
+}
+
+async function drain(claimed: ClaimedRun<AiStepEvent>): Promise<BackfillResult> {
   let summary: AiSummary | null = null;
   try {
     for await (const { applied, queued, skipped } of claimed.events) {

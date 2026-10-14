@@ -10,7 +10,10 @@ export async function GET() {
   // 200 that then errors mid-stream (#246).
   const claimed = syncAllBanksClaimed();
   if (claimed === null) {
-    return NextResponse.json({ error: "סנכרון כבר פועל" }, { status: 409 });
+    return NextResponse.json(
+      { error: "סנכרון או סיווג עסקאות כבר פועלים. נסה שוב בסיומם." },
+      { status: 409 },
+    );
   }
   const { events, release } = claimed;
 

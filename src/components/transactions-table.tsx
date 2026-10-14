@@ -752,7 +752,7 @@ export function TransactionsTable({
 
       {categorizationAvailable && (
         <CategorizationBackfillCallout
-          offered={filters.categoryId === "__uncategorized__" && total > 0}
+          offered={filters.categoryId === "__uncategorized__" && !loading && total > 0}
           onCompleted={reloadTransactions}
         />
       )}

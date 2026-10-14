@@ -2,20 +2,9 @@
 
 import * as React from "react";
 import { Bot, Loader2, X } from "lucide-react";
-import type { AiSummary } from "@/lib/sync";
 import { Button } from "@/components/ui/button";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
-
-type Result = { summary?: AiSummary; error?: string };
-
-async function requestBackfill(): Promise<Result> {
-  try {
-    const res = await fetch("/api/categorization/backfill", { method: "POST" });
-    return (await res.json()) as Result;
-  } catch {
-    return { error: "שגיאת חיבור. נסה שוב." };
-  }
-}
+import { requestBackfill, type BackfillOutcomeView } from "@/components/backfill-response";
 
 /**
  * The categorization backfill trigger (#263). The table keeps it mounted while
@@ -31,7 +20,7 @@ export function CategorizationBackfillCallout({
   onCompleted: () => void;
 }) {
   const [running, setRunning] = React.useState(false);
-  const [result, setResult] = React.useState<Result | null>(null);
+  const [result, setResult] = React.useState<BackfillOutcomeView | null>(null);
 
   async function run() {
     setRunning(true);

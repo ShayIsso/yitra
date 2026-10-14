@@ -23,7 +23,7 @@ import {
   drizzleSyncRunStore,
 } from "./runs";
 import { runAiSyncStep, type AiStepDeps } from "./ai-step";
-import { runCategorizationBackfill, type BackfillOutcome } from "./backfill";
+import { startCategorizationBackfill, type BackfillStart } from "./backfill";
 import { runPostImportPipeline, type PostSyncEvent } from "./post-import";
 import { createSyncClaim, acquireAndRelease, type ClaimedRun } from "./claim";
 
@@ -43,8 +43,10 @@ export function submitOtp(code: string): boolean {
 }
 
 // One in-progress sync at a time, across every entry point that can launch
-// one — the SSE route and the scheduler (#246). Without this, two runs could
-// both set `activeOtpHandler` above and race to resolve each other's OTP.
+// one — the SSE route and the scheduler (#246) — and never alongside a
+// categorization backfill (#263), which writes the same uncategorized rows.
+// Without this, two syncs could both set `activeOtpHandler` above and race to
+// resolve each other's OTP.
 //
 // Keyed off `globalThis`, not a bare module-level `const` — Next.js bundles
 // the instrumentation hook (src/instrumentation.ts → the scheduler) into a
@@ -257,7 +259,12 @@ export function syncAllBanksClaimed(opts: SyncOptions = {}): ClaimedRun<SyncSumm
   return acquireAndRelease(syncClaim, () => syncAllBanks(opts));
 }
 
-export type { BackfillOutcome };
+export type {
+  BackfillStart,
+  BackfillRefusal,
+  BackfillResult,
+  BackfillStreamEvent,
+} from "./backfill";
 export type { AiSummary } from "./ai-step";
 
 /**
@@ -265,8 +272,8 @@ export type { AiSummary } from "./ai-step";
  * takes, and with the same AI-step deps a sync wires — which is why it lives
  * here rather than beside its caller: the claim is this module's singleton.
  */
-export function backfillCategorization(): Promise<BackfillOutcome> {
-  return runCategorizationBackfill({
+export function backfillCategorization(): Promise<BackfillStart> {
+  return startCategorizationBackfill({
     claim: syncClaim,
     isProviderConfigured,
     runAiStep: runAiSyncStep,
