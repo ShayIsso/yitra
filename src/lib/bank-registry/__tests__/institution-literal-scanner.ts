@@ -21,7 +21,7 @@ const REGISTRY_DIRECTORY = "src/lib/bank-registry";
 /**
  * Exempt by construction: the registry owns institution facts, and tests and
  * fixtures name institutions to assert on them. Only `.ts`/`.tsx` is scanned, so
- * generated migration SQL under `drizzle/` never enters the walk.
+ * SQL never enters the scan.
  */
 export function isScannedSource(relativePath: string): boolean {
   if (!SOURCE_EXTENSION.test(relativePath) || TEST_FILE.test(relativePath)) return false;
@@ -49,9 +49,8 @@ function isSanctionedCompanyMapping(node: ts.PropertyAssignment): boolean {
 
 /**
  * A literal is text the program contains verbatim: a string, template text or
- * JSX text. `Math.max`, `.max(…)`, `CompanyTypes.max` and a shorthand `{ max }`
- * reference a binding or member rather than naming an institution, so they
- * never match. Identifier keys are handled separately by `institutionKeyedTable`.
+ * JSX text. Identifiers in expressions are bindings or members, never literals.
+ * Identifier keys are handled separately by `institutionKeyedTable`.
  */
 function literalText(node: ts.Node): string | undefined {
   if (
@@ -66,34 +65,48 @@ function literalText(node: ts.Node): string | undefined {
   return ts.isJsxText(node) ? node.text.trim() : undefined;
 }
 
-type KeyedMember = ts.PropertyAssignment | ts.PropertySignature;
+interface InstitutionKey {
+  readonly at: ts.Node;
+  readonly id: string;
+  readonly sanctioned: boolean;
+}
 
 /**
  * An identifier key is also ordinary vocabulary — `{ min, max }` is a range, and
  * `max` is an institution id — so one such key alone proves nothing. A table keyed
  * by institution (`{ discount: …, max: … }`) is the real leak, and it shows as two
  * or more distinct ids among the keys of one object, type literal or interface.
- * Quoted keys are string literals and are always checked.
+ * Sanctioned mappings count towards that threshold but are never reported, so
+ * they cannot excuse an unsanctioned sibling. Quoted keys are string literals
+ * and are always checked.
  */
 function institutionKeyedTable(
   node: ts.Node,
   knownLiterals: ReadonlySet<string>,
-): KeyedMember[] | undefined {
+): InstitutionKey[] {
   let members: readonly ts.Node[];
   if (ts.isObjectLiteralExpression(node)) members = node.properties;
   else if (ts.isTypeLiteralNode(node) || ts.isInterfaceDeclaration(node)) members = node.members;
-  else return undefined;
+  else return [];
 
-  const keyed = members.filter(
-    (member): member is KeyedMember =>
-      (ts.isPropertyAssignment(member) &&
-        !isSanctionedCompanyMapping(member) &&
-        ts.isIdentifier(member.name)) ||
-      (ts.isPropertySignature(member) && ts.isIdentifier(member.name)),
+  const keys: InstitutionKey[] = [];
+  for (const member of members) {
+    if (!ts.isPropertyAssignment(member) && !ts.isPropertySignature(member)) continue;
+    if (!ts.isIdentifier(member.name) || !knownLiterals.has(member.name.text)) continue;
+    keys.push({
+      at: member.name,
+      id: member.name.text,
+      sanctioned: ts.isPropertyAssignment(member) && isSanctionedCompanyMapping(member),
+    });
+  }
+  return new Set(keys.map((key) => key.id)).size >= 2 ? keys.filter((key) => !key.sanctioned) : [];
+}
+
+function isSanctionedKey(node: ts.Node): boolean {
+  const parent = node.parent;
+  return (
+    ts.isPropertyAssignment(parent) && parent.name === node && isSanctionedCompanyMapping(parent)
   );
-  const matching = keyed.filter((member) => knownLiterals.has((member.name as ts.Identifier).text));
-  const distinct = new Set(matching.map((member) => (member.name as ts.Identifier).text));
-  return distinct.size >= 2 ? matching : undefined;
 }
 
 export function findInstitutionLiterals(
@@ -109,7 +122,7 @@ export function findInstitutionLiterals(
       text,
       ts.ScriptTarget.Latest,
       true,
-      filePath.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      /\.tsx$/.test(filePath) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
 
     const report = (at: ts.Node, literal: string) => {
@@ -119,10 +132,10 @@ export function findInstitutionLiterals(
 
     const visit = (node: ts.Node) => {
       const literal = literalText(node);
-      if (literal !== undefined && knownLiterals.has(literal)) report(node, literal);
-      for (const member of institutionKeyedTable(node, knownLiterals) ?? []) {
-        report(member.name, (member.name as ts.Identifier).text);
+      if (literal !== undefined && knownLiterals.has(literal) && !isSanctionedKey(node)) {
+        report(node, literal);
       }
+      for (const key of institutionKeyedTable(node, knownLiterals)) report(key.at, key.id);
       ts.forEachChild(node, visit);
     };
     visit(file);

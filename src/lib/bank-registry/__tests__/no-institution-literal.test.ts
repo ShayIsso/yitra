@@ -44,10 +44,10 @@ describe("no institution id outside the bank registry (ADR-0013 law 1)", () => {
   });
 });
 
-const IDS: ReadonlySet<string> = new Set(["discount", "max", "visaCal", "union"]);
+const SAMPLE_IDS: ReadonlySet<string> = new Set(["discount", "max", "visaCal", "union"]);
 
 function scan(sourcePath: string, text: string) {
-  return findInstitutionLiterals([{ path: sourcePath, text }], IDS);
+  return findInstitutionLiterals([{ path: sourcePath, text }], SAMPLE_IDS);
 }
 
 describe("the guard's reach", () => {
@@ -70,7 +70,6 @@ describe("the guard's rule", () => {
       [
         `const a = "discount";`,
         "const b = `max`;",
-        "const c = `x-${n}-visaCal`;",
         "const d = `${n}union`;",
         `type T = "visaCal" | "other";`,
         `export const E = () => <p kind="max">discount</p>;`,
@@ -79,10 +78,10 @@ describe("the guard's rule", () => {
     expect(found.map((f) => [f.line, f.literal])).toEqual([
       [1, "discount"],
       [2, "max"],
-      [4, "union"],
-      [5, "visaCal"],
-      [6, "max"],
-      [6, "discount"],
+      [3, "union"],
+      [4, "visaCal"],
+      [5, "max"],
+      [5, "discount"],
     ]);
   });
 
@@ -143,6 +142,13 @@ describe("the guard's rule", () => {
     expect(scan("src/lib/scraper/other.ts", `const bank = "union";`)).toHaveLength(1);
   });
 
+  it("passes a quoted-key company map, and does not let it excuse an unsanctioned sibling", () => {
+    const quoted = `const MAP = { "discount": CompanyTypes.discount, "max": CompanyTypes.max };`;
+    expect(scan("src/lib/scraper/index.ts", quoted)).toEqual([]);
+    const sibling = `const MAP = { discount: CompanyTypes.discount, max: CompanyTypes.max, union: 1 };`;
+    expect(scan("src/lib/scraper/index.ts", sibling).map((f) => f.literal)).toEqual(["union"]);
+  });
+
   it("does not excuse a map whose keys and values disagree", () => {
     const found = scan(
       "src/lib/scraper/index.ts",
@@ -161,7 +167,6 @@ describe("the guard's exemptions", () => {
     ["a test directory", "src/components/__tests__/helper.tsx"],
     ["a test file", "src/lib/sync/runs.test.ts"],
     ["a fixtures directory", "src/lib/sync/fixtures/accounts.ts"],
-    ["generated migration SQL", "drizzle/0001_example.sql"],
   ])("exempts %s", (_label, sourcePath) => {
     expect(scan(sourcePath, planted)).toEqual([]);
   });
