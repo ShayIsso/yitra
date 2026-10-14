@@ -7,7 +7,7 @@ import {
   canonicalizeMerchant,
   matchesTransferDescriptor,
 } from "@/lib/transaction-matching";
-import { bankKindOf, type BankType } from "@/lib/bank-registry";
+import { bankKindOf } from "@/lib/bank-registry";
 
 export { monthDateRange } from "./month-window";
 
@@ -64,7 +64,7 @@ export type AccountBalance = {
   id: string;
   accountNumber: string;
   balance: number | null;
-  bankType: BankType;
+  bankType: string;
   displayName: string;
   /**
    * Only set for accounts at a card-issuing institution: the window date

@@ -13,12 +13,12 @@ import { parseCategorizationResponse } from "./parse";
 import { routeConfidence } from "./router";
 import { planPacing, type PacingPolicy } from "./pacing";
 import type { CategorizationProvider, GenerationOptions } from "./provider";
-import { bankKindOf, type BankType } from "@/lib/bank-registry";
+import { bankKindOf } from "@/lib/bank-registry";
 
 export interface UncategorizedTxn {
   readonly id: string;
   readonly description: string;
-  readonly bankType: BankType;
+  readonly bankType: string;
 }
 
 /** A category as the store hands it out: id for applying, name+description for the prompt. */
@@ -142,7 +142,7 @@ const MEMORY_CACHE_CONFIDENCE = 6;
  * (owner-adjudicated, PR #150). Mirrors reconciliation P1's kind gate. An
  * institution of unknown kind gets the narrower card scope.
  */
-function transferKindsFor(bankType: BankType): TransferDescriptorKind[] {
+function transferKindsFor(bankType: string): TransferDescriptorKind[] {
   return bankKindOf(bankType) === "bank"
     ? ["inter_account", "bit_mirror", "card_settlement"]
     : ["inter_account", "bit_mirror"];

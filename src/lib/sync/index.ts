@@ -1,5 +1,6 @@
 import { listCredentials, getDecryptedCredentials } from "@/lib/credentials";
 import { syncBank, getSyncStartDate } from "@/lib/scraper";
+import { bankTypeSchema } from "@/lib/bank-registry";
 import type { SyncEvent, OtpHandler } from "@/lib/scraper";
 import { importScrapedAccounts } from "@/lib/transactions";
 import { drizzleReconciliationStore, drizzleSuspectedTransferRouter } from "@/lib/reconciliation";
@@ -86,7 +87,22 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
   let total = 0;
 
   for (const cred of credentials) {
-    const { bankType, credentials: rawCreds } = await getDecryptedCredentials(cred.id);
+    // The stored id is unconstrained text (ADR-0013 §4); one the registry no
+    // longer knows has no scraper mapping, so it is reported, not attempted —
+    // and checked before decryption so its unusable secrets never enter memory.
+    const institution = bankTypeSchema.safeParse(cred.bankType);
+    if (!institution.success) {
+      yield {
+        type: "bank_error",
+        bank: cred.bankType,
+        error: institution.error.issues[0].message,
+        hasScreenshot: false,
+        _credentialId: cred.id,
+      };
+      continue;
+    }
+    const bankType = institution.data;
+    const { credentials: rawCreds } = await getDecryptedCredentials(cred.id);
 
     const existingAccount = await db.query.bankAccounts.findFirst({
       where: eq(bankAccounts.credentialId, cred.id),

@@ -25,8 +25,6 @@ const bytea = customType<{ data: Buffer }>({
 });
 
 // Enums
-export const bankTypeEnum = pgEnum("bank_type", ["discount", "max", "visaCal"]);
-
 export const categoryTypeEnum = pgEnum("category_type", [
   "income",
   "expense",
@@ -77,7 +75,13 @@ export const aiSuggestionStatusEnum = pgEnum("ai_suggestion_status", [
 // Tables
 export const bankCredentials = pgTable("bank_credentials", {
   id: uuid("id").primaryKey().defaultRandom(),
-  bankType: bankTypeEnum("bank_type").notNull(),
+  /**
+   * Institution id: plain text with no enum or CHECK, and read as `string`
+   * rather than `BankType` — the bank registry plus the Zod boundary validate
+   * ids, and a row naming a de-registered institution stays readable
+   * (ADR-0013 §4). Same for `sync_runs.bank`.
+   */
+  bankType: text("bank_type").notNull(),
   displayName: varchar("display_name", { length: 255 }).notNull(),
   encryptedCredentials: bytea("encrypted_credentials").notNull(),
   iv: bytea("iv").notNull(),
@@ -182,7 +186,8 @@ export const syncRuns = pgTable("sync_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   startedAt: timestamp("started_at").notNull().defaultNow(),
   finishedAt: timestamp("finished_at"),
-  bank: bankTypeEnum("bank").notNull(),
+  /** Institution id — unconstrained text, see `bankCredentials.bankType`. */
+  bank: text("bank").notNull(),
   status: syncRunStatusEnum("status").notNull().default("success"),
   transactionsImported: integer("transactions_imported").notNull().default(0),
   errorMessage: text("error_message"),

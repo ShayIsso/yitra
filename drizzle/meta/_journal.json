@@ -64,6 +64,13 @@
       "when": 1788947514774,
       "tag": "0008_certain_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791907629749,
+      "tag": "0009_amazing_kate_bishop",
+      "breakpoints": true
     }
   ]
 }

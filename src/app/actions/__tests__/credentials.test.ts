@@ -102,13 +102,27 @@ describe("addCredentialAction", () => {
     expect(addCredential).not.toHaveBeenCalled();
   });
 
-  it("rejects an unknown bank type without touching the module", async () => {
-    const result = await addCredentialAction({
-      bankType: "hapoalim",
+  it("rejects an institution id absent from the registry at the Zod boundary, though the column accepts any text", async () => {
+    // The column does not enforce this: an enum or CHECK listing institution ids
+    // would be a second source of truth beside the registry (ADR-0013 §4), so
+    // the registry-backed Zod boundary is the only place an unknown id is refused.
+    const { isBankType } = await import("@/lib/bank-registry");
+    const { bankCredentials } = await import("@/db/schema");
+    const { getTableColumns } = await import("drizzle-orm");
+    const unregistered = "not-a-registered-institution";
+    expect(isBankType(unregistered)).toBe(false);
+    expect(getTableColumns(bankCredentials).bankType.getSQLType()).toBe("text");
+
+    const input = {
+      bankType: unregistered,
       displayName: "חשבון בדיקה",
       credentials: FAKE_MAX_FIELDS,
-    });
+    };
+    const boundary = addCredentialSchema.safeParse(input);
+    const result = await addCredentialAction(input);
 
+    expect(boundary.success).toBe(false);
+    expect(boundary.error?.issues.map((issue) => issue.path)).toEqual([["bankType"]]);
     expect(result.error).toBeTruthy();
     expect(addCredential).not.toHaveBeenCalled();
   });

@@ -5,12 +5,12 @@
  */
 
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
-import { bankKindOf, type BankType } from "@/lib/bank-registry";
+import { bankKindOf } from "@/lib/bank-registry";
 
 export type InboxTransaction = {
   id: string;
   bankAccountId: string;
-  bankType: BankType;
+  bankType: string;
   date: string; // YYYY-MM-DD
   description: string;
   chargedAmount: number;

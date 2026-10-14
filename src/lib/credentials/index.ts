@@ -53,7 +53,7 @@ export async function getCredentialBankType(id: string): Promise<string> {
 
 export async function getDecryptedCredentials(
   id: string,
-): Promise<{ bankType: BankType; credentials: Record<string, string> }> {
+): Promise<{ bankType: string; credentials: Record<string, string> }> {
   const row = await db.query.bankCredentials.findFirst({
     where: eq(bankCredentials.id, id),
   });

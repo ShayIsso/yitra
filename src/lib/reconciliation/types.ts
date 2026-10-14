@@ -1,9 +1,7 @@
-import type { BankType } from "@/lib/bank-registry";
-
 export type ReconciliationTransaction = {
   id: string;
   bankAccountId: string;
-  bankType: BankType;
+  bankType: string;
   date: string; // YYYY-MM-DD
   chargedAmount: number;
   description: string;
