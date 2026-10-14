@@ -479,8 +479,7 @@ export function TransactionsTable({
   }
 
   function reloadTransactions() {
-    setFilters((f) => ({ ...f }));
-    setSelected(new Set());
+    setFilter("page", 1);
   }
 
   function clearFilters() {
@@ -751,8 +750,11 @@ export function TransactionsTable({
         </a>
       </div>
 
-      {categorizationAvailable && filters.categoryId === "__uncategorized__" && (
-        <CategorizationBackfillCallout hasRows={total > 0} onCompleted={reloadTransactions} />
+      {categorizationAvailable && (
+        <CategorizationBackfillCallout
+          offered={filters.categoryId === "__uncategorized__" && total > 0}
+          onCompleted={reloadTransactions}
+        />
       )}
 
       {/* Bulk action bar */}

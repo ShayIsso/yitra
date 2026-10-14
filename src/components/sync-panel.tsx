@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
+import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { bankLabel } from "@/lib/bank-registry";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
@@ -608,15 +609,11 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
           <CardContent className="space-y-2 py-4">
             <p className="font-semibold">סיווג חכם</p>
             <div className="space-y-0.5 text-sm">
-              {aiSummary.applied > 0 && (
-                <p className="text-muted-foreground">{aiSummary.applied} עסקאות סווגו אוטומטית</p>
-              )}
-              {aiSummary.queued > 0 && (
-                <p className="text-muted-foreground">{aiSummary.queued} עסקאות ממתינות לבדיקה</p>
-              )}
-              {aiSummary.skipped > 0 && (
-                <p className="text-muted-foreground">{aiSummary.skipped} עסקאות נותרו ללא סיווג</p>
-              )}
+              {aiSummaryLines(aiSummary).map((line) => (
+                <p key={line} className="text-muted-foreground">
+                  {line}
+                </p>
+              ))}
             </div>
           </CardContent>
         </Card>

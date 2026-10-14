@@ -268,7 +268,7 @@ export type { AiSummary } from "./ai-step";
 export function backfillCategorization(): Promise<BackfillOutcome> {
   return runCategorizationBackfill({
     claim: syncClaim,
-    isProviderConfigured: () => isProviderConfigured(),
+    isProviderConfigured,
     runAiStep: runAiSyncStep,
     ai: liveAiStepDeps(),
   });

@@ -2,48 +2,48 @@
 
 import * as React from "react";
 import { Bot, Loader2, X } from "lucide-react";
-import { backfillCategorizationAction } from "@/app/actions/categorization-backfill";
 import type { AiSummary } from "@/lib/sync";
 import { Button } from "@/components/ui/button";
+import { aiSummaryLines } from "@/components/ai-summary-lines";
 
 type Result = { summary?: AiSummary; error?: string };
 
-function summaryLines({ applied, queued, skipped }: AiSummary): string[] {
-  const lines: string[] = [];
-  if (applied > 0) lines.push(`${applied} עסקאות סווגו אוטומטית`);
-  if (queued > 0) lines.push(`${queued} עסקאות ממתינות לבדיקה`);
-  if (skipped > 0) lines.push(`${skipped} עסקאות נותרו ללא סיווג`);
-  return lines.length > 0 ? lines : ["לא נמצאו עסקאות לסיווג"];
+async function requestBackfill(): Promise<Result> {
+  try {
+    const res = await fetch("/api/categorization/backfill", { method: "POST" });
+    return (await res.json()) as Result;
+  } catch {
+    return { error: "שגיאת חיבור. נסה שוב." };
+  }
 }
 
 /**
- * The categorization backfill trigger (#263), shown on the uncategorized view
- * only while a provider is configured. Stays mounted through a run that
- * empties the view, so its result is still readable afterwards.
+ * The categorization backfill trigger (#263). The table keeps it mounted while
+ * a provider is configured and shows it on the uncategorized view with rows;
+ * a run in progress or an unread summary keeps it visible regardless, so a run
+ * that empties the view, or a filter change mid-run, never loses its outcome.
  */
 export function CategorizationBackfillCallout({
-  hasRows,
+  offered,
   onCompleted,
 }: {
-  hasRows: boolean;
+  offered: boolean;
   onCompleted: () => void;
 }) {
   const [running, setRunning] = React.useState(false);
   const [result, setResult] = React.useState<Result | null>(null);
 
   async function run() {
-    if (running) return;
     setRunning(true);
     setResult(null);
-    const outcome: Result = await backfillCategorizationAction().catch(() => ({
-      error: "שגיאה בקטלוג העסקאות",
-    }));
+    const outcome = await requestBackfill();
     setRunning(false);
     setResult(outcome);
     if (outcome.summary) onCompleted();
   }
 
-  if (!hasRows && !running && !result) return null;
+  if (!offered && !running && !result?.summary) return null;
+  const summaryLines = result?.summary ? aiSummaryLines(result.summary) : [];
 
   return (
     <div className="bg-muted/50 flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
@@ -53,7 +53,7 @@ export function CategorizationBackfillCallout({
           {result?.summary ? (
             <>
               <p className="font-medium">הסיווג החכם הושלם</p>
-              {summaryLines(result.summary).map((line) => (
+              {(summaryLines.length > 0 ? summaryLines : ["לא נמצאו עסקאות לסיווג"]).map((line) => (
                 <p key={line} className="text-muted-foreground">
                   {line}
                 </p>
