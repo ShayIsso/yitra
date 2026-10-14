@@ -26,7 +26,7 @@ export type AiStepEvent = { readonly type: "ai_summary" } & AiSummary;
 
 export interface AiStepDeps {
   /** Off short-circuits to `null` before any provider/run work (fresh install). */
-  readonly createProvider: () => CategorizationProvider | null;
+  readonly createProvider: () => Promise<CategorizationProvider | null>;
   readonly aiStore: AiCategorizationStore;
   readonly memoryStore: MerchantMemoryStore;
   readonly transferRouter: SuspectedTransferRouter;
@@ -50,7 +50,7 @@ export interface AiStepDeps {
 export async function* runAiSyncStep(deps: AiStepDeps): AsyncGenerator<AiStepEvent> {
   let provider: CategorizationProvider | null;
   try {
-    provider = deps.createProvider();
+    provider = await deps.createProvider();
   } catch {
     return;
   }
