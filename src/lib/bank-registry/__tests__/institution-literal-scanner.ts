@@ -75,7 +75,7 @@ interface InstitutionKey {
  * An identifier key is also ordinary vocabulary — `{ min, max }` is a range, and
  * `max` is an institution id — so one such key alone proves nothing. A table keyed
  * by institution (`{ discount: …, max: … }`) is the real leak, and it shows as two
- * or more distinct ids among the keys of one object, type literal or interface.
+ * or more distinct ids among the keys of one object, type literal, interface or enum.
  * Sanctioned mappings count towards that threshold but are never reported, so
  * they cannot excuse an unsanctioned sibling. Quoted keys are string literals
  * and are always checked.
@@ -86,12 +86,23 @@ function institutionKeyedTable(
 ): InstitutionKey[] {
   let members: readonly ts.Node[];
   if (ts.isObjectLiteralExpression(node)) members = node.properties;
-  else if (ts.isTypeLiteralNode(node) || ts.isInterfaceDeclaration(node)) members = node.members;
-  else return [];
+  else if (
+    ts.isTypeLiteralNode(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isEnumDeclaration(node)
+  ) {
+    members = node.members;
+  } else return [];
 
   const keys: InstitutionKey[] = [];
   for (const member of members) {
-    if (!ts.isPropertyAssignment(member) && !ts.isPropertySignature(member)) continue;
+    if (
+      !ts.isPropertyAssignment(member) &&
+      !ts.isPropertySignature(member) &&
+      !ts.isEnumMember(member)
+    ) {
+      continue;
+    }
     if (!ts.isIdentifier(member.name) || !knownLiterals.has(member.name.text)) continue;
     keys.push({
       at: member.name,

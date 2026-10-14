@@ -103,6 +103,17 @@ describe("the guard's rule", () => {
     ]);
   });
 
+  it("flags an enum keyed by institution id", () => {
+    const found = scan(
+      "src/lib/unrelated.ts",
+      `enum Bank { discount, max, other }\nenum Range { min, max }`,
+    );
+    expect(found.map((f) => [f.line, f.literal])).toEqual([
+      [1, "discount"],
+      [1, "max"],
+    ]);
+  });
+
   it("reports the location and the literal, and the message states the law and the fix", () => {
     const [violation] = scan("src/lib/unrelated.ts", `\n\n  const bank = "visaCal";`);
     expect(violation).toEqual({
