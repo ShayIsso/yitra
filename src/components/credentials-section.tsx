@@ -16,7 +16,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import {
   Form,
   FormField,
@@ -36,9 +35,7 @@ import {
   type CredentialValues,
 } from "@/lib/credentials/form";
 import {
-  bankLabel,
   enabledBankEntries,
-  enabledBankTypes,
   findBankEntry,
   isBankType,
   nonSecretCredentialValues,
@@ -46,6 +43,8 @@ import {
 } from "@/lib/bank-registry";
 import { BankBadge } from "@/components/bank-badge";
 import { CredentialFields } from "@/components/credential-fields";
+import { InstitutionPicker, useInstitutionPicker } from "@/components/institution-picker";
+import { InstitutionTrustBadge } from "@/components/institution-trust";
 import {
   addCredentialAction,
   updateCredentialAction,
@@ -69,14 +68,6 @@ type EditableCredential = Credential & { bankType: BankType };
 
 export function isEditable(cred: Credential): cred is EditableCredential {
   return isBankType(cred.bankType);
-}
-
-/**
- * The institution picker's menu, in registry order. The trigger labels the
- * selection through the same `bankLabel`, so menu and trigger cannot disagree.
- */
-export function bankPickerOptions(): { value: BankType; label: string }[] {
-  return enabledBankTypes().map((value) => ({ value, label: bankLabel(value) }));
 }
 
 /**
@@ -131,6 +122,7 @@ export function CredentialsSection() {
   }, []);
 
   const form = useForm<CredentialFormValues>({ resolver, defaultValues: emptyForm() });
+  const picker = useInstitutionPicker();
   const selectedEntry = findBankEntry(form.watch("bankType"));
 
   async function fetchCredentials() {
@@ -193,9 +185,15 @@ export function CredentialsSection() {
     setDeleteOpen(true);
   }
 
+  // A missing acknowledgment is reported alongside field errors, not only once they are fixed.
+  function onInvalid() {
+    if (!editing) picker.confirmCleared(form.getValues("bankType"));
+  }
+
   function onSubmit(values: CredentialFormValues) {
     const entry = findBankEntry(values.bankType);
     if (!entry) return;
+    if (!editing && !picker.confirmCleared(values.bankType)) return;
 
     // Absent means "keep the stored credentials": the update then carries no
     // credential fields, so a password is only sent when the owner typed one.
@@ -292,6 +290,7 @@ export function CredentialsSection() {
                 <div className="flex items-center gap-3">
                   <BankBadge bankType={cred.bankType} />
                   <span className="text-sm font-medium">{cred.displayName}</span>
+                  <InstitutionTrustBadge trust={picker.trustOf(cred.bankType)} />
                 </div>
                 <div className="flex items-center gap-1">
                   {isEditable(cred) && (
@@ -319,7 +318,7 @@ export function CredentialsSection() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} noValidate>
               <div className="space-y-4 pt-2">
                 {!editing && (
                   <FormField
@@ -328,30 +327,18 @@ export function CredentialsSection() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>סוג בנק</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={(v) => {
-                            const next = v ? findBankEntry(v) : undefined;
-                            if (!next) return;
-                            field.onChange(next.id);
-                            // An institution switch swaps the field set — start it clean.
-                            form.setValue("credentials", emptyCredentialValues(next));
-                            form.clearErrors("credentials");
-                          }}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <span>{bankLabel(field.value)}</span>
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {bankPickerOptions().map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <InstitutionPicker
+                            picker={picker}
+                            value={field.value}
+                            onValueChange={(next) => {
+                              field.onChange(next.id);
+                              // An institution switch swaps the field set — start it clean.
+                              form.setValue("credentials", emptyCredentialValues(next));
+                              form.clearErrors("credentials");
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

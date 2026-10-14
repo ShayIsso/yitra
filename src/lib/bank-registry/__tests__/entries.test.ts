@@ -12,16 +12,42 @@ import {
 const UNREGISTERED = "institution-that-was-removed";
 
 describe("bankRegistry", () => {
-  it("registers exactly the three verified institutions", () => {
-    expect(bankRegistry.map((e) => e.id)).toEqual(["discount", "max", "visaCal"]);
+  it("verifies exactly the three institutions tested with real credentials", () => {
+    expect(bankRegistry.filter((e) => e.tier === "verified").map((e) => e.id)).toEqual([
+      "discount",
+      "max",
+      "visaCal",
+    ]);
   });
 
-  it("marks every registered institution as verified", () => {
-    expect(bankRegistry.map((e) => [e.id, e.tier])).toEqual([
-      ["discount", "verified"],
-      ["max", "verified"],
-      ["visaCal", "verified"],
+  /**
+   * Restated independently of the registry so a transposed kind has something
+   * to disagree with: a card issuer registered as a bank is invisible to
+   * settlement reconciliation and to the next-debit estimate.
+   */
+  it("registers every other library institution as experimental, with its kind", () => {
+    expect(
+      bankRegistry.filter((e) => e.tier === "experimental").map((e) => [e.id, e.kind]),
+    ).toEqual([
+      ["hapoalim", "bank"],
+      ["leumi", "bank"],
+      ["mizrahi", "bank"],
+      ["mercantile", "bank"],
+      ["beinleumi", "bank"],
+      ["otsarHahayal", "bank"],
+      ["massad", "bank"],
+      ["pagi", "bank"],
+      ["yahav", "bank"],
+      ["union", "bank"],
+      ["isracard", "card"],
+      ["amex", "card"],
+      ["beyahadBishvilha", "card"],
+      ["behatsdaa", "card"],
     ]);
+  });
+
+  it("declares no experimental institution as issuing an OTP, since none of their scrapers asks for one", () => {
+    expect(bankRegistry.filter((e) => e.tier === "experimental" && e.issuesOtp)).toEqual([]);
   });
 
   it("gives each institution a distinct id, so no entry can shadow another", () => {

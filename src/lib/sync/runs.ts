@@ -42,6 +42,8 @@ export type SyncRunStore = {
   insert(row: SyncRunRow): Promise<void>;
   update(id: string, patch: Partial<Omit<SyncRunRow, "id">>): Promise<void>;
   getLastRunPerBank(): Promise<SyncRunSummary[]>;
+  /** Institution ids with at least one run that `isRecordedSuccess` accepts, ever. */
+  getInstitutionsWithRecordedSuccess(): Promise<string[]>;
 };
 
 // ── Drizzle implementation ────────────────────────────────────────────────────
@@ -90,6 +92,13 @@ export function makeDrizzleSyncRunStore(): SyncRunStore {
         .orderBy(syncRuns.bank, desc(syncRuns.startedAt));
 
       return rows;
+    },
+
+    async getInstitutionsWithRecordedSuccess() {
+      const { db } = await import("@/db");
+      const { syncRuns } = await import("@/db/schema");
+      const rows = await buildInstitutionsWithRecordedSuccessQuery({ db, syncRuns });
+      return rows.map((row) => row.bank);
     },
   };
 }
@@ -183,4 +192,38 @@ export function syncRunStatusForEvent(event: SyncEvent): "error" | "otp_skipped"
   if (event.type === "bank_error") return "error";
   if (event.type === "otp_timeout") return "otp_skipped";
   return null;
+}
+
+/**
+ * Whether a run is evidence that sync works for its institution on this
+ * install — what retires an experimental institution's caveat (ADR-0013 §3).
+ * `startSyncRun` writes an optimistic `success` row before scraping, so an
+ * in-flight or crashed run reads as successful until it is finished: only a
+ * finished success counts. `otp_skipped` never does.
+ */
+export function isRecordedSuccess(run: Pick<SyncRunRow, "status" | "finishedAt">): boolean {
+  return run.status === "success" && run.finishedAt !== null;
+}
+
+/** The Drizzle form of `isRecordedSuccess`, over every run ever recorded. */
+export async function buildInstitutionsWithRecordedSuccessQuery({
+  db,
+  syncRuns,
+}: {
+  db: typeof import("@/db").db;
+  syncRuns: typeof import("@/db/schema").syncRuns;
+}): Promise<{ bank: string }[]> {
+  const { and, eq, isNotNull } = await import("drizzle-orm");
+  return db
+    .selectDistinct({ bank: syncRuns.bank })
+    .from(syncRuns)
+    .where(and(eq(syncRuns.status, "success"), isNotNull(syncRuns.finishedAt)));
+}
+
+/**
+ * Institution ids this install has synced successfully at least once. Ids are
+ * stored text, so one may name an institution no longer registered.
+ */
+export async function getInstitutionsWithRecordedSuccess(store: SyncRunStore): Promise<string[]> {
+  return store.getInstitutionsWithRecordedSuccess();
 }

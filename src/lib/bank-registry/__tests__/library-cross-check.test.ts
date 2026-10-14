@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "fs";
+import path from "path";
 import { CompanyTypes, SCRAPERS, PASSWORD_FIELD } from "israeli-bank-scrapers-core/lib/definitions";
 import { enabledBankEntries } from "../index";
 
@@ -16,6 +18,20 @@ const EXPECTED_COMPANY: Record<string, CompanyTypes> = {
   discount: CompanyTypes.discount,
   max: CompanyTypes.max,
   visaCal: CompanyTypes.visaCal,
+  hapoalim: CompanyTypes.hapoalim,
+  leumi: CompanyTypes.leumi,
+  mizrahi: CompanyTypes.mizrahi,
+  mercantile: CompanyTypes.mercantile,
+  beinleumi: CompanyTypes.beinleumi,
+  otsarHahayal: CompanyTypes.otsarHahayal,
+  massad: CompanyTypes.massad,
+  pagi: CompanyTypes.pagi,
+  yahav: CompanyTypes.yahav,
+  union: CompanyTypes.union,
+  isracard: CompanyTypes.isracard,
+  amex: CompanyTypes.amex,
+  beyahadBishvilha: CompanyTypes.beyahadBishvilha,
+  behatsdaa: CompanyTypes.behatsdaa,
 };
 
 /**
@@ -84,5 +100,24 @@ describe("registry entries cross-checked against the scraper library", () => {
     for (const excluded of NON_USER_ENTERED_LOGIN_FIELDS) {
       expect(everyDeclaredField).toContain(excluded);
     }
+  });
+
+  /**
+   * `issuesOtp` of every experimental entry was set by reading whether its
+   * scraper asks the caller for a code. This re-reads the library on every run,
+   * so an upgrade that teaches another scraper to ask fails here until its entry
+   * is re-classified.
+   */
+  it("finds no library scraper that asks for an OTP code besides the excluded one", () => {
+    const scrapersDir = path.join(
+      path.dirname(require.resolve("israeli-bank-scrapers-core/lib/definitions")),
+      "scrapers",
+    );
+    const asking = readdirSync(scrapersDir)
+      .filter((file) => file.endsWith(".js") && !file.endsWith(".test.js"))
+      .filter((file) =>
+        /\.otpCodeRetriever\b/.test(readFileSync(path.join(scrapersDir, file), "utf8")),
+      );
+    expect(asking).toEqual(["one-zero.js"]);
   });
 });

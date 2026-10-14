@@ -45,6 +45,7 @@ describe("enabledBankEntries", () => {
 
 describe("enabledBankTypes", () => {
   it("lists the ids in registration order", () => {
-    expect(enabledBankTypes()).toEqual(["discount", "max", "visaCal"]);
+    expect(enabledBankTypes()).toEqual(bankRegistry.map((entry) => entry.id));
+    expect(enabledBankTypes().slice(0, 3)).toEqual(["discount", "max", "visaCal"]);
   });
 });

@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
-import { bankLabel } from "@/lib/bank-registry";
+import { bankLabel, bankTrustOf } from "@/lib/bank-registry";
+import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
 export type BankSyncState = {
@@ -155,7 +156,32 @@ export function hasSyncComplete(events: ClientSyncEvent[]): boolean {
   return events.some((event) => event.type === "sync_complete");
 }
 
-function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunSummary[] }) {
+type SyncPanelProps = {
+  banks: Bank[];
+  lastRuns: SyncRunSummary[];
+  /**
+   * Institution ids with a recorded successful sync on this install. Omitted
+   * means no evidence, which can only keep an experimental caveat showing.
+   */
+  observedInstitutions?: readonly string[];
+};
+
+/**
+ * This install's evidence, plus any institution that completed in the live run
+ * on screen: `bank_complete` reaches the client only after its import succeeded,
+ * so the caveat retires without waiting for a reload.
+ */
+export function observedWithLiveRun(
+  recorded: readonly string[],
+  liveStates: Record<string, BankSyncState>,
+): ReadonlySet<string> {
+  const completed = Object.entries(liveStates)
+    .filter(([, state]) => state.status === "complete")
+    .map(([bank]) => bank);
+  return new Set([...recorded, ...completed]);
+}
+
+function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPanelProps) {
   const searchParams = useSearchParams();
   // ?bank=<bankType> deep-link target — highlights the flagged bank card
   const highlightedBank = searchParams.get("bank");
@@ -193,6 +219,10 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
   const [otpCodes, setOtpCodes] = useState<Record<string, string>>({});
   const [otpCountdowns, setOtpCountdowns] = useState<Record<string, number>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
+  const observed = useMemo(
+    () => observedWithLiveRun(observedInstitutions, bankStates),
+    [observedInstitutions, bankStates],
+  );
   const countdownIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   useEffect(() => {
@@ -451,6 +481,11 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
             display.source === "persisted" && nowMs !== null
               ? formatRelativeAge(nowMs - new Date(display.run.startedAt).getTime())
               : null;
+          const trust = bankTrustOf(bank.bankType, observed);
+          const failed =
+            liveState?.status === "error" ||
+            (display.source === "persisted" && display.run.status === "error");
+          const failureNote = failed ? unverifiedFailureNote(bank.bankType, trust) : null;
           const canRetry =
             liveState?.status === "error" ||
             liveState?.status === "otp_timeout" ||
@@ -467,6 +502,7 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
                   <div className="flex items-center gap-3">
                     <BankBadge bankType={bank.bankType} />
                     <span className="font-medium">{bank.displayName}</span>
+                    <InstitutionTrustBadge trust={trust} />
                   </div>
 
                   <div className="flex items-center gap-1.5 text-sm">
@@ -540,6 +576,8 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
                     )}
                   </div>
                 </div>
+
+                {failureNote && <p className="text-muted-foreground text-sm">{failureNote}</p>}
 
                 {liveState?.status === "otp_required" && (
                   <div className="flex items-center gap-2">
@@ -644,10 +682,10 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
 }
 
 // useSearchParams requires a Suspense boundary (Next.js App Router requirement)
-export function SyncPanel({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunSummary[] }) {
+export function SyncPanel(props: SyncPanelProps) {
   return (
     <Suspense fallback={null}>
-      <SyncPanelInner banks={banks} lastRuns={lastRuns} />
+      <SyncPanelInner {...props} />
     </Suspense>
   );
 }
