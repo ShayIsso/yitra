@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BankBadge } from "@/components/bank-badge";
@@ -168,6 +168,7 @@ type SyncPanelProps = {
 
 function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPanelProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   // ?bank=<bankType> deep-link target — highlights the flagged bank card
   const highlightedBank = searchParams.get("bank");
   const lastRunByBank = useMemo(() => {
@@ -293,6 +294,9 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
       });
       setSummary(event.summary);
       setSyncing(false);
+      // Re-reads the recorded runs on the server, so an experimental institution
+      // this run just synced loses its caveat. Live SSE state is never evidence.
+      router.refresh();
     }
   }
 

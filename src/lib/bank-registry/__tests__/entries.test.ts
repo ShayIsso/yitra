@@ -46,10 +46,6 @@ describe("bankRegistry", () => {
     ]);
   });
 
-  it("declares no experimental institution as issuing an OTP, since none of their scrapers asks for one", () => {
-    expect(bankRegistry.filter((e) => e.tier === "experimental" && e.issuesOtp)).toEqual([]);
-  });
-
   it("gives each institution a distinct id, so no entry can shadow another", () => {
     const ids = bankRegistry.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);

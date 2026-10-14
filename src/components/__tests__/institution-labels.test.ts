@@ -10,6 +10,7 @@ import { ReconciliationInbox } from "@/components/reconciliation-inbox";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ refresh: () => undefined }),
 }));
 
 vi.mock("@/app/actions/credentials", () => ({

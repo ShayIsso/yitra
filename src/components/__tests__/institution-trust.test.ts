@@ -7,6 +7,7 @@ import type { SyncRunSummary } from "@/lib/sync/runs";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ refresh: () => undefined }),
 }));
 
 const UNVERIFIED = "עדיין לא נבדק על ידינו";

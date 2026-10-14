@@ -41,8 +41,10 @@ export interface BankRegistryEntry {
   readonly nameEn: string;
   readonly kind: BankKind;
   /**
-   * Whether the library's scraper for this company asks for an OTP code. It does
-   * not decide whether the sync prompts: that is event-driven (CONTEXT.md, OTP).
+   * Whether the institution's login challenges for an OTP code. A curated fact:
+   * a verified entry records what we observed, and an experimental entry's value
+   * is pinned to its library scraper by the cross-check test. It does not decide
+   * whether the sync prompts — that is event-driven (CONTEXT.md, OTP).
    */
   readonly issuesOtp: boolean;
   readonly company: SupportedCompany;
@@ -268,6 +270,10 @@ export const bankRegistry = Object.freeze([
     ],
     tier: "experimental",
   },
+  // A prepaid stored-value card: as `card`, its scraped balance is replaced by a
+  // next-debit estimate (usually 0) and its rows join the card side of settlement
+  // matching. `bank` would be worse — its purchases would meet the card-settlement
+  // transfer guard — so `card` holds until an owner decision on stored-value kinds.
   {
     id: "beyahadBishvilha",
     nameHe: "ביחד בשבילך",
