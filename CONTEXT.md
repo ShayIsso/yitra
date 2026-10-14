@@ -69,7 +69,7 @@ Always say "settlement charge" or "The Paradox" — these names are used in BACK
 
 ### `OTP` (one-time password)
 
-Only **Bank Discount** issues an OTP during scraping. Max and Cal do not. The OTP arrives as an SMS to the user; the UI prompts them to enter it within a 3-minute window (`/api/sync/otp` POST endpoint, promise-bridged to the scraper). On timeout the per-bank scrape fails and the next bank starts (per ADR-0003).
+Which institutions issue an OTP during scraping is a `bank registry` fact — each entry's `issuesOtp`, exposed by `bankIssuesOtp` — not prose to keep in sync here. No code branches on it to decide whether to prompt: the flow is **event-driven**. Every scrape is handed an `otpCodeRetriever`, and only an institution whose login actually challenges for a code calls it; that call is what raises `otp_required`. The OTP arrives as an SMS to the user; the UI prompts them to enter it within a 3-minute window (`/api/sync/otp` POST endpoint, promise-bridged to the scraper). On timeout the per-bank scrape fails and the next bank starts (per ADR-0003). Scheduled runs answer the same event with `skip()` and record `otp_skipped`.
 
 ### `sync claim` — load-bearing
 
@@ -83,7 +83,7 @@ The `israeli-bank-scrapers-core` library exposes a `futureDebits` array on credi
 
 ### `next-debit estimate` — load-bearing
 
-What the dashboard shows as a Max/Cal card's "balance": an estimate of the upcoming charge (החיוב הקרוב) against the bank account, **derived from stored transactions**, not read from the scraper. Decided in issue #102, shipped in PR #127.
+What the dashboard shows as the "balance" of a card account (any account whose institution's registry `kind` is `card`): an estimate of the upcoming charge (החיוב הקרוב) against the bank account, **derived from stored transactions**, not read from the scraper. Decided in issue #102, shipped in PR #127.
 
 The rule: sum of `chargedAmount` over the card's transactions with `processedDate` in `(today, today + 31 days]` — exclusive of today, inclusive at +31 days. Transaction status and type are deliberately ignored; the date predicate alone decides. Empty window → ₪0 (never "—"). The debit-date hint shown next to it is the in-window date carrying the largest absolute summed charge, so a small off-cycle straggler can't outrank the main billing-cycle date.
 

@@ -13,7 +13,7 @@ import { parseCategorizationResponse } from "./parse";
 import { routeConfidence } from "./router";
 import { planPacing, type PacingPolicy } from "./pacing";
 import type { CategorizationProvider, GenerationOptions } from "./provider";
-import type { BankType } from "@/lib/bank-registry";
+import { bankKindOf, type BankType } from "@/lib/bank-registry";
 
 export interface UncategorizedTxn {
   readonly id: string;
@@ -125,12 +125,6 @@ export interface RunDeps {
   readonly pacing?: BatchPacing;
 }
 
-/**
- * Card statements carry bare 4-digit merchant names (e.g. "פיצה 2000") that the
- * `card_settlement` shape would false-match, so cards scope the transfer guard
- * to genuine cross-account shapes only; bank accounts get all three kinds
- * (owner-adjudicated, PR #150). Mirrors reconciliation P1's bankType gate.
- */
 // Locked by the benchmark shape (#144): deterministic JSON output, not caller-tunable.
 const GENERATION: GenerationOptions = { temperature: 0, json: true };
 
@@ -141,8 +135,15 @@ const GENERATION: GenerationOptions = { temperature: 0, json: true };
 const MEMORY_CACHE_MODEL = "memory";
 const MEMORY_CACHE_CONFIDENCE = 6;
 
+/**
+ * Card statements carry bare 4-digit merchant names (e.g. "פיצה 2000") that the
+ * `card_settlement` shape would false-match, so cards scope the transfer guard
+ * to genuine cross-account shapes only; bank accounts get all three kinds
+ * (owner-adjudicated, PR #150). Mirrors reconciliation P1's kind gate. An
+ * institution of unknown kind gets the narrower card scope.
+ */
 function transferKindsFor(bankType: BankType): TransferDescriptorKind[] {
-  return bankType === "discount"
+  return bankKindOf(bankType) === "bank"
     ? ["inter_account", "bit_mirror", "card_settlement"]
     : ["inter_account", "bit_mirror"];
 }

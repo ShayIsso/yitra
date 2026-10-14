@@ -1,15 +1,14 @@
 import { datesWithin, matchesTransferDescriptor } from "@/lib/transaction-matching";
+import { bankKindOf } from "@/lib/bank-registry";
 import { scoreP1Confidence } from "./confidence";
 import type { ReconciliationCandidate, ReconciliationTransaction } from "./types";
 
 const CYCLE_WINDOW_DAYS = 35;
-const CARD_BANK_TYPES: ReadonlySet<string> = new Set(["max", "visaCal"]);
-const BANK_TYPES: ReadonlySet<string> = new Set(["discount"]);
 const OVERLAP_PENALTY = 0.25;
 const MIN_CONFIDENCE = 0.7;
 
 function isBankLumpCandidate(tx: ReconciliationTransaction): boolean {
-  if (!BANK_TYPES.has(tx.bankType)) return false;
+  if (bankKindOf(tx.bankType) !== "bank") return false;
   return matchesTransferDescriptor(tx.description, ["card_settlement"]);
 }
 
@@ -18,13 +17,14 @@ function parseDate(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00Z`);
 }
 
+/** A row from an institution of unknown kind lands on neither side. */
 export function detectP1Settlement(
   transactions: ReconciliationTransaction[],
 ): ReconciliationCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
   const bankLumps = unreconciled.filter(isBankLumpCandidate);
-  const cardTxns = unreconciled.filter((tx) => CARD_BANK_TYPES.has(tx.bankType));
+  const cardTxns = unreconciled.filter((tx) => bankKindOf(tx.bankType) === "card");
 
   if (bankLumps.length === 0 || cardTxns.length === 0) return [];
 
