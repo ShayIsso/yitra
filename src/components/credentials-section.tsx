@@ -29,8 +29,23 @@ import {
   applyActionErrors,
 } from "@/components/ui/form";
 import { addCredentialSchema, editCredentialSchema } from "@/lib/credentials/schemas";
-import { bankLabel, enabledBankTypes, isBankType, type BankType } from "@/lib/bank-registry";
+import {
+  credentialValuesFor,
+  emptyCredentialValues,
+  planCredentialEdit,
+  type CredentialValues,
+} from "@/lib/credentials/form";
+import {
+  bankLabel,
+  enabledBankEntries,
+  enabledBankTypes,
+  findBankEntry,
+  isBankType,
+  nonSecretCredentialValues,
+  type BankType,
+} from "@/lib/bank-registry";
 import { BankBadge } from "@/components/bank-badge";
+import { CredentialFields } from "@/components/credential-fields";
 import {
   addCredentialAction,
   updateCredentialAction,
@@ -65,23 +80,19 @@ export function bankPickerOptions(): { value: BankType; label: string }[] {
 }
 
 /**
- * Superset of both per-bank field shapes so a single RHF instance backs the
- * form; the module-owned discriminated-union schema validates only the
- * selected bank's fields.
+ * `credentials` holds exactly the selected institution's fields, keyed as its
+ * registry entry declares them; the module-owned schema validates only those.
  */
 type CredentialFormValues = {
   bankType: BankType;
   displayName: string;
-  credentials: { id: string; num: string; username: string; password: string };
+  credentials: CredentialValues;
 };
 
-const EMPTY_CREDENTIAL_FIELDS = { id: "", num: "", username: "", password: "" };
-
-const EMPTY_FORM: CredentialFormValues = {
-  bankType: enabledBankTypes()[0],
-  displayName: "",
-  credentials: EMPTY_CREDENTIAL_FIELDS,
-};
+function emptyForm(): CredentialFormValues {
+  const [first] = enabledBankEntries();
+  return { bankType: first.id, displayName: "", credentials: emptyCredentialValues(first) };
+}
 
 export function CredentialsSection() {
   const [credentials, setCredentials] = React.useState<Credential[]>([]);
@@ -98,11 +109,15 @@ export function CredentialsSection() {
   // one stable RHF instance can validate with the add schema (password
   // required) or the edit schema (blank password = keep the stored one).
   const editModeRef = React.useRef(false);
-  // Snapshot of the edit form's prefilled non-password fields, to detect
+  // Snapshot of the edit form's prefilled non-secret fields, to detect
   // changes that would be silently dropped without a replacement password.
-  const prefillRef = React.useRef(EMPTY_CREDENTIAL_FIELDS);
+  const prefillRef = React.useRef<CredentialValues>({});
+  // Bumped whenever the dialog opens or closes, so a prefill response that
+  // arrives after the owner moved on cannot write one credential's fields into
+  // another's form.
+  const prefillRequestRef = React.useRef(0);
   const resolver = React.useMemo<Resolver<CredentialFormValues>>(() => {
-    // The union's input type is narrower per-branch than the superset form
+    // The union's input type is narrower per-branch than the generic form
     // values, hence the cast; the schemas are module-owned and shared with
     // the Server Actions, so parity is asserted in tests, not here.
     const addResolver = zodResolver(
@@ -115,8 +130,8 @@ export function CredentialsSection() {
       (editModeRef.current ? editResolver : addResolver)(values, context, options);
   }, []);
 
-  const form = useForm<CredentialFormValues>({ resolver, defaultValues: EMPTY_FORM });
-  const bankType = form.watch("bankType");
+  const form = useForm<CredentialFormValues>({ resolver, defaultValues: emptyForm() });
+  const selectedEntry = findBankEntry(form.watch("bankType"));
 
   async function fetchCredentials() {
     const res = await fetch("/api/credentials");
@@ -131,39 +146,44 @@ export function CredentialsSection() {
     fetchCredentials();
   }, []);
 
+  function setDialogOpen(open: boolean) {
+    if (!open) prefillRequestRef.current++;
+    setFormOpen(open);
+  }
+
   function openAdd() {
+    prefillRequestRef.current++;
     editModeRef.current = false;
     setEditing(null);
-    form.reset(EMPTY_FORM);
+    form.reset(emptyForm());
     setFormOpen(true);
   }
 
   async function openEdit(cred: EditableCredential) {
+    const entry = findBankEntry(cred.bankType);
+    if (!entry) return;
+    const request = ++prefillRequestRef.current;
     editModeRef.current = true;
-    prefillRef.current = EMPTY_CREDENTIAL_FIELDS;
+    prefillRef.current = {};
     setEditing(cred);
     form.reset({
       bankType: cred.bankType,
       displayName: cred.displayName,
-      credentials: EMPTY_CREDENTIAL_FIELDS,
+      credentials: emptyCredentialValues(entry),
     });
     setFormOpen(true);
 
-    // Prefill the non-password fields; the password field always starts blank
-    // and the stored password is never sent to the client.
+    // Prefill the non-secret fields; secret fields always start blank and the
+    // stored password is never sent to the client.
     const res = await fetch(`/api/credentials/${cred.id}`);
     if (res.ok) {
       const data = await res.json();
-      const prefill = {
-        ...EMPTY_CREDENTIAL_FIELDS,
-        id: data.safeFields?.id ?? "",
-        num: data.safeFields?.num ?? "",
-        username: data.safeFields?.username ?? "",
-      };
+      if (request !== prefillRequestRef.current) return;
+      const prefill = nonSecretCredentialValues(entry.credentialFields, data.safeFields ?? {});
       prefillRef.current = prefill;
-      form.setValue("credentials.id", prefill.id);
-      form.setValue("credentials.num", prefill.num);
-      form.setValue("credentials.username", prefill.username);
+      for (const [key, value] of Object.entries(prefill)) {
+        form.setValue(`credentials.${key}`, value);
+      }
     }
   }
 
@@ -174,47 +194,36 @@ export function CredentialsSection() {
   }
 
   function onSubmit(values: CredentialFormValues) {
-    // Without a replacement password the stored credentials can't be
-    // re-encrypted, so edits to the other login fields would be silently
-    // dropped — demand a password instead of pretending they saved.
-    if (editing && values.credentials.password === "") {
-      const prefill = prefillRef.current;
-      const loginFieldsChanged =
-        values.bankType === "discount"
-          ? values.credentials.id !== prefill.id || values.credentials.num !== prefill.num
-          : values.credentials.username !== prefill.username;
-      if (loginFieldsChanged) {
-        form.setError("credentials.password", {
-          message: "כדי לעדכן את פרטי ההתחברות יש להזין סיסמה",
+    const entry = findBankEntry(values.bankType);
+    if (!entry) return;
+
+    // Absent means "keep the stored credentials": the update then carries no
+    // credential fields, so a password is only sent when the owner typed one.
+    let replacement: CredentialValues | undefined;
+    if (editing) {
+      const plan = planCredentialEdit(entry, values.credentials, prefillRef.current);
+      if (plan.kind === "needs-secret") {
+        const label = entry.credentialFields.find((field) => field.key === plan.field)?.label;
+        form.setError(`credentials.${plan.field}`, {
+          message: `כדי לעדכן את פרטי ההתחברות יש להזין ${label}`,
         });
         return;
       }
+      if (plan.kind === "replace") replacement = plan.credentials;
     }
 
     startTransition(async () => {
-      // Only the selected bank's fields leave the client.
-      const bankCredentials =
-        values.bankType === "discount"
-          ? {
-              id: values.credentials.id,
-              password: values.credentials.password,
-              num: values.credentials.num,
-            }
-          : { username: values.credentials.username, password: values.credentials.password };
-
       const result = editing
         ? await updateCredentialAction({
             id: editing.id,
             bankType: values.bankType,
             displayName: values.displayName,
-            // A blank password means "keep the stored credentials" — the
-            // payload then carries no credential fields at all.
-            ...(values.credentials.password === "" ? {} : { credentials: bankCredentials }),
+            ...(replacement ? { credentials: replacement } : {}),
           })
         : await addCredentialAction({
             bankType: values.bankType,
             displayName: values.displayName,
-            credentials: bankCredentials,
+            credentials: credentialValuesFor(entry, values.credentials),
           });
 
       if (result.error || result.fieldErrors) {
@@ -223,7 +232,7 @@ export function CredentialsSection() {
         return;
       }
 
-      setFormOpen(false);
+      setDialogOpen(false);
       await fetchCredentials();
     });
   }
@@ -303,7 +312,7 @@ export function CredentialsSection() {
       )}
 
       {/* Add / Edit Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog open={formOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? "ערוך חשבון בנק" : "הוסף חשבון בנק"}</DialogTitle>
@@ -322,16 +331,12 @@ export function CredentialsSection() {
                         <Select
                           value={field.value}
                           onValueChange={(v) => {
-                            if (!v) return;
-                            field.onChange(v);
-                            // Bank switch swaps the field set — start it clean.
-                            form.setValue("credentials", EMPTY_CREDENTIAL_FIELDS);
-                            form.clearErrors([
-                              "credentials.id",
-                              "credentials.num",
-                              "credentials.username",
-                              "credentials.password",
-                            ]);
+                            const next = v ? findBankEntry(v) : undefined;
+                            if (!next) return;
+                            field.onChange(next.id);
+                            // An institution switch swaps the field set — start it clean.
+                            form.setValue("credentials", emptyCredentialValues(next));
+                            form.clearErrors("credentials");
                           }}
                         >
                           <FormControl>
@@ -367,68 +372,8 @@ export function CredentialsSection() {
                   )}
                 />
 
-                {bankType === "discount" ? (
-                  <FormField
-                    control={form.control}
-                    name="credentials.id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>תעודת זהות</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="מספר ת.ז." />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <FormField
-                    control={form.control}
-                    name="credentials.username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>שם משתמש</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="שם משתמש לאינטרנט" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                <FormField
-                  control={form.control}
-                  name="credentials.password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>סיסמה</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type="password"
-                          placeholder={editing ? "ללא שינוי" : "סיסמה"}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {bankType === "discount" && (
-                  <FormField
-                    control={form.control}
-                    name="credentials.num"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>מספר חשבון</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="מספר חשבון" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                {selectedEntry && (
+                  <CredentialFields entry={selectedEntry} mode={editing ? "edit" : "add"} />
                 )}
 
                 <FormRootError />
@@ -438,7 +383,7 @@ export function CredentialsSection() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setFormOpen(false)}
+                  onClick={() => setDialogOpen(false)}
                   disabled={isPending}
                 >
                   ביטול

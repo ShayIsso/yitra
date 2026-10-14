@@ -11,4 +11,8 @@
 export type { AppSettings, AppSettingsRow, StoredSecret } from "./settings";
 export { EMPTY_APP_SETTINGS, projectAppSettings } from "./settings";
 export type { AppSettingsStore, CategorizationSelection } from "./store";
-export { makeDrizzleAppSettingsStore, drizzleAppSettingsStore } from "./store";
+export {
+  makeDrizzleAppSettingsStore,
+  drizzleAppSettingsStore,
+  CategorizationWriteError,
+} from "./store";

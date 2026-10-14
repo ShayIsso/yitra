@@ -7,6 +7,7 @@ import {
   canonicalizeMerchant,
   matchesTransferDescriptor,
 } from "@/lib/transaction-matching";
+import { bankKindOf } from "@/lib/bank-registry";
 
 export { monthDateRange } from "./month-window";
 
@@ -323,8 +324,8 @@ function addDaysToIsoDate(isoDate: string, days: number): string {
 
 /**
  * Estimates the upcoming credit-card debit (החיוב הקרוב) from already-stored
- * transactions, for banks (Max/Cal) whose scraper does not reliably report
- * account balance. See issue #40 / grilling session #102 for the semantics
+ * transactions, for card-kind institutions whose scraper does not reliably
+ * report account balance. See issue #40 / grilling session #102 for the semantics
  * decision.
  *
  * Window: `today < processedDate <= today + 31 days` — exclusive today,
@@ -517,8 +518,54 @@ export async function getSpendingRollup(
   return rollUpSpendingByGroup(spending, rollupCategories);
 }
 
-/** Bank types whose scraper doesn't reliably report account balance — display shows a derived estimate instead. */
-const CARD_BANK_TYPES = new Set<AccountBalance["bankType"]>(["max", "visaCal"]);
+/** An account as stored, before the next-debit estimate is substituted for card accounts. */
+export type ReportedAccountBalance = Omit<AccountBalance, "nextDebitDate">;
+
+/**
+ * Card issuers' scrapers don't reliably report account balance, so a card-kind
+ * account displays the next-debit estimate instead. An institution of unknown
+ * kind keeps its reported balance. The one selector both the upcoming-charges
+ * fetch and the projection read, so the two cannot disagree on which accounts
+ * are estimated.
+ */
+function nextDebitAccountIds(accounts: readonly ReportedAccountBalance[]): ReadonlySet<string> {
+  return new Set(accounts.filter((a) => bankKindOf(a.bankType) === "card").map((a) => a.id));
+}
+
+/** `upcomingByAccount` needs entries only for card-kind accounts. */
+export function projectAccountBalances(
+  accounts: readonly ReportedAccountBalance[],
+  upcomingByAccount: ReadonlyMap<string, NextDebitTransaction[]>,
+  today: string,
+): AccountBalance[] {
+  const estimated = nextDebitAccountIds(accounts);
+
+  return accounts.map((account) => {
+    if (estimated.has(account.id)) {
+      const { estimate, nextDebitDate } = computeNextDebitEstimate(
+        upcomingByAccount.get(account.id) ?? [],
+        today,
+      );
+      return {
+        id: account.id,
+        accountNumber: account.accountNumber,
+        balance: estimate,
+        bankType: account.bankType,
+        displayName: account.displayName,
+        nextDebitDate,
+      };
+    }
+
+    return {
+      id: account.id,
+      accountNumber: account.accountNumber,
+      balance: account.balance,
+      bankType: account.bankType,
+      displayName: account.displayName,
+      nextDebitDate: null,
+    };
+  });
+}
 
 export async function getAccountBalances(): Promise<AccountBalance[]> {
   const rows = await db
@@ -532,7 +579,15 @@ export async function getAccountBalances(): Promise<AccountBalance[]> {
     .from(bankAccounts)
     .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id));
 
-  const cardAccountIds = rows.filter((r) => CARD_BANK_TYPES.has(r.bankType)).map((r) => r.id);
+  const accounts: ReportedAccountBalance[] = rows.map((r) => ({
+    id: r.id,
+    accountNumber: r.accountNumber,
+    balance: r.balance !== null ? Number(r.balance) : null,
+    bankType: r.bankType,
+    displayName: r.displayName,
+  }));
+
+  const cardAccountIds = [...nextDebitAccountIds(accounts)];
 
   // Computed once here, then threaded into the pure function — see
   // computeNextDebitEstimate's doc comment for why it never calls Date itself.
@@ -561,31 +616,7 @@ export async function getAccountBalances(): Promise<AccountBalance[]> {
     }
   }
 
-  return rows.map((r) => {
-    if (CARD_BANK_TYPES.has(r.bankType)) {
-      const { estimate, nextDebitDate } = computeNextDebitEstimate(
-        txByAccount.get(r.id) ?? [],
-        today,
-      );
-      return {
-        id: r.id,
-        accountNumber: r.accountNumber,
-        balance: estimate,
-        bankType: r.bankType,
-        displayName: r.displayName,
-        nextDebitDate,
-      };
-    }
-
-    return {
-      id: r.id,
-      accountNumber: r.accountNumber,
-      balance: r.balance !== null ? Number(r.balance) : null,
-      bankType: r.bankType,
-      displayName: r.displayName,
-      nextDebitDate: null,
-    };
-  });
+  return projectAccountBalances(accounts, txByAccount, today);
 }
 
 export async function getRecentTransactions(limit: number): Promise<RecentTransaction[]> {

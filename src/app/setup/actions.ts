@@ -3,7 +3,13 @@
 import { redirect } from "next/navigation";
 import { formatZodError, formatZodFieldErrors, type FieldErrors } from "@/lib/api-utils";
 import { establishSession, requireSession } from "@/lib/auth";
-import { finishOnboarding, initialPasswordSchema, setInitialPassword } from "@/lib/onboarding";
+import {
+  ensureDefaultCategories,
+  finishOnboarding,
+  initialPasswordSchema,
+  readSetupState,
+  setInitialPassword,
+} from "@/lib/onboarding";
 
 /*
  * Nothing here is behind the middleware: every action must begin with
@@ -34,6 +40,7 @@ export async function setInitialPasswordAction(
 
 export async function completeOnboardingAction(): Promise<void> {
   await requireSession("/setup");
+  if (!(await readSetupState(true)).completed) await ensureDefaultCategories();
   await finishOnboarding();
   redirect("/");
 }

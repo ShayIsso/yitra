@@ -66,7 +66,7 @@ export const bankRegistry = Object.freeze([
     issuesOtp: false,
     company: CompanyTypes.max,
     credentialFields: [
-      { key: "username", kind: "text", label: "שם משתמש" },
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
       { key: "password", kind: "password", label: "סיסמה" },
     ],
     tier: "verified",
@@ -79,7 +79,7 @@ export const bankRegistry = Object.freeze([
     issuesOtp: false,
     company: CompanyTypes.visaCal,
     credentialFields: [
-      { key: "username", kind: "text", label: "שם משתמש" },
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
       { key: "password", kind: "password", label: "סיסמה" },
     ],
     tier: "verified",
@@ -114,7 +114,7 @@ export function isBankType(id: string): id is BankType {
  * Every institution a user may select. Every registered institution is selectable:
  * the tier is presentational, never a gate, so this must not filter by tier.
  */
-export function enabledBankEntries(): readonly BankRegistryEntry[] {
+export function enabledBankEntries(): readonly (BankRegistryEntry & { readonly id: BankType })[] {
   return bankRegistry;
 }
 

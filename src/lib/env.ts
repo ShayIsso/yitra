@@ -22,10 +22,12 @@ const envSchema = z.object({
   // that (src/instrumentation.ts) rather than this schema going lenient.
   CHROMIUM_PATH: blankAsUnset(z.string().min(1).optional()),
   SCHEDULER_ENABLED: blankAsUnset(z.enum(["true", "false"]).optional().default("false")),
-  // AI categorization (ADR-0008). Unset AI_PROVIDER resolves to off — a fresh
-  // install makes zero external calls. `gemini` needs GEMINI_API_KEY or it too
-  // resolves to off; `ollama` is the zero-egress mode. Resolution lives in the
-  // pure `resolveCategorizationProvider` (src/lib/ai-categorization/config.ts).
+  // AI categorization (ADR-0008). Each value, when set, wins over the choice
+  // stored in app settings (ADR-0014 §3); with nothing set in either place the
+  // provider resolves to off — a fresh install makes zero external calls.
+  // `gemini` needs a key from one place or the other, or it too resolves to
+  // off; `ollama` is the zero-egress mode. Resolution lives in the pure
+  // `resolveCategorizationProvider` (src/lib/ai-categorization/config.ts).
   AI_PROVIDER: blankAsUnset(z.enum(["gemini", "ollama", "off"]).optional()),
   GEMINI_API_KEY: blankAsUnset(z.string().min(1).optional()),
   OLLAMA_ENDPOINT: blankAsUnset(z.string().url().optional()),

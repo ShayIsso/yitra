@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
 import { SpendingBreakdown } from "@/components/spending-breakdown";
+import { isBankType } from "@/lib/bank-registry";
 import type { Category } from "@/lib/categories";
 import type {
   MonthlySummary,
@@ -31,6 +32,7 @@ import type {
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
 import { PaceHero } from "@/components/dashboard/pace-hero";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
+import { OnboardingPath } from "@/components/dashboard/onboarding-path";
 import { SyncFreshnessPill } from "@/components/dashboard/sync-freshness-pill";
 import { TrendMiniChart } from "@/components/dashboard/trend-mini-chart";
 import { TopMerchantsCard } from "@/components/dashboard/top-merchants-card";
@@ -86,6 +88,8 @@ type DashboardData = {
   attention: AttentionCounts | null;
   topMerchants: TopMerchant[];
   trend: TrendsMonthPoint[];
+  /** Null when the credentials fetch failed. Only existence is read (#264). */
+  credentialCount: number | null;
 };
 
 const EMPTY_DASHBOARD_DATA: DashboardData = {
@@ -102,6 +106,7 @@ const EMPTY_DASHBOARD_DATA: DashboardData = {
   attention: null,
   topMerchants: [],
   trend: [],
+  credentialCount: null,
 };
 
 type GoalsResponse = {
@@ -124,6 +129,7 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attentionRes,
     topMerchantsRes,
     trendRes,
+    credentialsRes,
   ] = await Promise.all([
     fetch(`/api/analytics/monthly?year=${year}&month=${month}`),
     fetch(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
@@ -138,6 +144,7 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     fetch(`/api/attention-counts`),
     fetch(`/api/analytics/top-merchants?year=${year}&month=${month}`),
     fetch(`/api/reports/trends?range=12`),
+    fetch(`/api/credentials`),
   ]);
 
   const [
@@ -152,6 +159,7 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attention,
     topMerchants,
     trendReport,
+    credentials,
   ] = await Promise.all([
     summaryRes.ok ? summaryRes.json() : null,
     spendingRes.ok ? spendingRes.json() : [],
@@ -164,6 +172,7 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
     topMerchantsRes.ok ? topMerchantsRes.json() : [],
     trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
+    credentialsRes.ok ? (credentialsRes.json() as Promise<{ bankType: string }[]>) : null,
   ]);
 
   return {
@@ -180,6 +189,8 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attention,
     topMerchants,
     trend: trendReport?.months ?? [],
+    // A credential for a retired institution cannot sync, so it is not "connected".
+    credentialCount: credentials?.filter((c) => isBankType(c.bankType)).length ?? null,
   };
 }
 
@@ -250,6 +261,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
     attention,
     topMerchants,
     trend,
+    credentialCount,
   } = data;
 
   // Budgets only ever attach to expense-type categories (src/lib/budgets
@@ -290,6 +302,18 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
     recent.length === 0 &&
     upcomingCharges.length === 0;
 
+  // Balances only appear once a sync has landed, so they cover the bank whose
+  // latest run errored after an earlier success (the runs list is last-per-bank).
+  const onboardingFacts =
+    credentialCount === null || attention === null
+      ? null
+      : {
+          hasCredential: credentialCount > 0,
+          hasSuccessfulSync:
+            lastSyncRuns.some((run) => run.status === "success") || balances.length > 0,
+          uncategorizedCount: attention.uncategorized,
+        };
+
   return (
     <div className="space-y-6">
       {/*
@@ -320,6 +344,8 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
           </div>
         </div>
       </div>
+
+      {!loading && <OnboardingPath facts={onboardingFacts} />}
 
       {loading ? (
         <div className="space-y-6">

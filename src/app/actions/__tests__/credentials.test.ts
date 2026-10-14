@@ -27,7 +27,7 @@ import {
 import {
   addCredentialSchema,
   editCredentialSchema,
-  credentialSchemas,
+  storedCredentialSchema,
 } from "@/lib/credentials/schemas";
 import { CredentialNotFoundError } from "@/lib/credentials/errors";
 import { formatZodError } from "@/lib/api-utils";
@@ -230,7 +230,7 @@ describe("updateCredentialAction", () => {
     // A forged payload can lie about bankType; the module re-validates
     // against the STORED bank and throws a ZodError — the boundary must
     // format it, not rethrow raw.
-    const moduleRejection = credentialSchemas.discount.safeParse(FAKE_MAX_FIELDS);
+    const moduleRejection = storedCredentialSchema("discount").safeParse(FAKE_MAX_FIELDS);
     if (moduleRejection.success) throw new Error("fixture should not validate");
     vi.mocked(updateCredential).mockRejectedValue(moduleRejection.error);
 

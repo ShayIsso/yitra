@@ -25,7 +25,7 @@ function emptyReconciliationStore(): ReconciliationStore {
 }
 
 const noopAi: AiStepDeps = {
-  createProvider: () => null,
+  createProvider: async () => null,
   aiStore: {} as AiStepDeps["aiStore"],
   memoryStore: {} as AiStepDeps["memoryStore"],
   transferRouter: {} as AiStepDeps["transferRouter"],
