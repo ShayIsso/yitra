@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { formatZodError, formatZodFieldErrors, type FieldErrors } from "@/lib/api-utils";
 import { requireSession } from "@/lib/auth";
 import { addCredential } from "@/lib/credentials";
@@ -12,8 +13,8 @@ import { addCredentialSchema } from "@/lib/credentials/schemas";
  * and the same credentials module behind `requireSession` instead.
  *
  * A store failure answers with a fixed message, never the error: a failed
- * insert's error carries its bound parameters, i.e. the encrypted blob and
- * the submitted values, so nothing of it may reach the response.
+ * insert's error carries its bound parameters (the encrypted blob, its IV and
+ * tag, the display name), so nothing of it may reach the response.
  */
 const SAVE_FAILED = "שגיאה בשמירת פרטי החשבון. נסו שוב.";
 
@@ -39,5 +40,10 @@ export async function addInstitutionCredentialAction(
   } catch {
     return { error: SAVE_FAILED };
   }
+
+  revalidatePath("/settings");
+  revalidatePath("/sync");
+  revalidatePath("/");
+  revalidatePath("/transactions");
   return { added: true };
 }

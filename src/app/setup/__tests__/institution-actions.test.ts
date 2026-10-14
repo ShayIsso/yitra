@@ -9,6 +9,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 
 vi.mock("@/lib/credentials", () => ({ addCredential: vi.fn() }));
 
+import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { addCredential } from "@/lib/credentials";
 import {
@@ -76,6 +77,19 @@ describe("addInstitutionCredentialAction", () => {
       expect(result).toEqual({ added: true });
     },
   );
+
+  it("refreshes the pages that list credentials once one is stored", async () => {
+    await addInstitutionCredentialAction(syntheticInput(firstEntry));
+    for (const page of ["/settings", "/sync", "/", "/transactions"]) {
+      expect(revalidatePath).toHaveBeenCalledWith(page);
+    }
+  });
+
+  it("refreshes nothing when the store fails", async () => {
+    vi.mocked(addCredential).mockRejectedValue(new Error("write failed"));
+    await addInstitutionCredentialAction(syntheticInput(firstEntry));
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
 
   it("answers each blank field with its own Hebrew error and stores nothing", async () => {
     const input = syntheticInput(firstEntry);

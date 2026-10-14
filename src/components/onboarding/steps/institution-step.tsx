@@ -40,9 +40,9 @@ export const institutionStepMeta: StepMeta = {
 
 type Connected = { readonly id: string; readonly bankType: string; readonly displayName: string };
 
-type Existing =
+type ConnectedLoad =
   | { readonly status: "loading" }
-  | { readonly status: "ready"; connected: Connected[] };
+  | { readonly status: "ready"; readonly connected: Connected[] };
 
 type InstitutionFormValues = {
   bankType: BankType;
@@ -55,9 +55,19 @@ function emptyForm(): InstitutionFormValues {
   return { bankType: first.id, displayName: "", credentials: emptyCredentialValues(first) };
 }
 
-/** Anything but a list reads as nothing connected, so the step falls back to its form. */
+function isConnected(row: unknown): row is Connected {
+  if (row === null || typeof row !== "object") return false;
+  const { id, bankType, displayName } = row as Record<string, unknown>;
+  return typeof id === "string" && typeof bankType === "string" && typeof displayName === "string";
+}
+
+/**
+ * Anything but a list reads as nothing connected, so a failed read falls back
+ * to the form: a second credential is recoverable in Settings, a step that
+ * cannot connect anything is not.
+ */
 function connectedFrom(body: unknown): Connected[] {
-  return Array.isArray(body) ? (body as Connected[]) : [];
+  return Array.isArray(body) ? body.filter(isConnected) : [];
 }
 
 /**
@@ -67,7 +77,7 @@ function connectedFrom(body: unknown): Connected[] {
  * another stays one click away.
  */
 export function InstitutionStep({ navigation }: SetupStepProps) {
-  const [existing, setExisting] = useState<Existing>({ status: "loading" });
+  const [existing, setExisting] = useState<ConnectedLoad>({ status: "loading" });
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
