@@ -12,6 +12,14 @@ export {
   type SetupStep,
 } from "./steps";
 export {
+  ONBOARDING_PATH_STEPS,
+  deriveOnboardingPath,
+  shouldShowOnboardingPath,
+  type OnboardingPathFacts,
+  type OnboardingPathStep,
+  type OnboardingPathStepId,
+} from "./path";
+export {
   resolveSetupView,
   resolveLoginView,
   loginDestination,
