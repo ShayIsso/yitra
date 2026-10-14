@@ -58,6 +58,7 @@ export {
   describeProviderSettings,
   providerSelectionSchema,
   readProviderSettings,
+  isProviderConfigured,
   saveProviderSelection,
   clearStoredProviderKey,
 } from "./provider-settings";
