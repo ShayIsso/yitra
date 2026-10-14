@@ -98,4 +98,14 @@ describe("getLastRunsForCurrentInstitutions", () => {
 
     expect(runs.map((r) => r.bank)).toEqual([KEPT]);
   });
+
+  it("returns no runs when there are no credentials", async () => {
+    const store = {
+      getLastRunPerBank: async () => [run({ bank: DELETED })],
+    } as unknown as SyncRunStore;
+
+    const runs = await getLastRunsForCurrentInstitutions(store, async () => []);
+
+    expect(classifySyncFreshness(runs, NOW)).toEqual({ level: "never" });
+  });
 });
