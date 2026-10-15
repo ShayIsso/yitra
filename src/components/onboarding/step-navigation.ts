@@ -1,9 +1,12 @@
+import { stepAfter, stepBefore, type SetupStep } from "@/lib/onboarding/steps";
+
 /**
  * The contract between the wizard frame and a step body (#258's slot carving).
  * Each later step (#259–#262) owns exactly one file under `./steps/`, exporting
  * one component that takes `SetupStepProps` and one `StepMeta` with its copy;
  * the frame owns everything else — order, progress, and where these callbacks
- * lead. A slot changes only its own file.
+ * lead. A slot changes only its own file; logic it shares with another step or
+ * page moves into a module both import rather than being copied.
  *
  * Step bodies are client components. A step that needs to write must do it
  * through a Server Action whose first statement is
@@ -26,6 +29,31 @@ export type StepNavigation = {
   /** True while a navigation or the completion is in flight. */
   readonly pending: boolean;
 };
+
+export type StepNavigationHandlers = {
+  readonly onNavigate: (step: SetupStep) => void;
+  /** Completes onboarding; reached by advancing or skipping past the last step. */
+  readonly onFinish: () => void;
+  readonly pending: boolean;
+};
+
+/** Skipping the last step completes onboarding exactly as advancing it does (ADR-0014 §5). */
+export function buildStepNavigation(
+  step: SetupStep,
+  { onNavigate, onFinish, pending }: StepNavigationHandlers,
+): StepNavigation {
+  const next = stepAfter(step);
+  const previous = stepBefore(step);
+  const forward = () => (next ? onNavigate(next) : onFinish());
+
+  return {
+    advance: forward,
+    skip: step === "password" ? null : forward,
+    back: previous ? () => onNavigate(previous) : null,
+    isLast: next === null,
+    pending,
+  };
+}
 
 export type SetupStepProps = {
   readonly navigation: StepNavigation;

@@ -3,10 +3,18 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -20,7 +28,10 @@ import {
 import { BankBadge } from "@/components/bank-badge";
 import { CredentialFields } from "@/components/credential-fields";
 import { InstitutionPicker, useInstitutionPicker } from "@/components/institution-picker";
-import { addInstitutionCredentialAction } from "@/app/setup/institution-actions";
+import {
+  addInstitutionCredentialAction,
+  removeInstitutionCredentialAction,
+} from "@/app/setup/institution-actions";
 import { enabledBankEntries, findBankEntry, type BankType } from "@/lib/bank-registry";
 import { addCredentialSchema } from "@/lib/credentials/schemas";
 import {
@@ -28,6 +39,7 @@ import {
   emptyCredentialValues,
   type CredentialValues,
 } from "@/lib/credentials/form";
+import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
 import { StepFooter } from "../step-footer";
 import type { SetupStepProps, StepMeta } from "../step-navigation";
 
@@ -38,11 +50,9 @@ export const institutionStepMeta: StepMeta = {
   description: "הוסיפו את פרטי ההתחברות לחשבון הראשון. הפרטים נשמרים מוצפנים במסד הנתונים שלכם.",
 };
 
-type Connected = { readonly id: string; readonly bankType: string; readonly displayName: string };
-
 type ConnectedLoad =
   | { readonly status: "loading" }
-  | { readonly status: "ready"; readonly connected: Connected[] };
+  | { readonly status: "ready"; readonly connected: ConnectedInstitution[] };
 
 type InstitutionFormValues = {
   bankType: BankType;
@@ -55,26 +65,12 @@ function emptyForm(): InstitutionFormValues {
   return { bankType: first.id, displayName: "", credentials: emptyCredentialValues(first) };
 }
 
-function isConnected(row: unknown): row is Connected {
-  if (row === null || typeof row !== "object") return false;
-  const { id, bankType, displayName } = row as Record<string, unknown>;
-  return typeof id === "string" && typeof bankType === "string" && typeof displayName === "string";
-}
-
-/**
- * Anything but a list reads as nothing connected, so a failed read falls back
- * to the form: a second credential is recoverable in Settings, a step that
- * cannot connect anything is not.
- */
-function connectedFrom(body: unknown): Connected[] {
-  return Array.isArray(body) ? body.filter(isConnected) : [];
-}
-
 /**
  * Revisiting the step (back from a later one, or a resumed wizard on an
  * install that already has credentials) shows what is connected instead of an
  * empty form, so pressing on does not store the same institution twice; adding
- * another stays one click away.
+ * another stays one click away. A credential the first sync rejected is fixed
+ * by removing it and adding it again: removing the last one reopens the form.
  */
 export function InstitutionStep({ navigation }: SetupStepProps) {
   const [existing, setExisting] = useState<ConnectedLoad>({ status: "loading" });
@@ -82,12 +78,11 @@ export function InstitutionStep({ navigation }: SetupStepProps) {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/credentials")
-      .then((res) => (res.ok ? res.json() : null))
-      .catch(() => null)
-      .then((body: unknown) => {
-        if (active) setExisting({ status: "ready", connected: connectedFrom(body) });
-      });
+    // A failed read falls back to the form: a second credential is recoverable
+    // in Settings, a step that cannot connect anything is not.
+    fetchConnectedInstitutions().then((connected) => {
+      if (active) setExisting({ status: "ready", connected: connected ?? [] });
+    });
     return () => {
       active = false;
     };
@@ -111,6 +106,12 @@ export function InstitutionStep({ navigation }: SetupStepProps) {
       <ConnectedSummary
         connected={existing.connected}
         onAddAnother={() => setAdding(true)}
+        onRemoved={(id) =>
+          setExisting({
+            status: "ready",
+            connected: existing.connected.filter((credential) => credential.id !== id),
+          })
+        }
         navigation={navigation}
       />
     );
@@ -119,14 +120,38 @@ export function InstitutionStep({ navigation }: SetupStepProps) {
   return <InstitutionForm navigation={navigation} />;
 }
 
-function ConnectedSummary({
+export function ConnectedSummary({
   connected,
   onAddAnother,
+  onRemoved,
   navigation,
 }: {
-  connected: Connected[];
+  connected: ConnectedInstitution[];
   onAddAnother: () => void;
+  onRemoved: (id: string) => void;
 } & SetupStepProps) {
+  const [target, setTarget] = useState<ConnectedInstitution | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [removing, startRemoving] = useTransition();
+
+  function openRemove(credential: ConnectedInstitution) {
+    setError(null);
+    setTarget(credential);
+  }
+
+  function confirmRemove() {
+    if (!target) return;
+    startRemoving(async () => {
+      const result = await removeInstitutionCredentialAction({ id: target.id });
+      if (!result.removed) {
+        setError(result.error ?? null);
+        return;
+      }
+      setTarget(null);
+      onRemoved(target.id);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <section className="border-border rounded-lg border">
@@ -136,6 +161,17 @@ function ConnectedSummary({
             <li key={credential.id} className="flex min-w-0 items-center gap-3 text-sm">
               <BankBadge bankType={credential.bankType} />
               <span className="truncate">{credential.displayName}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground ms-auto"
+                onClick={() => openRemove(credential)}
+                disabled={navigation.pending}
+                aria-label={`הסרת ${credential.displayName}`}
+              >
+                <Trash2 />
+                הסרה
+              </Button>
             </li>
           ))}
         </ul>
@@ -147,6 +183,31 @@ function ConnectedSummary({
         </Button>
       </div>
       <StepFooter navigation={navigation} />
+
+      <Dialog open={target !== null} onOpenChange={(open) => !open && !removing && setTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>הסרת חשבון</DialogTitle>
+            <DialogDescription>
+              להסיר את &ldquo;{target?.displayName}&rdquo;? יימחקו גם החשבונות והתנועות שיובאו ממנו.
+              כדי לתקן פרטי התחברות, הסירו את החשבון וחברו אותו מחדש עם הפרטים הנכונים.
+            </DialogDescription>
+          </DialogHeader>
+          {error && (
+            <p role="alert" className="text-destructive text-sm">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTarget(null)} disabled={removing}>
+              ביטול
+            </Button>
+            <Button variant="destructive" onClick={confirmRemove} disabled={removing}>
+              {removing ? "מסיר..." : "הסרה"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
