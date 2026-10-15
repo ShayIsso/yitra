@@ -113,10 +113,13 @@ describe("updateTransactionAction", () => {
     });
 
     expect(result).toEqual({ updated: true, fanOutCount: 1, fannedOut });
-    expect(changeTransactionCategory).toHaveBeenCalledWith(VALID_TXN_ID, VALID_CATEGORY_ID);
+    expect(changeTransactionCategory).toHaveBeenCalledWith(
+      VALID_TXN_ID,
+      VALID_CATEGORY_ID,
+      supersedeOpenSuggestions,
+    );
     // Assignment does not go through the plain update path.
     expect(updateTransaction).not.toHaveBeenCalled();
-    expect(supersedeOpenSuggestions).toHaveBeenCalledWith([VALID_TXN_ID, OTHER_TXN_ID]);
   });
 
   it("allows clearing the custom description back to null (display reverts to the original description)", async () => {
@@ -219,12 +222,8 @@ describe("bulkCategorizeAction", () => {
     expect(bulkChangeTransactionCategories).toHaveBeenCalledWith(
       [VALID_TXN_ID, OTHER_TXN_ID],
       VALID_CATEGORY_ID,
+      supersedeOpenSuggestions,
     );
-    expect(supersedeOpenSuggestions).toHaveBeenCalledWith([
-      VALID_TXN_ID,
-      OTHER_TXN_ID,
-      "9f8e7d6c-5b4a-4f3e-8d2c-1b0a9f8e7d6c",
-    ]);
     // Bulk touches many rows — revalidate ONCE per action call, not per row.
     expect(vi.mocked(revalidatePath).mock.calls).toEqual([["/transactions"], ["/"]]);
   });

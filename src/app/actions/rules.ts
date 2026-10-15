@@ -6,8 +6,9 @@ import { formatZodError, formatZodFieldErrors, type FieldErrors } from "@/lib/ap
 import {
   previewRetroactiveApply,
   applyRetroactively,
-  drizzleRetroactiveStore,
+  createRetroactiveStore,
 } from "@/lib/categories/retroactive";
+import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import { createRule, updateRule, deleteRule } from "@/lib/categories/rules";
 import { NotAssignableCategoryError } from "@/lib/categories";
 import {
@@ -16,6 +17,8 @@ import {
   ruleIdSchema as ruleIdActionSchema,
 } from "@/lib/categories/schemas";
 import { notAssignableResult } from "./not-assignable";
+
+const retroactiveStore = createRetroactiveStore(supersedeOpenSuggestions);
 
 const ruleIdSchema = z.object({
   ruleId: z.string().uuid({ message: "מזהה כלל לא תקין" }),
@@ -28,7 +31,7 @@ export async function previewRetroactiveApplyAction(
   if (!parsed.success) {
     return { error: formatZodError(parsed.error) };
   }
-  const { count } = await previewRetroactiveApply(parsed.data.ruleId, drizzleRetroactiveStore);
+  const { count } = await previewRetroactiveApply(parsed.data.ruleId, retroactiveStore);
   return { count };
 }
 
@@ -39,7 +42,7 @@ export async function applyRetroactivelyAction(
   if (!parsed.success) {
     return { error: formatZodError(parsed.error) };
   }
-  const { applied } = await applyRetroactively(parsed.data.ruleId, drizzleRetroactiveStore);
+  const { applied } = await applyRetroactively(parsed.data.ruleId, retroactiveStore);
   revalidatePath("/transactions");
   return { applied };
 }

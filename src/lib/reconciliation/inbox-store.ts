@@ -300,11 +300,13 @@ export const drizzleInboxStore: InboxStore = {
     // Reconciliation re-runs the rule engine on split/edit rows, so a non-null
     // result is rule-sourced (ADR-0010); clearing resets provenance to NULL.
     // Memory is deliberately NOT consulted here in this slice (issue #135).
-    await db
-      .update(transactions)
-      .set({ categoryId, categorySource: categoryId === null ? null : "rule" })
-      .where(eq(transactions.id, txnId));
-    if (categoryId !== null) await supersedeOpenSuggestions([txnId]);
+    await db.transaction(async (tx) => {
+      await tx
+        .update(transactions)
+        .set({ categoryId, categorySource: categoryId === null ? null : "rule" })
+        .where(eq(transactions.id, txnId));
+      if (categoryId !== null) await supersedeOpenSuggestions([txnId], tx);
+    });
   },
 
   async getCategoryIdByName(name: string): Promise<string | null> {

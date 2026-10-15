@@ -336,14 +336,15 @@ export async function runAiCategorization(
           continue;
         }
 
+        // Re-check at apply time for both tiers: a row categorized while the
+        // provider call was in flight must neither be overwritten (auto-apply)
+        // nor collect a stale open suggestion (queue).
+        const current = await memoryStore.getTransaction(txn.id);
+        if (!current || !canOverwrite(current.categorySource)) {
+          overwriteBlocked++;
+          continue;
+        }
         if (tier === "auto_apply") {
-          // Re-check the overwrite law at apply time: a row categorized as
-          // user/rule/memory since fetch is never overwritten by automation.
-          const current = await memoryStore.getTransaction(txn.id);
-          if (!current || !canOverwrite(current.categorySource)) {
-            overwriteBlocked++;
-            continue;
-          }
           // ai-tier recordAssignment sets category_source='ai' and writes an
           // ai-tier memory entry (cached guess, still undoable).
           await recordAssignment(

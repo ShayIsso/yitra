@@ -13,7 +13,7 @@ import type { SuspectedTransferRouter } from "@/lib/reconciliation";
  * bucket: `applied` (categorized — memory or auto-apply), `queued` (an AI review
  * suggestion, or a suspected transfer routed to the reconciliation inbox), or
  * `skipped` (still uncategorized — low confidence, suppressed, overwrite-locked,
- * transfer-guarded without a routing, or already awaiting an earlier review suggestion). So applied + queued + skipped equals
+ * or transfer-guarded without a routing). So applied + queued + skipped equals
  * the total the run examined.
  */
 export interface AiSummary {
@@ -84,7 +84,7 @@ export async function* runAiSyncStep(deps: AiStepDeps): AsyncGenerator<AiStepEve
   }
 
   const applied = summary.memoryApplied + summary.autoApplied;
-  const queued = summary.queuedForReview + routed;
+  const queued = summary.queuedForReview + summary.awaitingReview + routed;
   const skipped = Math.max(0, summary.totalUncategorized - applied - queued);
   yield { type: "ai_summary", applied, queued, skipped };
 }

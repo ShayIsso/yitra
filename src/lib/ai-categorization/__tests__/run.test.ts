@@ -894,4 +894,26 @@ describe("runAiCategorization — open suggestions", () => {
     expect(summary).toMatchObject({ suppressed: 0, queuedForReview: 1 });
     expect(fake.suggestions.filter((s) => s.status === "pending_review")).toHaveLength(1);
   });
+
+  it("does not queue a suggestion for a row categorized while the provider call was in flight", async () => {
+    const fake = createFake({ categories: CATS, txns: [txn("t-1", "ביגוד אופנה")] });
+    const inner = scriptedProvider([{ match: "ביגוד", category: "מזון וסופר", confidence: 4 }]);
+    const provider: CategorizationProvider = {
+      modelId: inner.modelId,
+      async generate(prompt, options) {
+        fake.txns[0].categoryId = "c-rest";
+        fake.txns[0].categorySource = "user";
+        return inner.generate(prompt, options);
+      },
+    };
+
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider,
+    });
+
+    expect(summary).toMatchObject({ overwriteBlocked: 1, queuedForReview: 0 });
+    expect(fake.suggestions).toHaveLength(0);
+  });
 });

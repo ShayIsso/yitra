@@ -19,7 +19,7 @@ vi.mock("@/lib/categories/rules", () => ({
 vi.mock("@/lib/categories/retroactive", () => ({
   previewRetroactiveApply: vi.fn(),
   applyRetroactively: vi.fn(),
-  drizzleRetroactiveStore: {},
+  createRetroactiveStore: () => ({}),
 }));
 
 import { revalidatePath } from "next/cache";

@@ -17,7 +17,11 @@ type StoredTxn = {
 };
 type StoredCategory = { id: string; name: string; description: string | null };
 
-function makeStores(seed: { txns: StoredTxn[]; categories: StoredCategory[] }) {
+function makeStores(seed: {
+  txns: StoredTxn[];
+  categories: StoredCategory[];
+  awaiting?: string[];
+}) {
   const txns = seed.txns.map((t) => ({ ...t }));
 
   const memoryStore: MerchantMemoryStore = {
@@ -82,8 +86,8 @@ function makeStores(seed: { txns: StoredTxn[]; categories: StoredCategory[] }) {
     async insertSuggestion(row) {
       suggestions.push(row);
     },
-    async getAwaitingReviewIds() {
-      return [];
+    async getAwaitingReviewIds(ids) {
+      return ids.filter((id) => seed.awaiting?.includes(id));
     },
     async supersedeOpenSuggestions() {},
     async supersedeSuggestionsOnCategorized() {},
@@ -292,6 +296,35 @@ describe("runAiSyncStep", () => {
     expect(summary.type).toBe("ai_summary");
     // applied = auto-applied פיצה; queued = 1 suspected transfer; skipped = rest.
     expect(summary).toMatchObject({ applied: 1, queued: 1, skipped: 0 });
+  });
+
+  it("counts a row already awaiting review as queued, not skipped, and never sends it to the provider", async () => {
+    const { aiStore, memoryStore } = makeStores({
+      categories: CATS,
+      awaiting: ["t-open"],
+      txns: [
+        {
+          id: "t-open",
+          description: "ביגוד אופנה",
+          bankType: "max",
+          categoryId: null,
+          categorySource: null,
+        },
+      ],
+    });
+    const provider = scriptedProvider([]);
+
+    const events = await collect(
+      runAiSyncStep({
+        createProvider: async () => provider,
+        aiStore,
+        memoryStore,
+        transferRouter: fakeRouter(),
+      }),
+    );
+
+    expect(provider.prompts).toHaveLength(0);
+    expect(events[0]).toMatchObject({ applied: 0, queued: 1, skipped: 0 });
   });
 
   it("does not queue a transfer row that P3 already paired (filterUnpaired returns none)", async () => {
