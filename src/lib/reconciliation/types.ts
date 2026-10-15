@@ -1,7 +1,7 @@
 export type ReconciliationTransaction = {
   id: string;
   bankAccountId: string;
-  bankType: "discount" | "max" | "visaCal";
+  bankType: string;
   date: string; // YYYY-MM-DD
   chargedAmount: number;
   description: string;

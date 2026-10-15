@@ -3,7 +3,7 @@
 
 export { detectPatterns } from "./detect";
 export { computeNextExpectedDate } from "./next-date";
-export { persistDetectedPatterns, runDetection } from "./scan";
+export { persistDetectedPatterns, runDetection, countPendingAnomalies } from "./scan";
 export { drizzleRecurringStore } from "./store";
 export type { RecurringStore } from "./store";
 export type {
@@ -21,4 +21,13 @@ export {
   detectMissedPayments,
   detectNewlyDetected,
   detectDormant,
+  countAnomalyAlerts,
 } from "./anomalies";
+export type { AnomalyAlertLists } from "./anomalies";
+export { projectSeries, projectUpcomingCharges, DEFAULT_HORIZON_DAYS } from "./project";
+export type {
+  ChargeEvidence,
+  SeriesProjection,
+  ProjectedCharge,
+  UpcomingChargesForecast,
+} from "./project";

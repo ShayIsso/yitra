@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { resolveCategoryFilter, buildPaginatedResult, type PaginatedResult } from "../index";
+import {
+  resolveCategoryFilter,
+  buildPaginatedResult,
+  expandCategoryFilter,
+  type PaginatedResult,
+} from "../index";
 import { transactionFiltersSchema } from "../schemas";
 
 describe("resolveCategoryFilter", () => {
@@ -26,6 +31,16 @@ describe("resolveCategoryFilter", () => {
 
   it("returns all mode when uncategorized is false and no categoryId", () => {
     expect(resolveCategoryFilter({ uncategorized: false })).toEqual({ mode: "all" });
+  });
+
+  it("returns needsReview mode when needsReview is true", () => {
+    expect(resolveCategoryFilter({ needsReview: true })).toEqual({ mode: "needsReview" });
+  });
+
+  it("needsReview wins over uncategorized and categoryId", () => {
+    expect(
+      resolveCategoryFilter({ needsReview: true, uncategorized: true, categoryId: "cat-1" }),
+    ).toEqual({ mode: "needsReview" });
   });
 });
 
@@ -69,5 +84,46 @@ describe("transactionFiltersSchema uncategorized parsing", () => {
     if (!result.success) {
       expect(result.error.issues[0].message).toBe("uncategorized חייב להיות true או false");
     }
+  });
+});
+
+describe("transactionFiltersSchema needsReview parsing", () => {
+  it('parses "true" to boolean true', () => {
+    const parsed = transactionFiltersSchema.parse({ needsReview: "true" });
+    expect(parsed.needsReview).toBe(true);
+  });
+
+  it("defaults to false when omitted", () => {
+    const parsed = transactionFiltersSchema.parse({});
+    expect(parsed.needsReview).toBe(false);
+  });
+
+  it("rejects an invalid needsReview value with a Hebrew message", () => {
+    const result = transactionFiltersSchema.safeParse({ needsReview: "yes" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe("needsReview חייב להיות true או false");
+    }
+  });
+});
+
+describe("expandCategoryFilter", () => {
+  // Group g1 owns leaves l1, l2; l3 is a root leaf (absent from the index).
+  const groupLeafIds = new Map<string, string[]>([["g1", ["l1", "l2"]]]);
+
+  it("expands a group to its leaf ids (subtree filtering, #174)", () => {
+    expect(expandCategoryFilter("g1", groupLeafIds)).toEqual(["l1", "l2"]);
+  });
+
+  it("matches a leaf against itself when it is not a group", () => {
+    expect(expandCategoryFilter("l3", groupLeafIds)).toEqual(["l3"]);
+  });
+
+  it("matches an unknown id against itself", () => {
+    expect(expandCategoryFilter("missing", groupLeafIds)).toEqual(["missing"]);
+  });
+
+  it("falls back to self for a group with an empty leaf list", () => {
+    expect(expandCategoryFilter("g-empty", new Map([["g-empty", []]]))).toEqual(["g-empty"]);
   });
 });

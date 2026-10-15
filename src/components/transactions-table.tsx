@@ -10,14 +10,30 @@ import {
   Repeat,
   SearchX,
   Inbox,
+  Bot,
+  Check,
+  X,
+  Download,
 } from "lucide-react";
 import { undoReconciliationAction } from "@/app/actions/reconciliation";
-import { Button } from "@/components/ui/button";
+import {
+  updateTransactionAction,
+  bulkCategorizeAction,
+  undoFanOutAction,
+} from "@/app/actions/transactions";
+import {
+  acceptSuggestionAction,
+  rejectSuggestionAction,
+  undoAiAssignmentAction,
+} from "@/app/actions/ai-review";
+import type { FannedOutRow } from "@/lib/merchant-memory";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { CategorizationBackfillCallout } from "@/components/categorization-backfill-callout";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import {
   Table,
@@ -27,9 +43,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Category } from "@/lib/categories";
+import type { Category, CategoryTreeNode } from "@/lib/categories";
+import {
+  CategoryDot,
+  GroupedCategorySelectItems,
+  FilterCategorySelectItems,
+} from "@/components/grouped-category-select-items";
 import { Amount } from "@/components/ui/amount";
 import { pageRange } from "@/lib/transactions/pagination";
+import { buildFilterSearchParams } from "@/lib/transactions/filter-params";
+import { cn } from "@/lib/utils";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +60,13 @@ type RecurringInfo = {
   id: string;
   merchant: string;
   cadence: "monthly" | "quarterly" | "annual";
+};
+
+type PendingSuggestion = {
+  suggestionId: string;
+  categoryId: string;
+  categoryName: string;
+  confidence: number;
 };
 
 type Transaction = {
@@ -54,10 +84,12 @@ type Transaction = {
   installmentTotal: number | null;
   status: "completed" | "pending";
   categoryId: string | null;
+  categorySource: "rule" | "memory" | "ai" | "user" | null;
   reconciliationGroupId: string | null;
   reconciliationConfirmedAt: string | null;
   recurringExpenseId: string | null;
   recurringExpense: RecurringInfo | null;
+  pendingSuggestion: PendingSuggestion | null;
 };
 
 type Filters = {
@@ -68,11 +100,6 @@ type Filters = {
   search: string;
   page: number;
   pageSize: number;
-};
-
-type RuleSuggestion = {
-  description: string;
-  categoryId: string;
 };
 
 type TransactionsResponse = {
@@ -96,15 +123,6 @@ const CADENCE_LABELS: Record<RecurringInfo["cadence"], string> = {
 };
 
 // ── Sub-components ───────────────────────────────────────────────────────────
-
-function CategoryDot({ color }: { color: string }) {
-  return (
-    <span
-      className="inline-block size-2 shrink-0 rounded-full"
-      style={{ backgroundColor: color }}
-    />
-  );
-}
 
 function DescriptionCell({
   transaction,
@@ -176,85 +194,187 @@ function DescriptionCell({
   );
 }
 
+// ── AI review affordances (ticket #149) ──────────────────────────────────────
+// A pending suggestion renders as an inline chip with one-click accept/reject.
+// Accept composes the same fan-out notice as manual assignment (recordAssignment
+// at user-tier); reject just suppresses the suggestion. An ai-assigned row
+// carries a marker instead, with one-click undo back to uncategorized.
+
+function SuggestionChip({
+  suggestion,
+  onAccept,
+  onReject,
+}: {
+  suggestion: PendingSuggestion;
+  onAccept: () => Promise<void>;
+  onReject: () => Promise<void>;
+}) {
+  const [busy, setBusy] = React.useState<"accept" | "reject" | null>(null);
+
+  async function handleAccept() {
+    setBusy("accept");
+    await onAccept();
+    setBusy(null);
+  }
+
+  async function handleReject() {
+    setBusy("reject");
+    await onReject();
+    setBusy(null);
+  }
+
+  return (
+    <div className="flex max-w-full items-center gap-1 rounded-md border border-dashed border-emerald-200 bg-emerald-50/60 px-1.5 py-0.5 text-xs">
+      <span className="truncate text-emerald-800">הצעה: {suggestion.categoryName}</span>
+      <span
+        title={`רמת ביטחון ${suggestion.confidence} מתוך 7`}
+        className="text-muted-foreground shrink-0"
+      >
+        ({suggestion.confidence}/7)
+      </span>
+      <button
+        onClick={handleAccept}
+        disabled={busy !== null}
+        title="אשר הצעה"
+        aria-label="אשר הצעה"
+        className="shrink-0 text-emerald-700 hover:text-emerald-900 disabled:opacity-50"
+      >
+        <Check className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+      <button
+        onClick={handleReject}
+        disabled={busy !== null}
+        title="דחה הצעה"
+        aria-label="דחה הצעה"
+        className="text-muted-foreground shrink-0 hover:text-red-600 disabled:opacity-50"
+      >
+        <X className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
+function AiMarker({ onUndo }: { onUndo: () => Promise<void> }) {
+  const [undoing, setUndoing] = React.useState(false);
+
+  async function handleUndo() {
+    setUndoing(true);
+    await onUndo();
+    setUndoing(false);
+  }
+
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      <span
+        title="הקטגוריה שויכה אוטומטית על ידי AI"
+        aria-label="קוטלג על ידי AI"
+        className="text-muted-foreground inline-flex"
+      >
+        <Bot className="h-3.5 w-3.5" strokeWidth={1.5} />
+      </span>
+      <button
+        onClick={handleUndo}
+        disabled={undoing}
+        title="בטל שיוך AI"
+        aria-label="בטל שיוך AI"
+        className="text-muted-foreground inline-flex items-center hover:text-red-600 disabled:opacity-50"
+      >
+        <Undo2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+      </button>
+    </span>
+  );
+}
+
 function CategoryCell({
   transaction,
   categories,
+  tree,
   onAssign,
+  onAcceptSuggestion,
+  onRejectSuggestion,
+  onUndoAi,
 }: {
   transaction: Transaction;
   categories: Category[];
+  tree: CategoryTreeNode<Category>[];
   onAssign: (id: string, categoryId: string) => Promise<void>;
+  onAcceptSuggestion: (transaction: Transaction) => Promise<void>;
+  onRejectSuggestion: (transaction: Transaction) => Promise<void>;
+  onUndoAi: (transaction: Transaction) => Promise<void>;
 }) {
   const category = categories.find((c) => c.id === transaction.categoryId);
 
   return (
-    <Select
-      value={transaction.categoryId ?? "__none__"}
-      onValueChange={(v) => {
-        if (v && v !== "__none__") onAssign(transaction.id, v);
-      }}
-    >
-      <SelectTrigger className="hover:border-input hover:bg-background h-7 w-full min-w-[130px] gap-1 border-transparent bg-transparent px-1 text-sm shadow-none">
-        {category ? (
-          <span className="flex items-center gap-1.5">
-            <CategoryDot color={category.color} />
-            <span>{category.name}</span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">ללא קטגוריה</span>
-        )}
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="__none__">
-          <span className="text-muted-foreground">ללא קטגוריה</span>
-        </SelectItem>
-        {categories.map((cat) => (
-          <SelectItem key={cat.id} value={cat.id}>
-            <span className="flex items-center gap-1.5">
-              <CategoryDot color={cat.color} />
-              {cat.name}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <div className="flex w-full min-w-0 items-center gap-1">
+        <Select
+          value={transaction.categoryId ?? "__none__"}
+          onValueChange={(v) => {
+            if (v && v !== "__none__") onAssign(transaction.id, v);
+          }}
+        >
+          <SelectTrigger className="hover:border-input hover:bg-background h-7 w-full min-w-[130px] gap-1 border-transparent bg-transparent px-1 text-sm shadow-none">
+            {category ? (
+              <span className="flex min-w-0 items-center gap-1.5">
+                <CategoryDot color={category.color} />
+                <span className="truncate">{category.name}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">ללא קטגוריה</span>
+            )}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">
+              <span className="text-muted-foreground">ללא קטגוריה</span>
+            </SelectItem>
+            <GroupedCategorySelectItems tree={tree} />
+          </SelectContent>
+        </Select>
+        {transaction.categorySource === "ai" && <AiMarker onUndo={() => onUndoAi(transaction)} />}
+      </div>
+      {transaction.pendingSuggestion && (
+        <SuggestionChip
+          suggestion={transaction.pendingSuggestion}
+          onAccept={() => onAcceptSuggestion(transaction)}
+          onReject={() => onRejectSuggestion(transaction)}
+        />
+      )}
+    </div>
   );
 }
 
-// ── Rule suggestion banner ───────────────────────────────────────────────────
+// ── Fan-out notice ────────────────────────────────────────────────────────────
+// After a category assignment, merchant memory auto-applies the choice to
+// same-key transactions (ADR-0010 §4): a count with one-click undo, not a
+// confirmation modal. Undo restores the siblings' prior category+provenance;
+// the memory entry the user wrote stays.
 
-function RuleSuggestionBanner({
-  suggestion,
-  categories,
-  onCreateRule,
+function FanOutNotice({
+  count,
+  onUndo,
   onDismiss,
 }: {
-  suggestion: RuleSuggestion;
-  categories: Category[];
-  onCreateRule: () => Promise<void>;
+  count: number;
+  onUndo: () => Promise<void>;
   onDismiss: () => void;
 }) {
-  const [creating, setCreating] = React.useState(false);
-  const category = categories.find((c) => c.id === suggestion.categoryId);
+  const [undoing, setUndoing] = React.useState(false);
 
-  async function handleCreate() {
-    setCreating(true);
-    await onCreateRule();
-    setCreating(false);
+  async function handleUndo() {
+    setUndoing(true);
+    await onUndo();
+    setUndoing(false);
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border bg-amber-50 px-4 py-3 text-sm">
-      <span>
-        ליצור כלל אוטומטי עבור &ldquo;{suggestion.description}&rdquo;
-        {category ? ` → ${category.name}` : ""}?
-      </span>
+    <div className="bg-muted/50 flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm">
+      <span>הוחל על עוד {count} עסקאות של אותו בית עסק</span>
       <div className="flex shrink-0 gap-2">
-        <Button size="sm" variant="outline" onClick={onDismiss}>
-          ביטול
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
+          סגור
         </Button>
-        <Button size="sm" onClick={handleCreate} disabled={creating}>
-          {creating ? "יוצר..." : "צור כלל"}
+        <Button size="sm" variant="outline" onClick={handleUndo} disabled={undoing}>
+          {undoing ? "מבטל..." : "בטל החלה"}
         </Button>
       </div>
     </div>
@@ -290,7 +410,19 @@ function UndoReconciliationButton({ txnId, onUndone }: { txnId: string; onUndone
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function TransactionsTable({ categories }: { categories: Category[] }) {
+export function TransactionsTable({
+  categories,
+  tree,
+  initialCategoryFilter = "",
+  categorizationAvailable = false,
+}: {
+  categories: Category[];
+  tree: CategoryTreeNode<Category>[];
+  /** Seeds the categoryId sentinel from a dashboard deep link (#206) — e.g. `__uncategorized__`. */
+  initialCategoryFilter?: string;
+  /** A categorization provider is configured — presence only, never its settings. */
+  categorizationAvailable?: boolean;
+}) {
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [totalPages, setTotalPages] = React.useState(1);
@@ -298,7 +430,7 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
   const [filters, setFilters] = React.useState<Filters>({
     dateFrom: "",
     dateTo: "",
-    categoryId: "",
+    categoryId: initialCategoryFilter,
     status: "",
     search: "",
     page: 1,
@@ -307,23 +439,18 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = React.useState("");
   const [bulkApplying, setBulkApplying] = React.useState(false);
-  const [ruleSuggestion, setRuleSuggestion] = React.useState<RuleSuggestion | null>(null);
+  const [fanOutNotice, setFanOutNotice] = React.useState<{
+    count: number;
+    rows: FannedOutRow[];
+  } | null>(null);
+  const [isPending, startTransition] = React.useTransition();
 
   React.useEffect(() => {
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- removed during Phase 2 Server Actions migration (see PRD issue #35)
     setLoading(true);
 
-    const params = new URLSearchParams();
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    if (filters.categoryId === "__uncategorized__") {
-      params.set("uncategorized", "true");
-    } else if (filters.categoryId) {
-      params.set("categoryId", filters.categoryId);
-    }
-    if (filters.status) params.set("status", filters.status);
-    if (filters.search) params.set("search", filters.search);
+    const params = buildFilterSearchParams(filters);
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));
 
@@ -351,6 +478,10 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
     setSelected(new Set());
   }
 
+  function reloadTransactions() {
+    setFilter("page", 1);
+  }
+
   function clearFilters() {
     setFilters({
       dateFrom: "",
@@ -365,43 +496,111 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
   }
 
   async function handleDescriptionSave(id: string, customDescription: string | null) {
-    await fetch(`/api/transactions/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customDescription }),
+    startTransition(async () => {
+      const result = await updateTransactionAction({ id, customDescription });
+      if (!result.error) {
+        setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, customDescription } : t)));
+      }
     });
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, customDescription } : t)));
   }
 
   async function handleCategoryAssign(id: string, categoryId: string) {
-    await fetch(`/api/transactions/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId }),
+    startTransition(async () => {
+      const result = await updateTransactionAction({ id, categoryId });
+      if (!result.error) {
+        // Both the first-time label and the correction path land on 'user'
+        // (changeTransactionCategory), which also clears any AI marker.
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, categoryId, categorySource: "user" } : t)),
+        );
+        applyFanOutResult(categoryId, result.fannedOut);
+      }
     });
-    const tx = transactions.find((t) => t.id === id);
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, categoryId } : t)));
-    if (tx) {
-      setRuleSuggestion({
-        description: tx.customDescription ?? tx.description,
-        categoryId,
-      });
+  }
+
+  function applyFanOutResult(categoryId: string, fannedOut: FannedOutRow[] | undefined) {
+    if (fannedOut && fannedOut.length > 0) {
+      const fannedIds = new Set(fannedOut.map((r) => r.id));
+      // Fan-out siblings acquire the category via automation applying a
+      // user-tier memory entry — provenance 'memory', not 'user' (ADR-0010 §4).
+      setTransactions((prev) =>
+        prev.map((t) => (fannedIds.has(t.id) ? { ...t, categoryId, categorySource: "memory" } : t)),
+      );
+      setFanOutNotice({ count: fannedOut.length, rows: fannedOut });
+    } else {
+      setFanOutNotice(null);
     }
   }
 
-  async function handleCreateRule() {
-    if (!ruleSuggestion) return;
-    await fetch("/api/category-rules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        categoryId: ruleSuggestion.categoryId,
-        matchType: "contains",
-        pattern: ruleSuggestion.description,
-        priority: 0,
-      }),
+  async function handleUndoFanOut() {
+    if (!fanOutNotice) return;
+    const rows = fanOutNotice.rows;
+    const result = await undoFanOutAction({ rows });
+    if (!result.error) {
+      setTransactions((prev) =>
+        prev.map((t) => {
+          const restored = rows.find((r) => r.id === t.id);
+          return restored
+            ? {
+                ...t,
+                categoryId: restored.previousCategoryId,
+                categorySource: restored.previousCategorySource,
+              }
+            : t;
+        }),
+      );
+      setFanOutNotice(null);
+    }
+  }
+
+  async function handleAcceptSuggestion(tx: Transaction) {
+    const suggestion = tx.pendingSuggestion;
+    if (!suggestion) return;
+    startTransition(async () => {
+      const result = await acceptSuggestionAction({
+        transactionId: tx.id,
+        suggestionId: suggestion.suggestionId,
+      });
+      if (!result.error && result.accepted) {
+        setTransactions((prev) =>
+          prev.map((t) =>
+            t.id === tx.id
+              ? {
+                  ...t,
+                  categoryId: suggestion.categoryId,
+                  categorySource: "user",
+                  pendingSuggestion: null,
+                }
+              : t,
+          ),
+        );
+        applyFanOutResult(suggestion.categoryId, result.fannedOut);
+      }
     });
-    setRuleSuggestion(null);
+  }
+
+  async function handleRejectSuggestion(tx: Transaction) {
+    const suggestion = tx.pendingSuggestion;
+    if (!suggestion) return;
+    startTransition(async () => {
+      const result = await rejectSuggestionAction({ suggestionId: suggestion.suggestionId });
+      if (!result.error && result.rejected) {
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === tx.id ? { ...t, pendingSuggestion: null } : t)),
+        );
+      }
+    });
+  }
+
+  async function handleUndoAiAssignment(tx: Transaction) {
+    startTransition(async () => {
+      const result = await undoAiAssignmentAction({ transactionId: tx.id });
+      if (!result.error && result.undone) {
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === tx.id ? { ...t, categoryId: null, categorySource: null } : t)),
+        );
+      }
+    });
   }
 
   const allSelected = transactions.length > 0 && transactions.every((t) => selected.has(t.id));
@@ -426,17 +625,20 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
   async function applyBulkCategory() {
     if (!bulkCategoryId || selected.size === 0) return;
     setBulkApplying(true);
-    await fetch("/api/transactions/bulk-categorize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transactionIds: Array.from(selected), categoryId: bulkCategoryId }),
+    const transactionIds = Array.from(selected);
+    const categoryId = bulkCategoryId;
+    startTransition(async () => {
+      const result = await bulkCategorizeAction({ transactionIds, categoryId });
+      if (!result.error) {
+        setTransactions((prev) =>
+          prev.map((t) => (selected.has(t.id) ? { ...t, categoryId, categorySource: "user" } : t)),
+        );
+        setSelected(new Set());
+        setBulkCategoryId("");
+        applyFanOutResult(categoryId, result.fannedOut);
+      }
+      setBulkApplying(false);
     });
-    setTransactions((prev) =>
-      prev.map((t) => (selected.has(t.id) ? { ...t, categoryId: bulkCategoryId } : t)),
-    );
-    setSelected(new Set());
-    setBulkCategoryId("");
-    setBulkApplying(false);
   }
 
   const hasActiveFilters =
@@ -444,12 +646,11 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
 
   return (
     <div className="space-y-4">
-      {ruleSuggestion && (
-        <RuleSuggestionBanner
-          suggestion={ruleSuggestion}
-          categories={categories}
-          onCreateRule={handleCreateRule}
-          onDismiss={() => setRuleSuggestion(null)}
+      {fanOutNotice !== null && (
+        <FanOutNotice
+          count={fanOutNotice.count}
+          onUndo={handleUndoFanOut}
+          onDismiss={() => setFanOutNotice(null)}
         />
       )}
 
@@ -483,19 +684,18 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
               <span>
                 {filters.categoryId === "__uncategorized__"
                   ? "ללא קטגוריה"
-                  : filters.categoryId
-                    ? (categories.find((c) => c.id === filters.categoryId)?.name ?? "קטגוריה")
-                    : "הכל"}
+                  : filters.categoryId === "__needs_review__"
+                    ? "ממתין לסקירה"
+                    : filters.categoryId
+                      ? (categories.find((c) => c.id === filters.categoryId)?.name ?? "קטגוריה")
+                      : "הכל"}
               </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">הכל</SelectItem>
               <SelectItem value="__uncategorized__">ללא קטגוריה</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="__needs_review__">ממתין לסקירה</SelectItem>
+              <FilterCategorySelectItems tree={tree} />
             </SelectContent>
           </Select>
         </div>
@@ -538,7 +738,24 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
             נקה סינון
           </Button>
         )}
+        {/* WYSIWYG export (issue #163): same query params the listing fetch
+            just built above, minus paging — export always reads every row
+            matching the active filters, so clearing filters exports everything. */}
+        <a
+          href={`/api/transactions/export?${buildFilterSearchParams(filters).toString()}`}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 self-end")}
+        >
+          <Download className="size-3.5" strokeWidth={1.5} />
+          ייצוא ל-CSV
+        </a>
       </div>
+
+      {categorizationAvailable && (
+        <CategorizationBackfillCallout
+          offered={filters.categoryId === "__uncategorized__" && !loading && total > 0}
+          onCompleted={reloadTransactions}
+        />
+      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
@@ -553,14 +770,14 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
               </span>
             </SelectTrigger>
             <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
+              <GroupedCategorySelectItems tree={tree} />
             </SelectContent>
           </Select>
-          <Button size="sm" onClick={applyBulkCategory} disabled={!bulkCategoryId || bulkApplying}>
+          <Button
+            size="sm"
+            onClick={applyBulkCategory}
+            disabled={!bulkCategoryId || bulkApplying || isPending}
+          >
             {bulkApplying ? "מחיל..." : "החל"}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
@@ -584,7 +801,7 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
               <TableHead className="w-28">תאריך</TableHead>
               <TableHead>תיאור</TableHead>
               <TableHead className="w-32 text-left">סכום</TableHead>
-              <TableHead className="w-40">קטגוריה</TableHead>
+              <TableHead className="w-48">קטגוריה</TableHead>
               <TableHead className="w-24">סטטוס</TableHead>
               <TableHead className="w-16">פרטים</TableHead>
             </TableRow>
@@ -673,7 +890,11 @@ export function TransactionsTable({ categories }: { categories: Category[] }) {
                     <CategoryCell
                       transaction={tx}
                       categories={categories}
+                      tree={tree}
                       onAssign={handleCategoryAssign}
+                      onAcceptSuggestion={handleAcceptSuggestion}
+                      onRejectSuggestion={handleRejectSuggestion}
+                      onUndoAi={handleUndoAiAssignment}
                     />
                   </TableCell>
                   <TableCell>

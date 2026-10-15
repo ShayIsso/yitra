@@ -1,10 +1,10 @@
-# ShayFinance — Development Guidelines
+# Yitra — Development Guidelines
 
 ## Project Overview
 
 Private, self-hosted personal finance dashboard. Fetches and categorizes transactions from Israeli banks (Bank Discount, Max, Cal). Single-user, local/Docker only. Hebrew RTL interface.
 
-**PRD v1 (MVP):** https://github.com/ShayIsso/ShayFinance/issues/1
+**PRD v1 (MVP):** https://github.com/ShayIsso/yitra/issues/1
 **Phase 2 Kickoff:** `docs/phase2-kickoff.md`
 **Backlog:** `BACKLOG.md`
 
@@ -12,21 +12,11 @@ Private, self-hosted personal finance dashboard. Fetches and categorizes transac
 
 ### Module Structure
 
-The app is composed of 9 deep modules. Each module has a clean public interface and encapsulates its complexity internally:
-
-1. `crypto` — AES-256-GCM encrypt/decrypt. No DB awareness.
-2. `credentials` — Bank credential CRUD. Encrypts on write, decrypts on read.
-3. `scraper` — Wraps `israeli-bank-scrapers-core`. Yields typed events.
-4. `sync` — Sequential bank-by-bank orchestrator. SSE stream + OTP bridge.
-5. `transactions` — Import with deduplication, status updates, CRUD.
-6. `categories` — Rule engine + CRUD. Priority-ordered matching.
-7. `analytics` — Pure functional. Computes financial metrics. No side effects.
-8. `auth` — Bcrypt password check + session cookie middleware.
-9. `screenshots` — Temporary failure screenshot management. 24h cleanup.
+The app is composed of deep modules under `src/lib/` — one directory per module, and each module's **public interface is its `index.ts`** (the only file consumers import). `ls src/lib` is the authoritative module list; a module's name states its responsibility, its `index.ts` states its surface, and its test suite states its behavior. Don't rely on prose lists of modules — they drift. Domain vocabulary for module concepts lives in `CONTEXT.md`.
 
 ### Adding New Modules
 
-When building Phase 2 features, follow the deep module pattern:
+When building new features, follow the deep module pattern:
 
 - Clean public interface (export only what consumers need)
 - Pure computation functions testable without DB
@@ -37,7 +27,7 @@ When building Phase 2 features, follow the deep module pattern:
 ### Scraper Execution
 
 - **On-demand only.** No background scheduler (Phase 2 backlog item).
-- **Sequential:** Discount → Max → Cal, one at a time.
+- **Sequential:** one bank at a time, in credential-creation order (ADR-0003 clarification 2026-10-15).
 - **SSE** for real-time progress to the frontend.
 - **OTP:** `otpCodeRetriever` bridged via promise. Frontend POSTs OTP to `/api/sync/otp`. 3-minute timeout.
 - **Per-bank failure isolation.** One bank failing does not block the rest.
@@ -56,7 +46,7 @@ When building Phase 2 features, follow the deep module pattern:
 - **5 types:** `income`, `expense`, `investment`, `transfer`, `ignore`
 - **Rule-based auto-categorization** with priority ordering.
 - **Match types:** `contains`, `starts_with`, `exact`, `regex`
-- Manual assignment triggers a "Create rule?" suggestion.
+- Manual assignment writes user-tier **merchant memory** — the default learning path (ADR-0010). Rules are authored deliberately in Settings; there is no "Create rule?" suggestion.
 - `transfer` and `ignore` are excluded from all financial totals.
 - `investment` is tracked separately from expenses.
 
@@ -67,6 +57,16 @@ When building Phase 2 features, follow the deep module pattern:
 - `investment` does NOT reduce net savings — it's tracked as deployment of savings.
 - `transfer` and `ignore` are invisible to calculations.
 
+## Code Comments
+
+Code explains itself — structure, naming, and tests carry the "what" and "how". A comment is justified only when it states something the code cannot:
+
+- **Domain semantics and cross-module invariants** — e.g. "rule matching runs on `description`, never `custom_description`". Prefer linking the `CONTEXT.md` term over restating it.
+- **Why this and not the alternative** — a rejected approach and its reason, or a pointer to the deciding ADR/issue.
+- **Non-obvious constraints** — library quirks, timezone/encoding traps, security requirements that a plausible refactor would silently break.
+
+Never write comments that narrate the next line, restate the function name, address the PR reviewer ("this now correctly handles X"), or explain what a test asserts (the test name does that). If a comment merely repeats the code, delete it — or rename/restructure the code until the comment isn't needed. When removing a comment, first check it against the list above: deleting a constraint or invariant comment damages the code.
+
 ## Security Rules
 
 These are non-negotiable:
@@ -76,21 +76,17 @@ These are non-negotiable:
 - **Credentials** stored in PostgreSQL encrypted with AES-256-GCM. Unique IV per record.
 - **Passwords never returned by API.** The `GET /api/credentials/:id` route strips passwords and returns only safe fields.
 - **Path traversal prevention.** The screenshots module validates filenames with `/^[a-zA-Z0-9_-]+\.png$/`.
-- **`.env` contains only:** `DATABASE_URL`, `ENCRYPTION_KEY`, `APP_PASSWORD`, `CHROMIUM_PATH` (optional)
+- **`.env` contains only:** `DATABASE_URL` and `ENCRYPTION_KEY` (required — the only secrets the app cannot ask for, ADR-0014), plus optional `APP_PASSWORD` (legacy override), `CHROMIUM_PATH`, `SCHEDULER_ENABLED`, and the AI categorization variables (`AI_PROVIDER`, `GEMINI_API_KEY`, `OLLAMA_ENDPOINT`, `OLLAMA_MODEL` — egress per ADR-0008). `src/lib/env.ts` is the authoritative list.
 - **Never commit** `.env`, `node_modules`, `.DS_Store`, or the screenshots directory.
 - **Failure screenshots** auto-delete after 24 hours. Directory is gitignored.
-- **App auth:** Simple password gate with bcrypt hash. HTTP-only HMAC-signed session cookie.
+- **App auth:** Simple password gate with bcrypt hash. HTTP-only HMAC-signed session cookie. The password is chosen in the first-run wizard (`/setup`) and its hash stored in `app_settings`; `APP_PASSWORD` is a legacy override that **wins when set** (ADR-0014 §2). `/login` and `/setup` are exempt from the auth gate, so every Server Action in their module graphs must call `requireSession()` first — the first-password claim alone is guarded by its conditional write instead (`setup-action-guard.test.ts` enforces this).
 - **Session HMAC key must be hex-decoded.** Both `createSession` and `validateSessionEdge` decode `ENCRYPTION_KEY` from hex before HMAC.
 
 ## Database Schema (Drizzle ORM)
 
 ### Tables
 
-- `bank_credentials` — encrypted bank login data
-- `bank_accounts` — account numbers and balances per credential (unique: credentialId + accountNumber)
-- `transactions` — all financial transactions with dedup support
-- `categories` — Hebrew categories with type classification (unique: name)
-- `category_rules` — auto-categorization rules with priority
+`src/db/schema.ts` is the single source of truth for tables, columns, and indexes — read it directly instead of trusting any prose list (prose drifts; the schema file can't, since migrations are generated from it).
 
 ### Key Constraints
 
@@ -98,6 +94,16 @@ These are non-negotiable:
 - **Bank accounts:** `onConflictDoUpdate` upsert — updates balance on every sync.
 - **Installments:** Individual rows per monthly charge. `installment_number` / `installment_total` fields.
 - **Custom descriptions:** `custom_description` (nullable) overrides display. Original `description` is never modified.
+
+### Migration Workflow (ADR-0009 — binding)
+
+- **Schema changes go in `src/db/schema.ts`.** Never hand-write SQL and never hand-apply DDL against a live DB.
+- **`npm run db:generate` produces the migration.** Review the generated SQL file and commit it with the slice that needed the schema change — migrations ship alongside the code that depends on them, not as a follow-up.
+- **Applying migrations (`npm run db:migrate`) is owner-only (Shay).** Workers generate and commit migration files; they never run `db:migrate` against the shared dev DB. An apply is always preceded by a `pg_dump` backup and verified after with `to_regclass`/`information_schema`.
+- **`npm run db:push` is retired.** It bypasses migration history and desynchronizes the committed snapshot from the live DB. The script stays in `package.json` for emergency owner use only — workers must never reach for it.
+- **Migration files are immutable once merged.** A wrong migration is fixed forward with a new migration, never by editing or deleting a committed one.
+- **Fresh environments** (new dev DB, production container) build their schema by running `npm run db:migrate` from empty — never `db:push`.
+- **CI enforces this:** a drift check runs `drizzle-kit generate` and fails the build if it produces or modifies anything under `drizzle/`, catching a hand-applied change or a skipped generate at PR time. Full rationale and bootstrap history: `docs/adr/0009-generated-migrations-from-baseline.md`.
 
 ## UI/Design Rules
 
@@ -112,10 +118,7 @@ These are non-negotiable:
 
 ## Pages
 
-1. **Dashboard** — Savings Summary (Net Savings, Savings Rate %), income/expenses, balance per account, spending-by-category chart, recent transactions. Month navigation.
-2. **Transactions** — Filterable/sortable table, inline custom_description editing, bulk category assignment, "create rule?" suggestions.
-3. **Sync** — Per-bank progress, OTP input with 3-min countdown, error/retry per bank, screenshot links.
-4. **Settings** — Bank credentials CRUD, categories management, categorization rules CRUD.
+Four pages — **Dashboard**, **Transactions**, **Sync**, **Settings** — under `src/app/(dashboard)/`. Read the page's component tree for its current feature set; the tracker issue that shipped a feature is the record of its intent.
 
 ## Infrastructure
 
@@ -154,12 +157,13 @@ These are non-negotiable:
 - Use Zod for all API input validation.
 - Follow existing patterns in the codebase (check similar modules first).
 - Never log credentials, OTP codes, or bank data.
+- Schema changes follow the Migration Workflow section above: `npm run db:generate` + commit the SQL with the slice; never `db:push` or `db:migrate`.
 
 ## Agent skills
 
 ### Issue tracker
 
-GitHub issues at `ShayIsso/ShayFinance` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+GitHub issues at `ShayIsso/yitra` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
@@ -174,12 +178,13 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents
 - **CI uses `npm install`, not `npm ci`.** Lock file is generated on macOS ARM64 and `npm ci` rejects it on Linux CI runners. Do not change CI back to `npm ci`.
 - **Never add `os=any` or `cpu=any` to `.npmrc`.** This corrupts native bindings on macOS. If the lock file needs regenerating: `rm -rf node_modules package-lock.json && npm install`.
 - **Test runner is Vitest.** `npm test` runs all tests. `npm run test:watch` for watch mode. Config in `vitest.config.ts` with `@/*` path alias.
-- **`APP_PASSWORD` in `.env` must escape `$` as `\$`.** Next.js's dotenv parser expands `$VAR` — bcrypt hashes contain `$2b$12$...` which gets mangled. Always write `\$2b\$12\$...` in `.env`.
-- **`APP_PASSWORD` in Docker `.env` must escape `$` as `$$`.** Docker Compose interprets `$` as variable substitution.
+- **Legacy `APP_PASSWORD` override only: escape `$` as `\$` in `.env`.** New installs leave `APP_PASSWORD` unset and choose the password in the setup wizard, so neither escaping trap applies to them. Where the override is used, Next.js's dotenv parser expands `$VAR` — bcrypt hashes contain `$2b$12$...` which gets mangled. Write `\$2b\$12\$...`.
+- **Legacy `APP_PASSWORD` override only: escape `$` as `$$` in the `.env` Docker Compose reads.** Docker Compose interprets `$` as variable substitution.
 - **Session HMAC key must be hex-decoded.** `createSession` and `validateSessionEdge` both decode `ENCRYPTION_KEY` from hex to raw bytes before using it as the HMAC key. If one uses the raw string and the other decodes it, tokens will never validate.
 - **Middleware file must be `src/middleware.ts` exporting `middleware`.** Next.js 16 shows a deprecation warning suggesting `proxy.ts`, but `proxy.ts` does not reliably intercept requests — routes will be unprotected. Ignore the warning and keep `middleware.ts`.
 - **`puppeteer-core` version mismatch.** The scraper library bundles its own puppeteer-core. We use `as unknown as ScraperBrowser` to bridge types. Pin versions when possible.
 - **Discount scraper is patched locally.** `israeli-bank-scrapers-core@6.7.4` doesn't recognize Discount's `apollo/retail3/` post-login URL — we add it via `patches/israeli-bank-scrapers-core+6.7.4.patch` (auto-applied by the `postinstall` hook). See `patches/README.md` for the drop condition.
+- **Never run `npm run db:push` or `npm run db:migrate` as a worker.** Applying schema changes is owner-only — the Migration Workflow section has the full rules. CI's drift check fails the PR if `src/db/schema.ts` and `drizzle/` disagree, so always run `db:generate` after touching the schema and commit the result.
 
 ## Testing Priorities
 

@@ -67,7 +67,7 @@ const FILTER_LABELS: Record<FilterTab, string> = {
 
 // ── Sorting ───────────────────────────────────────────────────────────────────
 
-type SortKey = "expectedAmount" | "nextExpectedDate";
+type SortKey = "expectedAmount" | "projectedDate";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
@@ -81,12 +81,17 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 
 function sortRows(rows: SubscriptionRow[], key: SortKey, dir: SortDir): SubscriptionRow[] {
   return [...rows].sort((a, b) => {
-    let cmp = 0;
     if (key === "expectedAmount") {
-      cmp = a.expectedAmount - b.expectedAmount;
-    } else {
-      cmp = a.nextExpectedDate.localeCompare(b.nextExpectedDate);
+      const cmp = a.expectedAmount - b.expectedAmount;
+      return dir === "asc" ? cmp : -cmp;
     }
+    // Rows without liveness evidence have no projected charge — they sort last
+    // in both directions rather than clustering at whichever end null lands on.
+    if (a.projectedDate === null || b.projectedDate === null) {
+      if (a.projectedDate === b.projectedDate) return 0;
+      return a.projectedDate === null ? 1 : -1;
+    }
+    const cmp = a.projectedDate.localeCompare(b.projectedDate);
     return dir === "asc" ? cmp : -cmp;
   });
 }
@@ -145,7 +150,7 @@ function AnomalyStrip({
   if (totalAnomalies === 0) return null;
 
   return (
-    <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+    <div className="bg-muted/50 mb-4 rounded-lg border p-4">
       <div className="flex flex-wrap gap-4 text-sm">
         {alerts.priceChanges.length > 0 && (
           <button
@@ -202,8 +207,8 @@ function AnomalyStrip({
             onClick={() => onFilterChange(activeFilter === "dormant" ? "all" : "dormant")}
             className={`flex items-center gap-1.5 rounded px-2 py-1 transition-colors ${
               activeFilter === "dormant"
-                ? "bg-zinc-200 text-zinc-800"
-                : "text-zinc-600 hover:bg-zinc-100"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             <CircleSlash className="h-3.5 w-3.5" />
@@ -250,9 +255,12 @@ function NamingForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded border bg-white p-3 text-sm">
+    <form onSubmit={handleSubmit} className="bg-card mt-2 space-y-2 rounded border p-3 text-sm">
       <div>
-        <label className="mb-1 block text-xs font-medium text-zinc-700" htmlFor={`name-${subId}`}>
+        <label
+          className="text-muted-foreground mb-1 block text-xs font-medium"
+          htmlFor={`name-${subId}`}
+        >
           שם המנוי
         </label>
         <input
@@ -261,20 +269,23 @@ function NamingForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="לדוגמה: ספוטיפיי"
-          className="w-full rounded border border-zinc-300 px-2 py-1 text-sm focus:border-zinc-500 focus:outline-none"
+          className="border-input bg-background focus:border-ring w-full rounded border px-2 py-1 text-sm focus:outline-none"
           dir="rtl"
         />
       </div>
       {categories.length > 0 && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-700" htmlFor={`cat-${subId}`}>
+          <label
+            className="text-muted-foreground mb-1 block text-xs font-medium"
+            htmlFor={`cat-${subId}`}
+          >
             קטגוריה (אופציונלי)
           </label>
           <select
             id={`cat-${subId}`}
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full rounded border border-zinc-300 px-2 py-1 text-sm focus:border-zinc-500 focus:outline-none"
+            className="border-input bg-background focus:border-ring w-full rounded border px-2 py-1 text-sm focus:outline-none"
             dir="rtl"
           >
             <option value="">ללא קטגוריה</option>
@@ -286,7 +297,7 @@ function NamingForm({
           </select>
         </div>
       )}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-destructive text-xs">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={isPending} className="h-7 text-xs">
           {isPending ? "שומר..." : "אשר"}
@@ -380,7 +391,7 @@ function AnomalyDetail({
             {"צפוי "}
             <Amount amount={rowExpectedAmount} currency="ILS" colorize={false} />
             {" בתאריך "}
-            {formatDateObj(missedAlert.nextExpectedDate)}
+            {formatDateObj(missedAlert.projectedDate)}
             {", לא זוהה"}
           </p>
           <div className="flex gap-1.5">
@@ -406,17 +417,17 @@ function AnomalyDetail({
         </div>
       )}
       {dormantAlert && (
-        <div className="rounded border border-zinc-200 bg-zinc-50 p-2">
-          <p className="mb-1.5 font-medium text-zinc-700">
-            {"לא זוהה חיוב מאז "}
-            {formatDateObj(dormantAlert.nextExpectedDate)}
-            {` (מעל ${dormantAlert.daysOverdue} ימים) — ייתכן שהמנוי בוטל`}
+        <div className="bg-muted/50 rounded border p-2">
+          <p className="text-foreground mb-1.5 font-medium">
+            {dormantAlert.lastObservedChargeDate === null
+              ? "לא זוהה אף חיוב תואם בהיסטוריה — ייתכן שהמנוי בוטל"
+              : `לא זוהה חיוב מאז ${formatDateObj(dormantAlert.lastObservedChargeDate)} (${dormantAlert.silenceDays} ימים) — ייתכן שהמנוי בוטל`}
           </p>
           <div className="flex gap-1.5">
             <Button
               variant="outline"
               size="sm"
-              className="h-6 border-zinc-300 text-xs text-zinc-700 hover:bg-zinc-100"
+              className="h-6 text-xs"
               disabled={isPending}
               onClick={() => onCancel(rowId)}
             >
@@ -482,7 +493,7 @@ function AnomalyBadge({ rowId, alerts }: { rowId: string; alerts: AnomalyAlerts 
   // cancelled", not merely a one-off missed payment.
   if (hasDormant) {
     return (
-      <Badge variant="outline" className="border-zinc-300 bg-zinc-50 text-xs text-zinc-600">
+      <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">
         לא פעיל
       </Badge>
     );
@@ -515,7 +526,7 @@ export function SubscriptionsTable({
   alerts: AnomalyAlerts;
   categories: Category[];
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("nextExpectedDate");
+  const [sortKey, setSortKey] = useState<SortKey>("projectedDate");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [cancelingId, setCancelingId] = useState<string | null>(null);
@@ -592,7 +603,6 @@ export function SubscriptionsTable({
     return <EmptyState />;
   }
 
-  // Build a set of IDs that have anomalies for filter matching.
   const priceChangeIds = new Set(alerts.priceChanges.map((a) => a.patternId));
   const missedIds = new Set(alerts.missedPayments.map((a) => a.patternId));
   const newlyDetectedIds = new Set(alerts.newlyDetected.map((a) => a.patternId));
@@ -633,7 +643,7 @@ export function SubscriptionsTable({
 
       {/* Filter tabs */}
       {hasAnomalies && (
-        <div className="flex flex-wrap gap-1 border-b border-zinc-200 pb-2">
+        <div className="flex flex-wrap gap-1 border-b pb-2">
           {(
             [
               "all",
@@ -661,8 +671,8 @@ export function SubscriptionsTable({
                 onClick={() => setActiveFilter(tab)}
                 className={`rounded px-3 py-1 text-sm transition-colors ${
                   activeFilter === tab
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600 hover:bg-zinc-100"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
                 }`}
               >
                 {FILTER_LABELS[tab]}
@@ -695,10 +705,10 @@ export function SubscriptionsTable({
                   variant="ghost"
                   size="sm"
                   className="-mr-3 h-8 font-medium"
-                  onClick={() => handleSortClick("nextExpectedDate")}
+                  onClick={() => handleSortClick("projectedDate")}
                 >
                   תשלום הבא
-                  <SortIcon col="nextExpectedDate" sortKey={sortKey} sortDir={sortDir} />
+                  <SortIcon col="projectedDate" sortKey={sortKey} sortDir={sortDir} />
                 </Button>
               </TableHead>
               <TableHead className="text-right">סטטוס</TableHead>
@@ -746,7 +756,7 @@ export function SubscriptionsTable({
                       <Amount amount={row.expectedAmount} currency="ILS" colorize={false} />
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
-                      {formatDate(row.nextExpectedDate)}
+                      {row.projectedDate ? formatDate(row.projectedDate) : "אין עדות לחיוב"}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">

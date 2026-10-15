@@ -38,6 +38,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Phase 3 wayfinder brief — private planning artifact / reference-app research; read by Fable from disk, never committed.
+docs/phase3-kickoff.md
+
+# database backups (real financial data — never commit)
+backups/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -52,9 +58,15 @@ pgdata/
 # Only the template is committed; actual fixtures stay local-only.
 scripts/spike/fixture.json
 scripts/spike/fixture-draft.json
+scripts/spike/few-shot.json
+scripts/spike/adjudications.json
 scripts/spike/benchmark-results.json
+scripts/spike/benchmark-results-*.json
 scripts/spike/benchmark.ts
 scripts/spike/discount-url-probe.ts
+
+# Taxonomy v2 owner decisions — real merchant descriptors, never commit.
+scripts/spike/taxonomy-decisions-133.json
 
 # mattpocock/skills — installed agentic tooling, regenerable from skills-lock.json (committed).
 # Real skill content lives in /.agents/ (fetched from GitHub); /.claude/skills/* are generated
@@ -65,3 +77,10 @@ scripts/spike/discount-url-probe.ts
 !/.claude/skills/generate-commit-message/
 !/.claude/skills/obsidian-markdown/
 !/.claude/skills/react-performance-optimization/
+
+# database backups (real financial data — never commit)
+backups/
+
+# Claude Code agent memory is personal working state and lives outside the repo
+# (~/.claude/projects/); the copies once committed here were stale snapshots of it.
+/.claude/projects/

@@ -5,13 +5,12 @@
  */
 
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
-
-// ── Store interface ──────────────────────────────────────────────────────────
+import { bankKindOf } from "@/lib/bank-registry";
 
 export type InboxTransaction = {
   id: string;
   bankAccountId: string;
-  bankType: "discount" | "max" | "visaCal";
+  bankType: string;
   date: string; // YYYY-MM-DD
   description: string;
   chargedAmount: number;
@@ -39,23 +38,24 @@ export type InboxStore = {
   getRulesOrderedByPriority(): Promise<CategoryRule[]>;
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 /**
  * Identify the bankSide row in a transfer_pair group.
  *
  * Heuristic (in priority order):
  * 1. If one row has description containing "ביט" (Bit) markers, that is the cardSide;
  *    the other is bankSide.
- * 2. If both or neither have markers, prefer bankType === "discount" as bankSide
- *    (Discount is our canonical bank account; Max/Cal are credit/card accounts).
- * 3. If both same bankType, pick the row with earlier createdAt as bankSide
- *    (deterministic tie-break).
+ * 2. If both or neither have markers, prefer the row whose institution's registry
+ *    `kind` is "bank" over one that is not (a card, prepaid or unknown kind alike).
+ * 3. If that still does not separate them, pick the row with earlier createdAt as
+ *    bankSide (deterministic tie-break).
  *
  * Rationale: A future PR may add an explicit role-side column — this heuristic
  * bridges the gap until then.
  */
 export function identifyBankSide(members: InboxTransaction[]): InboxTransaction | null {
+  // A singleton suspected-transfer group (AI-step routing, #148): its only member
+  // is the side to flip to the transfer category on approve. Genuine pairs below.
+  if (members.length === 1) return members[0];
   if (members.length !== 2) return null;
   const [a, b] = members;
 
@@ -67,15 +67,15 @@ export function identifyBankSide(members: InboxTransaction[]): InboxTransaction 
   if (aHasBit && !bHasBit) return b;
   if (bHasBit && !aHasBit) return a;
 
-  // Rule 2: prefer discount as bankSide
-  if (a.bankType === "discount" && b.bankType !== "discount") return a;
-  if (b.bankType === "discount" && a.bankType !== "discount") return b;
+  // Rule 2: prefer the bank-kind row as bankSide
+  const aIsBank = bankKindOf(a.bankType) === "bank";
+  const bIsBank = bankKindOf(b.bankType) === "bank";
+  if (aIsBank && !bIsBank) return a;
+  if (bIsBank && !aIsBank) return b;
 
   // Rule 3: deterministic tie-break — earlier createdAt is bankSide
   return a.createdAt <= b.createdAt ? a : b;
 }
-
-// ── Approve ───────────────────────────────────────────────────────────────────
 
 export async function approveGroup(
   groupId: string,
@@ -86,7 +86,6 @@ export async function approveGroup(
 
   const transferCategoryId = await store.getCategoryIdByName("העברה פנימית");
 
-  // Determine group type from members' roles
   const hasSettlementLump = members.some((m) => m.reconciliationRole === "settlement_lump");
 
   if (hasSettlementLump) {
@@ -115,8 +114,6 @@ export async function approveGroups(
   }
   return {};
 }
-
-// ── Reject ────────────────────────────────────────────────────────────────────
 
 export async function rejectGroup(groupId: string, store: InboxStore): Promise<{ error?: string }> {
   const members = await store.getGroupMembers(groupId);
@@ -148,8 +145,6 @@ export async function rejectGroups(
   return {};
 }
 
-// ── Undo auto-applied ─────────────────────────────────────────────────────────
-
 export async function undoTransaction(
   txnId: string,
   allGroupMembers: InboxTransaction[],
@@ -161,12 +156,10 @@ export async function undoTransaction(
 
   const rules = await store.getRulesOrderedByPriority();
 
-  // Clear this row's reconciliation columns
   await store.clearRows([txnId]);
   const newCategoryId = categorize(txn.description, rules);
   await store.setCategory(txnId, newCategoryId);
 
-  // Check remaining group members
   const remaining = allGroupMembers.filter(
     (m) => m.id !== txnId && m.reconciliationGroupId === txn.reconciliationGroupId,
   );

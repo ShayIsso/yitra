@@ -14,16 +14,27 @@
  *   Warning       — amber (oklch ~0.769 0.188 70) — pending states only
  *
  * Card convention:
- *   rounded-xl + ring-1 ring-foreground/10 + no shadow + no gradient.
- *   See src/components/ui/card.tsx — Card component enforces this.
+ *   rounded-xl + unified --card-edge (border + box-shadow bundle, mode-aware).
+ *   Light: hairline border + soft shadow. Dark: hairline border, no shadow.
+ *   See src/components/ui/card.tsx — Card component enforces this; no card
+ *   may layer its own ring/border/shadow on top.
  *
  * Lucide icon convention:
  *   Default stroke width: 1.5px (Lucide library default — do not override).
  *   Duo-tone treatment: section headers only, nowhere else.
  *   See src/components/ui/amount.tsx for the canonical reference comment.
  *
- * Motion convention:
- *   Use .fade-in utility for enter transitions (150ms ease-out).
+ * Motion convention (Phase 3 A5, #202):
+ *   .fade-in     — 150ms opacity-only enter (legacy, still valid for small bits).
+ *   .enter       — 220ms fade + 8px rise, cubic-bezier(0.16, 1, 0.3, 1). Sections/cards.
+ *   .stagger     — container utility: staggers direct children's .enter by ~55ms/position.
+ *   .view-wash   — whole-view opacity fade on load, applied once at the outermost container.
+ *   .hover-tint  — 130ms background/edge tint on hover.
+ *   .press       — 100ms scale(.98) on press (:active).
+ *   All animations run once per DOM node creation — a re-render that doesn't
+ *   remount the element (e.g. the dashboard month-strip refetch) never replays
+ *   them. Don't key an animated container by data that changes on refetch.
+ *   prefers-reduced-motion drops translate/scale and keeps opacity only.
  *   No scroll-triggered animations (Phase 3 backlog).
  *
  * Numeric displays:
@@ -67,6 +78,12 @@
   --color-card: var(--card);
   --color-emerald: var(--emerald);
   --color-emerald-foreground: var(--emerald-foreground);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-bar: var(--bar);
+  --color-bar-strong: var(--bar-strong);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -76,26 +93,49 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * #109 direction F, "Original, elevated" — true-neutral zinc in BOTH modes.
+ * Both light and dark adopt the #109 palette: :root holds the light F values
+ * (a few shift vs the old baseline — foreground 0.145→0.16, muted-foreground
+ * 0.556→0.505, accent 0.97→0.965, border/input 0.922→0.918, sidebar→pure
+ * white, warning recolored to 0.72 0.15 65), and [data-theme="dark"] (with the
+ * .dark alias) is a scoped token swap over that same set. Only values change,
+ * so every color utility (bg-background, text-muted-foreground, border-border,
+ * ...) re-skins by cascade — sidebar and main as one. The active theme is
+ * stamped on <html> pre-paint by the inline script in the root layout
+ * (SSR-safe, no white flash). Achromatic zinc, chroma = 0 unless noted. The
+ * --radius calc scale (kept at the 0.625rem baseline per #195) and the
+ * Assistant font family are unchanged.
+ */
 :root {
-  /* ── Neutral base (zinc/stone — achromatic, chroma ≈ 0) ── */
-  --background: oklch(0.985 0 0); /* zinc-50 equivalent */
-  --foreground: oklch(0.145 0 0); /* zinc-950 equivalent */
-  --card: oklch(1 0 0); /* pure white */
-  --card-foreground: oklch(0.145 0 0);
+  /* ── Neutral base (zinc — achromatic, chroma = 0) ── */
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.16 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0); /* zinc-900 equivalent */
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0); /* zinc-100 equivalent */
+  --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0); /* zinc-500 equivalent */
-  --accent: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.505 0 0);
+  /* Neutral-bar fill — progress/gauge/category-breakdown bars (A4 #201).
+     Not a semantic color: emerald stays reserved for positive values only. */
+  --bar: oklch(0.87 0 0); /* ≈ gray-300, standard fill */
+  --bar-strong: oklch(0.72 0 0); /* ≈ gray-400, stronger fill */
+  --accent: oklch(0.965 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --border: oklch(0.922 0 0); /* zinc-200 equivalent */
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.918 0 0);
+  --input: oklch(0.918 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+
+  /* Card edge (#109) — hairline border + soft shadow bundle, mode-dependent.
+     Consumed by the base Card component only; no card overrides these. */
+  --card-shadow: 0 1px 2px oklch(0.145 0 0 / 0.04), 0 2px 8px oklch(0.145 0 0 / 0.06);
+  --card-border: oklch(0.145 0 0 / 0.09);
 
   /* ── Semantic colors ── */
 
@@ -106,8 +146,24 @@
   --emerald: oklch(0.596 0.145 163.225); /* emerald-600 */
   --emerald-foreground: oklch(1 0 0);
 
-  /* Warning — amber tone, for pending/in-progress states */
-  --warning: oklch(0.769 0.188 70.08); /* amber-400 equivalent */
+  /* Identity violet — the Yitra mark only; deliberately collides with no data color
+     (green/red/amber carry money and warning meaning). See brand/brand.md. */
+  --brand: #4b22e0;
+
+  /* Money-color source of truth (#109 sheet): --pos = positive money (emerald),
+     --neg = negative money (red). <Amount> is the primary consumer via text-pos/
+     text-neg; a sign-driven ternary (v >= 0 ? "text-pos" : "text-neg") is the
+     sanctioned secondary form where <Amount> itself doesn't fit. */
+  --pos: oklch(0.596 0.145 163);
+  --neg: oklch(0.577 0.245 27);
+
+  /* Warning — amber tone, for pending/in-progress/stale states only. Never a
+     "success" or "on track" signal; emerald stays positive-money-only.
+     Reach for it as a FILL (bg-warning + text-warning-foreground): amber at
+     this lightness fails small-text contrast against --card in light mode
+     (raised in the #108 design review), so text-warning is legible only at
+     larger sizes or on a neutral fill. */
+  --warning: oklch(0.72 0.15 65);
   --warning-foreground: oklch(0.145 0 0);
 
   /* ── Chart palette ── */
@@ -117,8 +173,9 @@
   --chart-4: oklch(0.627 0.265 303.9); /* violet */
   --chart-5: oklch(0.645 0.246 16.439); /* red */
 
-  /* ── Sidebar ── */
-  --sidebar: oklch(0.985 0 0);
+  /* ── Sidebar ── (--sidebar and --sidebar-border are the #109-F sheet values;
+     the rest stay at baseline — the sheet does not respec them) */
+  --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -126,6 +183,73 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* Dark theme — same token names, dark values. muted-foreground and destructive
+ * are lifted/brightened for legibility on the dark surface. */
+[data-theme="dark"],
+.dark {
+  --background: oklch(0.165 0 0);
+  --foreground: oklch(0.955 0 0);
+  --card: oklch(0.215 0 0);
+  --card-foreground: oklch(0.955 0 0);
+  --popover: oklch(0.215 0 0);
+  --popover-foreground: oklch(0.955 0 0);
+  --primary: oklch(0.92 0 0);
+  --primary-foreground: oklch(0.165 0 0);
+  --secondary: oklch(0.265 0 0);
+  --secondary-foreground: oklch(0.955 0 0);
+  --muted: oklch(0.265 0 0);
+  --muted-foreground: oklch(0.71 0 0); /* lifted — secondary text was near the noise floor */
+  /* Neutral-bar fill — a proper mid-tone so bars stay visible against the dark
+     --card (0.215) / --background (0.165) instead of washing out near-white. */
+  --bar: oklch(0.4 0 0);
+  --bar-strong: oklch(0.52 0 0);
+  --accent: oklch(0.285 0 0);
+  --accent-foreground: oklch(0.955 0 0);
+  --border: oklch(0.29 0 0);
+  --input: oklch(0.29 0 0);
+  --ring: oklch(0.55 0 0);
+
+  /* Card edge (#109) — dark cards drop the shadow entirely; hairline only.
+     Uses a transparent zero-shadow, NOT the `none` keyword: the base Card feeds
+     this into Tailwind's shared box-shadow chain (shadow-* and ring-* compose
+     into one declaration), and a literal `none` mid-list is invalid CSS that
+     voids the whole box-shadow — silently killing any ring a card stacks on top
+     (e.g. the highlighted bank card's amber ring). `0 0 #0000` renders nothing
+     while keeping the chain valid. */
+  --card-shadow: 0 0 #0000;
+  --card-border: oklch(1 0 0 / 0.1);
+
+  --destructive: oklch(0.71 0.17 22); /* brighter rose — muddy at 0.577 on dark */
+  --emerald: oklch(0.72 0.15 163);
+  /* emerald is lifted in dark — dark text reads, white washes out */
+  --emerald-foreground: oklch(0.165 0 0);
+  --brand: #a78bfa;
+
+  /* Money colors lifted for the dark surface; dark red brightened so it isn't muddy. */
+  --pos: oklch(0.72 0.15 163);
+  --neg: oklch(0.71 0.17 22);
+  --warning: oklch(0.78 0.15 70);
+  /* warning stays amber (light) in both modes → dark foreground */
+  --warning-foreground: oklch(0.145 0 0);
+
+  /* ── Chart palette ── lightness lifted, hue preserved so each category keeps
+     its identity and stays legible on the dark surface (chart-1 tracks --emerald). */
+  --chart-1: oklch(0.72 0.15 163.225); /* emerald */
+  --chart-2: oklch(0.65 0.19 264.376); /* blue */
+  --chart-3: oklch(0.8 0.16 70.08); /* amber */
+  --chart-4: oklch(0.7 0.2 303.9); /* violet */
+  --chart-5: oklch(0.7 0.19 16.439); /* red */
+
+  --sidebar: oklch(0.185 0 0);
+  --sidebar-foreground: oklch(0.955 0 0);
+  --sidebar-primary: oklch(0.92 0 0);
+  --sidebar-primary-foreground: oklch(0.165 0 0);
+  --sidebar-accent: oklch(0.285 0 0);
+  --sidebar-accent-foreground: oklch(0.955 0 0);
+  --sidebar-border: oklch(0.29 0 0);
+  --sidebar-ring: oklch(0.55 0 0);
 }
 
 @layer base {
@@ -165,6 +289,119 @@
     }
     to {
       opacity: 1;
+    }
+  }
+
+  /**
+   * .enter — fade + 8px rise, 220ms, cubic-bezier(0.16, 1, 0.3, 1) (#202).
+   * Apply to a section/card wrapper that should enter gently on mount.
+   * .stagger > * shares this same animation (see below) — kept as one
+   * selector so the timing/easing only needs to change in one place.
+   */
+  .enter,
+  .stagger > * {
+    animation: enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /**
+   * .stagger — apply to a grid/list CONTAINER to stagger its direct children's
+   * entrance by ~55ms per position, without adding a class to every child
+   * (#202). nth-child rules assign the position; capped at 10, beyond which
+   * every further child shares the last delay rather than growing unbounded.
+   */
+  .stagger > * {
+    animation-delay: calc(var(--stagger-i, 0) * 55ms);
+  }
+  .stagger > *:nth-child(1) {
+    --stagger-i: 0;
+  }
+  .stagger > *:nth-child(2) {
+    --stagger-i: 1;
+  }
+  .stagger > *:nth-child(3) {
+    --stagger-i: 2;
+  }
+  .stagger > *:nth-child(4) {
+    --stagger-i: 3;
+  }
+  .stagger > *:nth-child(5) {
+    --stagger-i: 4;
+  }
+  .stagger > *:nth-child(6) {
+    --stagger-i: 5;
+  }
+  .stagger > *:nth-child(7) {
+    --stagger-i: 6;
+  }
+  .stagger > *:nth-child(8) {
+    --stagger-i: 7;
+  }
+  .stagger > *:nth-child(9) {
+    --stagger-i: 8;
+  }
+  .stagger > *:nth-child(n + 10) {
+    --stagger-i: 9;
+  }
+
+  /**
+   * .view-wash — whole-view opacity fade on load. Apply once, at the
+   * outermost dashboard container (not per-page-navigation, not per-refetch).
+   */
+  .view-wash {
+    animation: fade-in 220ms ease-out both;
+  }
+
+  /**
+   * .hover-tint — 130ms background/edge tint on hover (#202).
+   */
+  .hover-tint {
+    transition:
+      background-color 130ms ease-out,
+      border-color 130ms ease-out;
+  }
+  .hover-tint:hover {
+    background-color: var(--accent);
+    border-color: var(--border);
+  }
+
+  /**
+   * .press — scale(.98) over 100ms on press (#202).
+   */
+  .press {
+    transition: transform 100ms ease-out;
+  }
+  .press:active {
+    transform: scale(0.98);
+  }
+
+  /**
+   * prefers-reduced-motion — drop translate/scale, keep opacity only (#202).
+   * Falls back to the existing .fade-in keyframes (opacity 0→1) rather than
+   * a new one, per the "single .fade-in" motion convention above.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .enter,
+    .view-wash,
+    .stagger > * {
+      animation-name: fade-in;
+      animation-duration: 150ms;
+      animation-delay: 0s;
+    }
+    .press,
+    .press:active {
+      transition: none;
+      transform: none;
     }
   }
 }

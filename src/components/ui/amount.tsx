@@ -6,10 +6,10 @@
  * All currency formatting happens here (client-side only) to prevent
  * hydration mismatches (SSR locale ≠ browser locale for Intl.NumberFormat).
  *
- * Color convention:
- *   - Positive values → text-emerald-600  (emerald is reserved for POSITIVE values only)
- *   - Negative values → text-red-600
- *   - No color       → inherit (use colorize={false})
+ * Color convention (money-color source of truth — the --pos/--neg tokens):
+ *   - Non-negative values → text-pos  (--pos = emerald; reserved for POSITIVE money only)
+ *   - Negative values     → text-neg  (--neg = destructive red)
+ *   - No color            → inherit (use colorize={false})
  *
  * Lucide icon convention (documented here as the shared UI entry point):
  *   - Default stroke width: 1.5px  (Lucide default; do not override globally)
@@ -18,8 +18,6 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-
-// ── Currency helpers (source of truth — lifted from transactions-table) ────────
 
 /** Maps common currency symbols to ISO 4217 codes for Intl.NumberFormat. */
 export const CURRENCY_SYMBOL_TO_CODE: Record<string, string> = {
@@ -59,7 +57,19 @@ export function formatAmount(
   }).format(amount);
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+/**
+ * Maps a monetary value's sign to its money-color utility class.
+ *
+ * Pure and framework-free so the money-color law is node-testable without a DOM.
+ * Zero is non-negative money, so it maps to `text-pos` (emerald is positive-only).
+ *
+ * @returns `"text-neg"` for negative, `"text-pos"` for non-negative, or
+ *          `undefined` when colorize is false (inherit the surrounding text color).
+ */
+export function amountColorClass(amount: number, colorize: boolean): string | undefined {
+  if (!colorize) return undefined;
+  return amount < 0 ? "text-neg" : "text-pos";
+}
 
 export interface AmountProps {
   /** The numeric value to display. */
@@ -95,7 +105,7 @@ export function Amount({
   fractionDigits,
   className,
 }: AmountProps) {
-  const colorClass = colorize ? (amount < 0 ? "text-red-600" : "text-emerald-600") : undefined;
+  const colorClass = amountColorClass(amount, colorize);
 
   return (
     <span className={cn("tabular-nums", colorClass, className)}>

@@ -1,13 +1,20 @@
 import { db } from "@/db";
 import { bankAccounts, transactions, recurringExpenses } from "@/db/schema";
-import { eq, and, gte, lte, ilike, inArray, isNull, count } from "drizzle-orm";
-import { categorizeTransaction } from "@/lib/categories/rules";
+import { eq, and, gte, lte, ilike, isNull, count, inArray } from "drizzle-orm";
+import { categorize, getRules } from "@/lib/categories/rules";
+import { getGroupLeafIndex } from "@/lib/categories";
 import type { ScrapedAccount } from "@/lib/scraper/types";
-import { importTransaction } from "./import";
+import { importTransaction, type Categorization } from "./import";
 import { createDbStore } from "./store";
 import type { transactionFiltersSchema } from "./schemas";
 import type { z } from "zod";
 import { extractMerchant, amountsMatch } from "@/lib/transaction-matching";
+import { createMerchantMemoryStore, deriveMerchantKey, lookupMemory } from "@/lib/merchant-memory";
+import {
+  createReviewStore,
+  needsReviewSql,
+  type PendingSuggestionRow,
+} from "@/lib/ai-categorization";
 
 export async function importScrapedAccounts(
   credentialId: string,
@@ -17,6 +24,24 @@ export async function importScrapedAccounts(
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+
+  // Precedence at the import seam: rules (deliberately-authored law) → merchant
+  // memory (learned exact-key mappings). AI is a later slice (ADR-0010 §1).
+  // Rules are fetched once for the whole sync rather than per transaction.
+  const rules = await getRules();
+  const memoryStore = createMerchantMemoryStore();
+  const categorizer = async (description: string): Promise<Categorization> => {
+    const ruleCategoryId = categorize(description, rules);
+    if (ruleCategoryId) return { categoryId: ruleCategoryId, source: "rule" };
+
+    const key = deriveMerchantKey(description);
+    if (!key) return { categoryId: null, source: null };
+    const hit = (await lookupMemory([key], memoryStore)).get(key);
+    if (!hit) return { categoryId: null, source: null };
+    // Trust tier, not mechanism (ADR-0010 §2): a user-tier hit is `memory`, an
+    // ai-tier hit stays `ai` so a cached guess never launders into trusted.
+    return { categoryId: hit.categoryId, source: hit.source === "user" ? "memory" : "ai" };
+  };
 
   for (const account of scrapedAccounts) {
     // Upsert bank_account — insert or update balance on conflict
@@ -41,7 +66,7 @@ export async function importScrapedAccounts(
     if (!accountId) continue;
 
     for (const tx of account.transactions) {
-      const result = await importTransaction(tx, accountId, store, categorizeTransaction);
+      const result = await importTransaction(tx, accountId, store, categorizer);
       if (result === "inserted") inserted++;
       else if (result === "updated") updated++;
       else skipped++;
@@ -55,18 +80,22 @@ export async function importScrapedAccounts(
 
 export type CategoryFilterIntent =
   | { mode: "uncategorized" }
+  | { mode: "needsReview" }
   | { mode: "category"; categoryId: string }
   | { mode: "all" };
 
 /**
- * Resolves how to filter by category. `uncategorized` always wins: when true we
- * match rows with no category and IGNORE any categoryId. Otherwise a concrete
- * categoryId selects that category, and neither means no category constraint.
+ * Resolves how to filter by category. `needsReview` wins first (ticket #149 —
+ * the review queue: exactly the rows with a pending AI suggestion), then
+ * `uncategorized` — when either is true we IGNORE any categoryId. Otherwise a
+ * concrete categoryId selects that category, and neither means no constraint.
  */
 export function resolveCategoryFilter(input: {
   uncategorized?: boolean;
+  needsReview?: boolean;
   categoryId?: string;
 }): CategoryFilterIntent {
+  if (input.needsReview) return { mode: "needsReview" };
   if (input.uncategorized) return { mode: "uncategorized" };
   if (input.categoryId) return { mode: "category", categoryId: input.categoryId };
   return { mode: "all" };
@@ -89,7 +118,48 @@ export function buildPaginatedResult<T>(
   return { data, total, page, pageSize };
 }
 
-export async function getTransactions(filters: z.infer<typeof transactionFiltersSchema>) {
+/**
+ * The subset of the transactions filter schema that constrains WHICH rows
+ * match — every consumer that reads filtered rows (paginated listing, the
+ * unpaginated CSV export in `@/lib/reports`) shares this exact condition
+ * set, so "what you filtered" and "what you export" can never diverge.
+ */
+export type TransactionFilterConditions = Pick<
+  z.infer<typeof transactionFiltersSchema>,
+  | "dateFrom"
+  | "dateTo"
+  | "bankAccountId"
+  | "categoryId"
+  | "status"
+  | "search"
+  | "uncategorized"
+  | "needsReview"
+>;
+
+/**
+ * Subtree expansion for the category filter (#174, ADR-0011 aggregation lens):
+ * a group is never assigned to a transaction, so filtering by a group matches
+ * all of its leaves. A leaf (absent from `groupLeafIds`) matches itself. This
+ * changes WHICH rows list, never any total.
+ */
+export function expandCategoryFilter(
+  categoryId: string,
+  groupLeafIds: ReadonlyMap<string, readonly string[]>,
+): string[] {
+  const leaves = groupLeafIds.get(categoryId);
+  return leaves && leaves.length > 0 ? [...leaves] : [categoryId];
+}
+
+/**
+ * When `groupLeafIds` is supplied, a selected group is expanded to its leaves
+ * (subtree filtering, #174); without it, `categoryId` matches literally. Both
+ * the paginated listing and the CSV export pass the same index, so "what you
+ * filtered" and "what you export" share one subtree semantics.
+ */
+export function buildTransactionFilterConditions(
+  filters: TransactionFilterConditions,
+  groupLeafIds?: ReadonlyMap<string, readonly string[]>,
+) {
   const {
     dateFrom,
     dateTo,
@@ -98,25 +168,57 @@ export async function getTransactions(filters: z.infer<typeof transactionFilters
     status,
     search,
     uncategorized,
-    page,
-    pageSize,
+    needsReview,
   } = filters;
-  const offset = (page - 1) * pageSize;
 
   const conditions = [];
   if (dateFrom) conditions.push(gte(transactions.date, dateFrom));
   if (dateTo) conditions.push(lte(transactions.date, dateTo));
   if (bankAccountId) conditions.push(eq(transactions.bankAccountId, bankAccountId));
-  const categoryFilter = resolveCategoryFilter({ uncategorized, categoryId });
-  if (categoryFilter.mode === "uncategorized") {
+  const categoryFilter = resolveCategoryFilter({ uncategorized, needsReview, categoryId });
+  if (categoryFilter.mode === "needsReview") {
+    conditions.push(needsReviewSql());
+  } else if (categoryFilter.mode === "uncategorized") {
     conditions.push(isNull(transactions.categoryId));
   } else if (categoryFilter.mode === "category") {
-    conditions.push(eq(transactions.categoryId, categoryFilter.categoryId));
+    const ids = groupLeafIds
+      ? expandCategoryFilter(categoryFilter.categoryId, groupLeafIds)
+      : [categoryFilter.categoryId];
+    conditions.push(
+      ids.length === 1
+        ? eq(transactions.categoryId, ids[0])
+        : inArray(transactions.categoryId, ids),
+    );
   }
   if (status) conditions.push(eq(transactions.status, status));
   if (search) conditions.push(ilike(transactions.description, `%${search}%`));
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+/**
+ * Total uncategorized transactions — same predicate as the `{ mode:
+ * "uncategorized" }` row filter (`buildTransactionFilterConditions`), counted
+ * rather than fetched, for the dashboard's attention feeder (#196). Any drift
+ * between this count and the row filter would show a badge count that
+ * disagrees with what the "uncategorized" list actually contains.
+ */
+export async function getUncategorizedTransactionCount(): Promise<number> {
+  const whereClause = buildTransactionFilterConditions({
+    uncategorized: true,
+    needsReview: false,
+  });
+  const result = await db.select({ count: count() }).from(transactions).where(whereClause);
+  return result[0]?.count ?? 0;
+}
+
+export async function getTransactions(filters: z.infer<typeof transactionFiltersSchema>) {
+  const { page, pageSize } = filters;
+  const offset = (page - 1) * pageSize;
+
+  // Only a concrete category filter can name a group; skip the lookup otherwise.
+  const groupLeafIds = filters.categoryId ? await getGroupLeafIndex() : undefined;
+  const whereClause = buildTransactionFilterConditions(filters, groupLeafIds);
 
   const [rows, activeRecurring, totalResult] = await Promise.all([
     db.query.transactions.findMany({
@@ -152,6 +254,14 @@ export async function getTransactions(filters: z.infer<typeof transactionFilters
 
   const total = totalResult[0]?.count ?? 0;
 
+  // Pending-suggestion overlay (ticket #149): depends on this page's ids, so it
+  // can't join the Promise.all above. Same non-essential-overlay degrade as
+  // the recurring badges — a lookup failure hides suggestion chips, not the page.
+  const pendingSuggestions = await createReviewStore()
+    .getPendingSuggestions(rows.map((r) => r.id))
+    .catch(() => [] as PendingSuggestionRow[]);
+  const suggestionByTxnId = new Map(pendingSuggestions.map((s) => [s.transactionId, s]));
+
   const data = rows.map((r) => {
     const txnMerchant = extractMerchant(r.description);
     // Detection stores expectedAmount as an absolute (positive) value, while
@@ -179,6 +289,7 @@ export async function getTransactions(filters: z.infer<typeof transactionFilters
       installmentTotal: r.installmentTotal,
       status: r.status,
       categoryId: r.categoryId,
+      categorySource: r.categorySource,
       reconciliationGroupId: r.reconciliationGroupId,
       reconciliationConfirmedAt: r.reconciliationConfirmedAt
         ? r.reconciliationConfirmedAt.toISOString()
@@ -188,25 +299,29 @@ export async function getTransactions(filters: z.infer<typeof transactionFilters
       recurringExpense: matched
         ? { id: matched.id, merchant: matched.merchant, cadence: matched.expectedCadence }
         : null,
+      pendingSuggestion: suggestionByTxnId.get(r.id) ?? null,
     };
   });
 
   return buildPaginatedResult(data, total, page, pageSize);
 }
 
+/**
+ * Category ASSIGNMENT is not accepted here — `categoryId` is typed as `null`
+ * only, so an assignment cannot bypass merchant-memory's atomic
+ * memory+log+fan-out path (`changeTransactionCategory` /
+ * `bulkChangeTransactionCategories`, ADR-0010 §6). This path edits the custom
+ * description and clears a category (which also clears its provenance).
+ */
 export async function updateTransaction(
   id: string,
-  changes: { customDescription?: string | null; categoryId?: string | null },
+  changes: { customDescription?: string | null; categoryId?: null },
 ): Promise<void> {
   const dbChanges: Record<string, unknown> = { updatedAt: new Date() };
   if ("customDescription" in changes) dbChanges.customDescription = changes.customDescription;
-  if ("categoryId" in changes) dbChanges.categoryId = changes.categoryId;
+  if ("categoryId" in changes) {
+    dbChanges.categoryId = null;
+    dbChanges.categorySource = null;
+  }
   await db.update(transactions).set(dbChanges).where(eq(transactions.id, id));
-}
-
-export async function bulkCategorize(transactionIds: string[], categoryId: string): Promise<void> {
-  await db
-    .update(transactions)
-    .set({ categoryId, updatedAt: new Date() })
-    .where(inArray(transactions.id, transactionIds));
 }

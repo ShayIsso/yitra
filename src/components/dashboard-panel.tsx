@@ -2,31 +2,44 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Inbox,
-  Repeat,
-  ChevronDown,
-  ChevronUp,
-  Wallet,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BankBadge } from "@/components/bank-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
-import { SpendingChart } from "@/components/spending-chart";
+import { SpendingBreakdown } from "@/components/spending-breakdown";
+import { isBankType } from "@/lib/bank-registry";
 import type { Category } from "@/lib/categories";
 import type {
   MonthlySummary,
-  CategorySpending,
+  CategorySpendingNode,
   AccountBalance,
   RecentTransaction,
+  TopMerchant,
 } from "@/lib/analytics";
-import { LastSyncStrip } from "@/components/last-sync-strip";
 import type { SyncRunSummary } from "@/lib/sync/runs";
+import { GoalsProgressCard, type GoalProgressCardData } from "@/components/goals-progress-card";
+import { BudgetStatusCard, type BudgetChipData } from "@/components/budget-status-card";
+import type {
+  BudgetPace,
+  BudgetStatus,
+  MonthlyTargetsData,
+  SavingsTargetStatus,
+} from "@/lib/budgets";
+import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
+import { PaceHero } from "@/components/dashboard/pace-hero";
+import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
+import { OnboardingPath } from "@/components/dashboard/onboarding-path";
+import { SyncFreshnessPill } from "@/components/dashboard/sync-freshness-pill";
+import { TrendMiniChart } from "@/components/dashboard/trend-mini-chart";
+import { TopMerchantsCard } from "@/components/dashboard/top-merchants-card";
+import {
+  UpcomingChargesCard,
+  type UpcomingCharge,
+} from "@/components/dashboard/upcoming-charges-card";
 
 const HEBREW_MONTHS = [
   "ינואר",
@@ -43,61 +56,123 @@ const HEBREW_MONTHS = [
   "דצמבר",
 ];
 
-const BANK_LABELS: Record<string, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "ויזה כאל",
-};
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("he-IL", {
-    style: "currency",
-    currency: "ILS",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
 }
 
-type UpcomingCharge = {
-  id: string;
-  merchant: string;
-  expectedAmount: number;
-  cadence: "monthly" | "quarterly" | "annual";
-  nextExpectedDate: string;
+type BudgetsSummaryResponse = {
+  budgets: BudgetStatus[];
+  monthlyTargets: MonthlyTargetsData;
+  savingsTarget: SavingsTargetStatus | null;
+  expenseTargetPace: BudgetPace | null;
+};
+
+const EMPTY_BUDGETS_SUMMARY: BudgetsSummaryResponse = {
+  budgets: [],
+  monthlyTargets: { expenseTarget: null, savingsTarget: null },
+  savingsTarget: null,
+  expenseTargetPace: null,
 };
 
 type DashboardData = {
   summary: MonthlySummary | null;
-  spending: CategorySpending[];
+  spending: CategorySpendingNode[];
   balances: AccountBalance[];
   recent: RecentTransaction[];
   lastSyncRuns: SyncRunSummary[];
   upcomingCharges: UpcomingCharge[];
   upcomingTotal: number;
+  goals: GoalProgressCardData[];
+  goalsSurplus: number;
+  budgetsSummary: BudgetsSummaryResponse;
+  attention: AttentionCounts | null;
+  topMerchants: TopMerchant[];
+  trend: TrendsMonthPoint[];
+  /** Null when the credentials fetch failed. Only existence is read (#264). */
+  credentialCount: number | null;
 };
 
-async function fetchDashboardData(year: number, month: number): Promise<DashboardData> {
-  const [summaryRes, spendingRes, balancesRes, recentRes, syncRunsRes, upcomingRes] =
-    await Promise.all([
-      fetch(`/api/analytics/monthly?year=${year}&month=${month}`),
-      fetch(`/api/analytics/spending-by-category?year=${year}&month=${month}`),
-      fetch(`/api/analytics/balances`),
-      fetch(`/api/analytics/recent?limit=15`),
-      fetch(`/api/sync-runs`),
-      fetch(`/api/recurring-upcoming`),
-    ]);
+const EMPTY_DASHBOARD_DATA: DashboardData = {
+  summary: null,
+  spending: [],
+  balances: [],
+  recent: [],
+  lastSyncRuns: [],
+  upcomingCharges: [],
+  upcomingTotal: 0,
+  goals: [],
+  goalsSurplus: 0,
+  budgetsSummary: EMPTY_BUDGETS_SUMMARY,
+  attention: null,
+  topMerchants: [],
+  trend: [],
+  credentialCount: null,
+};
 
-  const [summary, spending, balances, recent, lastSyncRuns, upcomingData] = await Promise.all([
+type GoalsResponse = {
+  goals: GoalProgressCardData[];
+  surplus: number;
+};
+
+const EMPTY_GOALS_RESPONSE: GoalsResponse = { goals: [], surplus: 0 };
+
+async function fetchDashboardData(year: number, month: number): Promise<DashboardData> {
+  const [
+    summaryRes,
+    spendingRes,
+    balancesRes,
+    recentRes,
+    syncRunsRes,
+    upcomingRes,
+    goalsRes,
+    budgetsSummaryRes,
+    attentionRes,
+    topMerchantsRes,
+    trendRes,
+    credentialsRes,
+  ] = await Promise.all([
+    fetch(`/api/analytics/monthly?year=${year}&month=${month}`),
+    fetch(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
+    fetch(`/api/analytics/balances`),
+    // 8, not 15: the A′ layout puts the recent list in a half-width column
+    // beside Upcoming, and a 15-row column dwarfs it. "צפה בהכל" carries the rest.
+    fetch(`/api/analytics/recent?limit=8`),
+    fetch(`/api/sync-runs`),
+    fetch(`/api/recurring-upcoming`),
+    fetch(`/api/goals`),
+    fetch(`/api/budgets-summary?year=${year}&month=${month}`),
+    fetch(`/api/attention-counts`),
+    fetch(`/api/analytics/top-merchants?year=${year}&month=${month}`),
+    fetch(`/api/reports/trends?range=12`),
+    fetch(`/api/credentials`),
+  ]);
+
+  const [
+    summary,
+    spending,
+    balances,
+    recent,
+    lastSyncRuns,
+    upcomingData,
+    goalsData,
+    budgetsSummary,
+    attention,
+    topMerchants,
+    trendReport,
+    credentials,
+  ] = await Promise.all([
     summaryRes.ok ? summaryRes.json() : null,
     spendingRes.ok ? spendingRes.json() : [],
     balancesRes.ok ? balancesRes.json() : [],
     recentRes.ok ? recentRes.json() : [],
     syncRunsRes.ok ? syncRunsRes.json() : [],
     upcomingRes.ok ? upcomingRes.json() : { upcoming: [], total: 0 },
+    goalsRes.ok ? (goalsRes.json() as Promise<GoalsResponse>) : EMPTY_GOALS_RESPONSE,
+    budgetsSummaryRes.ok ? budgetsSummaryRes.json() : EMPTY_BUDGETS_SUMMARY,
+    attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
+    topMerchantsRes.ok ? topMerchantsRes.json() : [],
+    trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
+    credentialsRes.ok ? (credentialsRes.json() as Promise<{ bankType: string }[]>) : null,
   ]);
 
   return {
@@ -108,127 +183,42 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     lastSyncRuns,
     upcomingCharges: upcomingData.upcoming ?? [],
     upcomingTotal: upcomingData.total ?? 0,
+    goals: goalsData.goals ?? [],
+    goalsSurplus: goalsData.surplus ?? 0,
+    budgetsSummary,
+    attention,
+    topMerchants,
+    trend: trendReport?.months ?? [],
+    // A credential for a retired institution cannot sync, so it is not "connected".
+    credentialCount: credentials?.filter((c) => isBankType(c.bankType)).length ?? null,
   };
 }
 
-// ── Hebrew cadence labels ─────────────────────────────────────────────────────
-
-const CADENCE_LABELS: Record<UpcomingCharge["cadence"], string> = {
-  monthly: "חודשי",
-  quarterly: "רבעוני",
-  annual: "שנתי",
-};
-
-// ── Upcoming charges card ─────────────────────────────────────────────────────
-// Dates formatted client-side to avoid hydration mismatch (CLAUDE.md rule)
-
-function formatUpcomingDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Intl.DateTimeFormat("he-IL", {
-    day: "2-digit",
-    month: "2-digit",
-  }).format(new Date(year, month - 1, day));
+// Dates formatted client-side to avoid hydration mismatch (CLAUDE.md rule).
+//
+// Not the upcoming-charges card's formatter: the balances card wants an
+// unpadded "day.month" ("9.8"), not Intl's 2-digit form.
+function formatDebitDateHint(isoDate: string): string {
+  const [, month, day] = isoDate.split("-").map(Number);
+  return `${day}.${month}`;
 }
 
-function UpcomingChargesCard({ charges, total }: { charges: UpcomingCharge[]; total: number }) {
-  const [expanded, setExpanded] = React.useState(false);
-
+function KpiTile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Repeat className="h-4 w-4 text-emerald-600" strokeWidth={1.5} />
-            <CardTitle className="text-base font-semibold">חיובים קרובים</CardTitle>
-          </div>
-          {charges.length > 0 && (
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground text-xs">7 ימים הקרובים</span>
-              <Amount
-                amount={total}
-                currency="ILS"
-                colorize={false}
-                className="text-sm font-semibold tabular-nums"
-              />
-            </div>
-          )}
-        </div>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-muted-foreground text-sm font-medium">{label}</CardTitle>
       </CardHeader>
-      <CardContent>
-        {charges.length === 0 ? (
-          <p className="text-muted-foreground text-sm">אין חיובים חוזרים צפויים בשבוע הקרוב</p>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-sm">
-                {charges.length} חיוב{charges.length !== 1 ? "ים" : ""} צפוי
-                {charges.length !== 1 ? "ים" : ""}
-              </span>
-              <button
-                onClick={() => setExpanded((e) => !e)}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs"
-                aria-expanded={expanded}
-              >
-                {expanded ? (
-                  <>
-                    הסתר
-                    <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  </>
-                ) : (
-                  <>
-                    הצג פירוט
-                    <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  </>
-                )}
-              </button>
-            </div>
-            {expanded && (
-              <div className="divide-y rounded-md border">
-                {charges.map((charge) => (
-                  <div key={charge.id} className="flex items-center justify-between px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{charge.merchant}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {CADENCE_LABELS[charge.cadence]} &middot;{" "}
-                        {formatUpcomingDate(charge.nextExpectedDate)}
-                      </p>
-                    </div>
-                    <Amount
-                      amount={charge.expectedAmount}
-                      currency="ILS"
-                      colorize={false}
-                      className="text-sm tabular-nums"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
+      <CardContent>{children}</CardContent>
     </Card>
   );
 }
 
-export function DashboardPanel({
-  categories: _categories,
-  pendingReconCount = 0,
-}: {
-  categories: Category[];
-  pendingReconCount?: number;
-}) {
+export function DashboardPanel({ categories }: { categories: Category[] }) {
   const now = new Date();
   const [year, setYear] = React.useState(now.getFullYear());
   const [month, setMonth] = React.useState(now.getMonth() + 1);
-  const [data, setData] = React.useState<DashboardData>({
-    summary: null,
-    spending: [],
-    balances: [],
-    recent: [],
-    lastSyncRuns: [],
-    upcomingCharges: [],
-    upcomingTotal: 0,
-  });
+  const [data, setData] = React.useState<DashboardData>(EMPTY_DASHBOARD_DATA);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -257,8 +247,45 @@ export function DashboardPanel({
     }
   }
 
-  const { summary, spending, balances, recent, lastSyncRuns, upcomingCharges, upcomingTotal } =
-    data;
+  const {
+    summary,
+    spending,
+    balances,
+    recent,
+    lastSyncRuns,
+    upcomingCharges,
+    upcomingTotal,
+    goals,
+    goalsSurplus,
+    budgetsSummary,
+    attention,
+    topMerchants,
+    trend,
+    credentialCount,
+  } = data;
+
+  // Budgets only ever attach to expense-type categories (src/lib/budgets
+  // enforces this at write time), so this lookup only ever needs to resolve
+  // an expense category's display name/color for the chip row.
+  const categoriesById = React.useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
+  const budgetChips: BudgetChipData[] = React.useMemo(
+    () =>
+      budgetsSummary.budgets.map(({ budget, pace }) => {
+        const category = categoriesById.get(budget.categoryId);
+        return {
+          id: budget.id,
+          categoryName: category?.name ?? "—",
+          categoryColor: category?.color ?? "#9ca3af",
+          verdict: pace.verdict,
+          spent: pace.spent,
+          limit: pace.limit,
+        };
+      }),
+    [budgetsSummary.budgets, categoriesById],
+  );
 
   // A brand-new account returns a zeroed summary object (not null), so checking
   // `summary === null` alone never fires. Treat an all-zero summary as empty too;
@@ -275,58 +302,67 @@ export function DashboardPanel({
     recent.length === 0 &&
     upcomingCharges.length === 0;
 
+  // Balances only appear once a sync has landed, so they cover the bank whose
+  // latest run errored after an earlier success (the runs list is last-per-bank).
+  const onboardingFacts =
+    credentialCount === null || attention === null
+      ? null
+      : {
+          hasCredential: credentialCount > 0,
+          hasSuccessfulSync:
+            lastSyncRuns.some((run) => run.status === "success") || balances.length > 0,
+          uncategorizedCount: attention.uncategorized,
+        };
+
   return (
     <div className="space-y-6">
-      {/* Month navigation */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">לוח בקרה</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={nextMonth} aria-label="חודש הבא">
-            <ChevronRight className="size-4" />
-          </Button>
-          <span className="min-w-32 text-center text-sm font-medium">
-            {HEBREW_MONTHS[month - 1]} {year}
-          </span>
-          <Button variant="outline" size="icon" onClick={prevMonth} aria-label="חודש קודם">
-            <ChevronLeft className="size-4" />
-          </Button>
+      {/*
+       * .stagger is scoped to this month-nav block only — it doesn't depend on
+       * `loading`, so this wrapper's children never remount on the month-strip
+       * refetch below. (The sync freshness pill lives *inside* the month-nav
+       * child, so it doesn't occupy a stagger position of its own.) The data
+       * slots past this point DO remount every refetch (the loading ternary
+       * swaps their JSX), so they stay unanimated (#202).
+       */}
+      <div className="stagger space-y-6">
+        {/* Header — month navigation + sync-freshness pill */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold tracking-tight">לוח בקרה</h2>
+          <div className="flex items-center gap-3">
+            <SyncFreshnessPill runs={lastSyncRuns} />
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={nextMonth} aria-label="חודש הבא">
+                <ChevronRight className="size-4" />
+              </Button>
+              <span className="min-w-32 text-center text-sm font-medium">
+                {HEBREW_MONTHS[month - 1]} {year}
+              </span>
+              <Button variant="outline" size="icon" onClick={prevMonth} aria-label="חודש קודם">
+                <ChevronLeft className="size-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Reconciliation pending strip */}
-      {pendingReconCount > 0 && (
-        <Link
-          href="/reconciliation"
-          className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
-        >
-          <Inbox className="h-4 w-4 shrink-0" strokeWidth={1.5} />
-          <span>{pendingReconCount} התאמות ממתינות לאישור</span>
-          <span className="mr-auto text-xs text-amber-600">לחץ לאישור &#x2190;</span>
-        </Link>
-      )}
-
-      {/* Last sync strip */}
-      {lastSyncRuns.length > 0 && <LastSyncStrip runs={lastSyncRuns} />}
+      {!loading && <OnboardingPath facts={onboardingFacts} />}
 
       {loading ? (
         <div className="space-y-6">
-          {/* Summary cards skeleton */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={`sk-summary-${i}`}>
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-24" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-32" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {/* Income / Expenses skeleton */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <Card key={`sk-ie-${i}`}>
+          {/* Pace hero skeleton */}
+          <Card>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-4 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-8 w-40" />
+              <Skeleton className="h-3 w-full" />
+            </CardContent>
+          </Card>
+          {/* KPI band skeleton */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={`sk-kpi-${i}`}>
                 <CardHeader className="pb-2">
                   <Skeleton className="h-4 w-20" />
                 </CardHeader>
@@ -336,7 +372,7 @@ export function DashboardPanel({
               </Card>
             ))}
           </div>
-          {/* Chart skeleton */}
+          {/* Breakdown skeleton */}
           <Card>
             <CardHeader>
               <Skeleton className="h-5 w-40" />
@@ -368,91 +404,102 @@ export function DashboardPanel({
         </Card>
       ) : (
         <div className="space-y-6 transition-opacity duration-150">
-          {/* Savings summary — 3 cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-muted-foreground text-sm font-medium">
-                  חיסכון נטו
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p
-                  className={`text-2xl font-bold ${
-                    summary && summary.netSavings >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {summary ? formatCurrency(summary.netSavings) : "—"}
-                </p>
-              </CardContent>
-            </Card>
+          {/* ── Monthly band — everything below is scoped to the month strip ── */}
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-muted-foreground text-sm font-medium">
-                  אחוז חיסכון
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p
-                  className={`text-2xl font-bold ${
-                    summary && summary.savingsRate >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {summary ? formatPercent(summary.savingsRate) : "—"}
-                </p>
-                {summary && (
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className="h-full rounded-full bg-emerald-500 transition-all"
-                      style={{ width: `${Math.min(Math.max(summary.savingsRate, 0), 100)}%` }}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          <PaceHero pace={budgetsSummary.expenseTargetPace} />
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-muted-foreground text-sm font-medium">הושקע</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-blue-600">
-                  {summary ? formatCurrency(summary.investmentTotal) : "—"}
-                </p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KpiTile label="הכנסות">
+              {summary ? (
+                <Amount amount={summary.income} fractionDigits={0} className="text-2xl font-bold" />
+              ) : (
+                <p className="text-2xl font-bold">—</p>
+              )}
+            </KpiTile>
+
+            <KpiTile label="הוצאות">
+              {summary ? (
+                // summary.expenses is a stored positive magnitude (analytics sums
+                // Math.abs), so sign-driven colorize would read it as positive money
+                // and go emerald. Expenses are money-out: force the --neg token.
+                <Amount
+                  amount={summary.expenses}
+                  fractionDigits={0}
+                  colorize={false}
+                  className="text-neg text-2xl font-bold"
+                />
+              ) : (
+                <p className="text-2xl font-bold">—</p>
+              )}
+            </KpiTile>
+
+            <KpiTile label="חיסכון נטו">
+              {summary ? (
+                <Amount
+                  amount={summary.netSavings}
+                  fractionDigits={0}
+                  className="text-2xl font-bold"
+                />
+              ) : (
+                <p className="text-2xl font-bold">—</p>
+              )}
+            </KpiTile>
+
+            <KpiTile label="אחוז חיסכון">
+              <p
+                className={`text-2xl font-bold ${
+                  summary && summary.savingsRate >= 0 ? "text-pos" : "text-neg"
+                }`}
+              >
+                {summary ? formatPercent(summary.savingsRate) : "—"}
+              </p>
+              {summary && (
+                <div className="bg-muted mt-2 h-2 overflow-hidden rounded-full">
+                  <div
+                    className="bg-bar-strong h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(Math.max(summary.savingsRate, 0), 100)}%` }}
+                  />
+                </div>
+              )}
+            </KpiTile>
           </div>
 
-          {/* Income / Expenses — 2 cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-muted-foreground text-sm font-medium">הכנסות</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-emerald-600">
-                  {summary ? formatCurrency(summary.income) : "—"}
-                </p>
-              </CardContent>
-            </Card>
+          <AttentionCounters counts={attention} />
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-muted-foreground text-sm font-medium">הוצאות</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-red-600">
-                  {summary ? formatCurrency(summary.expenses) : "—"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Spending breakdown — group-first with drill-down (BGR5 #162). Sits
+              directly above budgets so the two monthly spend views are adjacent
+              (#108 gate adjudication). */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">הוצאות לפי קטגוריה</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SpendingBreakdown nodes={spending} />
+            </CardContent>
+          </Card>
 
-          {/* Upcoming charges */}
-          <UpcomingChargesCard charges={upcomingCharges} total={upcomingTotal} />
+          {/* Budgets — pace chips + targets headline (BGR9 #166). #205 dropped
+              the spend-vs-ceiling headline from this card, giving the pace
+              hero sole ownership of that figure; #234 consciously supersedes
+              that and restores a plain actual-vs-target expense line here,
+              distinct from the hero's pace verdict (see TargetsHeadline in
+              budget-status-card.tsx). */}
+          <BudgetStatusCard
+            budgets={budgetChips}
+            targetsHeadline={{
+              expenseTarget: budgetsSummary.monthlyTargets.expenseTarget,
+              expenseActual: summary?.expenses ?? 0,
+              savingsTarget: budgetsSummary.savingsTarget,
+            }}
+          />
 
-          {/* Account balances */}
+          {/* ── Long-horizon band — month-independent widgets: goals always
+                track today's real month (CONTEXT.md "savings goal") and
+                balances are current-state, so the month strip doesn't scope
+                either of them. ── */}
+
+          <GoalsProgressCard goals={goals} surplus={goalsSurplus} />
+
           {balances.length > 0 && (
             <div>
               <h3 className="mb-3 text-base font-semibold">יתרות חשבון</h3>
@@ -468,18 +515,25 @@ export function DashboardPanel({
                           </p>
                         </div>
                         <div className="text-left">
-                          <Badge variant="outline" className="mb-1 text-xs">
-                            {BANK_LABELS[acc.bankType] ?? acc.bankType}
-                          </Badge>
-                          <p
-                            className={`text-sm font-semibold ${
-                              acc.balance !== null && acc.balance >= 0
-                                ? "text-emerald-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {acc.balance !== null ? formatCurrency(acc.balance) : "—"}
-                          </p>
+                          <BankBadge
+                            bankType={acc.bankType}
+                            variant="outline"
+                            className="mb-1 text-xs"
+                          />
+                          {acc.balance !== null ? (
+                            <Amount
+                              amount={acc.balance}
+                              fractionDigits={0}
+                              className="text-sm font-semibold"
+                            />
+                          ) : (
+                            <p className="text-sm font-semibold">—</p>
+                          )}
+                          {acc.nextDebitDate && acc.balance !== 0 && (
+                            <p className="text-muted-foreground mt-0.5 text-xs">
+                              חיוב קרוב · {formatDebitDateHint(acc.nextDebitDate)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -489,72 +543,75 @@ export function DashboardPanel({
             </div>
           )}
 
-          {/* Spending by category chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">הוצאות לפי קטגוריה</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SpendingChart spending={spending} />
-            </CardContent>
-          </Card>
-
-          {/* Recent transactions */}
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold">עסקאות אחרונות</h3>
-              <Link href="/transactions" className="text-muted-foreground text-sm hover:underline">
-                צפה בהכל
-              </Link>
+          {/* Past | future activity, side by side */}
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base font-semibold">עסקאות אחרונות</h3>
+                <Link
+                  href="/transactions"
+                  className="text-muted-foreground text-sm hover:underline"
+                >
+                  צפה בהכל
+                </Link>
+              </div>
+              <Card>
+                <CardContent className="p-0">
+                  {recent.length === 0 ? (
+                    <p className="text-muted-foreground p-4 text-sm">אין עסקאות להצגה</p>
+                  ) : (
+                    <div className="divide-y">
+                      {recent.map((tx) => (
+                        <div
+                          key={tx.id}
+                          className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {tx.customDescription ?? tx.description}
+                            </p>
+                            <p className="text-muted-foreground text-xs">{tx.date}</p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+                            {tx.categoryName && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                                style={
+                                  tx.categoryColor
+                                    ? {
+                                        borderColor: tx.categoryColor,
+                                        color: tx.categoryColor,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {tx.categoryName}
+                              </Badge>
+                            )}
+                            <Amount
+                              amount={tx.chargedAmount}
+                              fractionDigits={0}
+                              className="text-sm font-semibold"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-            <Card>
-              <CardContent className="p-0">
-                {recent.length === 0 ? (
-                  <p className="text-muted-foreground p-4 text-sm">אין עסקאות להצגה</p>
-                ) : (
-                  <div className="divide-y">
-                    {recent.map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between gap-3 px-4 py-3"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {tx.customDescription ?? tx.description}
-                          </p>
-                          <p className="text-muted-foreground text-xs">{tx.date}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {tx.categoryName && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs"
-                              style={
-                                tx.categoryColor
-                                  ? {
-                                      borderColor: tx.categoryColor,
-                                      color: tx.categoryColor,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {tx.categoryName}
-                            </Badge>
-                          )}
-                          <span
-                            className={`text-sm font-semibold tabular-nums ${
-                              tx.chargedAmount >= 0 ? "text-emerald-600" : "text-red-600"
-                            }`}
-                          >
-                            {formatCurrency(tx.chargedAmount)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <div>
+              <h3 className="mb-3 text-base font-semibold">צפוי בהמשך</h3>
+              <UpcomingChargesCard charges={upcomingCharges} total={upcomingTotal} />
+            </div>
+          </div>
+
+          {/* Bottom band — secondary, backward-looking (full trend on דוחות) */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <TrendMiniChart months={trend} />
+            <TopMerchantsCard merchants={topMerchants} />
           </div>
         </div>
       )}

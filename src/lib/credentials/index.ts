@@ -2,12 +2,17 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bankCredentials } from "@/db/schema";
 import { encrypt, decrypt } from "@/lib/crypto";
-import { credentialSchemas } from "./schemas";
+import type { BankType } from "@/lib/bank-registry";
+import { storedCredentialSchema } from "./schemas";
+import { CredentialNotFoundError } from "./errors";
 
-type BankType = "discount" | "max" | "visaCal";
-
-function validateCredentials(bankType: BankType, raw: Record<string, string>): void {
-  credentialSchemas[bankType].parse(raw);
+// Returns the parsed value, which drops undeclared keys: only that is ever
+// encrypted, since the whole blob is handed to the scraper at sync time.
+function validateCredentials(
+  bankType: string,
+  raw: Record<string, string>,
+): Record<string, string> {
+  return storedCredentialSchema(bankType).parse(raw);
 }
 
 export async function addCredential(
@@ -15,8 +20,8 @@ export async function addCredential(
   displayName: string,
   rawCredentials: Record<string, string>,
 ): Promise<string> {
-  validateCredentials(bankType, rawCredentials);
-  const { encrypted, iv, authTag } = encrypt(JSON.stringify(rawCredentials));
+  const credentials = validateCredentials(bankType, rawCredentials);
+  const { encrypted, iv, authTag } = encrypt(JSON.stringify(credentials));
   const [row] = await db
     .insert(bankCredentials)
     .values({ bankType, displayName, encryptedCredentials: encrypted, iv, authTag })
@@ -33,13 +38,26 @@ export async function listCredentials(): Promise<
   });
 }
 
+/**
+ * The stored institution id alone, without decrypting the blob, so a caller can
+ * refuse a row naming an unregistered institution before any secret is in memory.
+ */
+export async function getCredentialBankType(id: string): Promise<string> {
+  const row = await db.query.bankCredentials.findFirst({
+    where: eq(bankCredentials.id, id),
+    columns: { bankType: true },
+  });
+  if (!row) throw new CredentialNotFoundError(id);
+  return row.bankType;
+}
+
 export async function getDecryptedCredentials(
   id: string,
 ): Promise<{ bankType: string; credentials: Record<string, string> }> {
   const row = await db.query.bankCredentials.findFirst({
     where: eq(bankCredentials.id, id),
   });
-  if (!row) throw new Error(`Credential not found: ${id}`);
+  if (!row) throw new CredentialNotFoundError(id);
   const json = decrypt({ encrypted: row.encryptedCredentials, iv: row.iv, authTag: row.authTag });
   return { bankType: row.bankType, credentials: JSON.parse(json) as Record<string, string> };
 }
@@ -57,9 +75,9 @@ export async function updateCredential(
       where: eq(bankCredentials.id, id),
       columns: { bankType: true },
     });
-    if (!row) throw new Error(`Credential not found: ${id}`);
-    validateCredentials(row.bankType, update.rawCredentials);
-    const { encrypted, iv, authTag } = encrypt(JSON.stringify(update.rawCredentials));
+    if (!row) throw new CredentialNotFoundError(id);
+    const credentials = validateCredentials(row.bankType, update.rawCredentials);
+    const { encrypted, iv, authTag } = encrypt(JSON.stringify(credentials));
     values.encryptedCredentials = encrypted;
     values.iv = iv;
     values.authTag = authTag;

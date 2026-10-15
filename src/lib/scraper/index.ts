@@ -7,6 +7,7 @@ import { createOtpBridge } from "./otp";
 import { mapAccount } from "./mapper";
 import type { SyncEvent, OtpHandler } from "./types";
 import { getEnv } from "@/lib/env";
+import type { BankType } from "@/lib/bank-registry";
 
 const SCREENSHOT_DIR = "/tmp/scraper-failures";
 mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -18,6 +19,20 @@ const BANK_COMPANY_MAP = {
   discount: CompanyTypes.discount,
   max: CompanyTypes.max,
   visaCal: CompanyTypes.visaCal,
+  hapoalim: CompanyTypes.hapoalim,
+  leumi: CompanyTypes.leumi,
+  mizrahi: CompanyTypes.mizrahi,
+  mercantile: CompanyTypes.mercantile,
+  beinleumi: CompanyTypes.beinleumi,
+  otsarHahayal: CompanyTypes.otsarHahayal,
+  massad: CompanyTypes.massad,
+  pagi: CompanyTypes.pagi,
+  yahav: CompanyTypes.yahav,
+  union: CompanyTypes.union,
+  isracard: CompanyTypes.isracard,
+  amex: CompanyTypes.amex,
+  beyahadBishvilha: CompanyTypes.beyahadBishvilha,
+  behatsdaa: CompanyTypes.behatsdaa,
 } as const;
 
 export function getSyncStartDate(isFirstSync: boolean): Date {
@@ -28,7 +43,7 @@ export function getSyncStartDate(isFirstSync: boolean): Date {
 
 export async function* syncBank(
   credentials: Record<string, string>,
-  bankType: "discount" | "max" | "visaCal",
+  bankType: BankType,
   options: { startDate: Date; isFirstSync: boolean },
 ): AsyncGenerator<SyncEvent> {
   const companyId = BANK_COMPANY_MAP[bankType];

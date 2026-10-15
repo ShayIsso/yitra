@@ -1,17 +1,17 @@
 import { listCredentials, getDecryptedCredentials } from "@/lib/credentials";
 import { syncBank, getSyncStartDate } from "@/lib/scraper";
+import { bankTypeSchema } from "@/lib/bank-registry";
 import type { SyncEvent, OtpHandler } from "@/lib/scraper";
 import { importScrapedAccounts } from "@/lib/transactions";
-import {
-  detectP1Settlement,
-  applyReconciliation,
-  detectP2Mirror,
-  applyP2Mirror,
-  detectP3InterAccount,
-  applyP3InterAccount,
-  drizzleReconciliationStore,
-} from "@/lib/reconciliation";
+import { drizzleReconciliationStore, drizzleSuspectedTransferRouter } from "@/lib/reconciliation";
 import { runDetection, drizzleRecurringStore } from "@/lib/recurring-detection";
+import {
+  createAiCategorizationStore,
+  createConfiguredProvider,
+  isProviderConfigured,
+  DEFAULT_PACING,
+} from "@/lib/ai-categorization";
+import { createMerchantMemoryStore } from "@/lib/merchant-memory";
 import { db } from "@/db";
 import { bankAccounts } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -22,16 +22,44 @@ import {
   syncRunStatusForEvent,
   drizzleSyncRunStore,
 } from "./runs";
+import { runAiSyncStep, type AiStepDeps } from "./ai-step";
+import { startCategorizationBackfill, type BackfillStart } from "./backfill";
+import { runPostImportPipeline, type PostSyncEvent } from "./post-import";
+import { createSyncClaim, acquireAndRelease, type ClaimedRun } from "./claim";
 
 // Module-level OTP handler — set during active sync, used by POST /api/sync/otp
 let activeOtpHandler: OtpHandler | null = null;
 
 export function submitOtp(code: string): boolean {
+  // No sync in progress — this specifically catches a stale handler left
+  // bridged to an abandoned run's promise (e.g. an aborted SSE connection):
+  // without this check, resolving it would silently go nowhere instead of
+  // reporting "no active request" to the caller.
+  if (!syncClaim.isHeld()) return false;
   if (!activeOtpHandler) return false;
   activeOtpHandler.resolveOtp(code);
   activeOtpHandler = null;
   return true;
 }
+
+// One in-progress sync at a time, across every entry point that can launch
+// one — the SSE route and the scheduler (#246) — and never alongside a
+// categorization backfill (#263), which writes the same uncategorized rows.
+// Without this, two syncs could both set `activeOtpHandler` above and race to
+// resolve each other's OTP.
+//
+// Keyed off `globalThis`, not a bare module-level `const` — Next.js bundles
+// the instrumentation hook (src/instrumentation.ts → the scheduler) into a
+// separate chunk from the App Router route handlers, so `createSyncClaim()`
+// called at plain module scope would run once per bundle and produce two
+// independent claims that can never see each other, silently reopening the
+// exact scheduler/manual overlap this guard exists to close. `globalThis` is
+// shared across every bundle in the process, so this is a true singleton.
+const GLOBAL_CLAIM_KEY = "__yitraSyncClaim" as const;
+const globalForSyncClaim = globalThis as typeof globalThis & {
+  [GLOBAL_CLAIM_KEY]?: ReturnType<typeof createSyncClaim>;
+};
+const syncClaim = (globalForSyncClaim[GLOBAL_CLAIM_KEY] ??= createSyncClaim());
 
 export type SyncOptions = {
   /** Which surface triggered this sync — recorded in sync_runs.triggered_by. Defaults to "manual". */
@@ -45,11 +73,26 @@ export type SyncOptions = {
   otpMode?: "interactive" | "skip";
 };
 
-export type SyncSummaryEvent =
-  | (SyncEvent & { _credentialId?: string })
-  | { type: "reconciliation_summary"; autoApplied: number; queued: number };
+export type SyncSummaryEvent = (SyncEvent & { _credentialId?: string }) | PostSyncEvent;
 
-export async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummaryEvent> {
+// Real inter-batch pacing wiring: the pure DEFAULT_PACING policy decides the
+// delay; the timer lives here (setTimeout), out of the pure run/policy code.
+const syncBatchSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+function liveAiStepDeps(): AiStepDeps {
+  return {
+    createProvider: createConfiguredProvider,
+    aiStore: createAiCategorizationStore(),
+    memoryStore: createMerchantMemoryStore(),
+    transferRouter: drizzleSuspectedTransferRouter,
+    pacing: { policy: DEFAULT_PACING, sleep: syncBatchSleep },
+  };
+}
+
+// Not exported: every real caller must go through the claim (route.ts and
+// scheduler/index.ts both use `syncAllBanksClaimed` below). Exporting this
+// directly would reopen the exact bypass #246 exists to close.
+async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummaryEvent> {
   const triggeredBy = opts.triggeredBy ?? "manual";
   const otpMode = opts.otpMode ?? "interactive";
 
@@ -58,7 +101,22 @@ export async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<Sync
   let total = 0;
 
   for (const cred of credentials) {
-    const { bankType, credentials: rawCreds } = await getDecryptedCredentials(cred.id);
+    // The stored id is unconstrained text (ADR-0013 §4); one the registry no
+    // longer knows has no scraper mapping, so it is reported, not attempted —
+    // and checked before decryption so its unusable secrets never enter memory.
+    const institution = bankTypeSchema.safeParse(cred.bankType);
+    if (!institution.success) {
+      yield {
+        type: "bank_error",
+        bank: cred.bankType,
+        error: institution.error.issues[0].message,
+        hasScreenshot: false,
+        _credentialId: cred.id,
+      };
+      continue;
+    }
+    const bankType = institution.data;
+    const { credentials: rawCreds } = await getDecryptedCredentials(cred.id);
 
     const existingAccount = await db.query.bankAccounts.findFirst({
       where: eq(bankAccounts.credentialId, cred.id),
@@ -69,14 +127,11 @@ export async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<Sync
 
     // Record the start of this per-bank sync run (optimistic: status=success)
     const runId = await startSyncRun(drizzleSyncRunStore, {
-      bank: bankType as "discount" | "max" | "visaCal",
+      bank: bankType,
       triggeredBy,
     }).catch(() => null); // Never let sync_runs write abort the sync loop
 
-    const generator = syncBank(rawCreds, bankType as "discount" | "max" | "visaCal", {
-      startDate,
-      isFirstSync,
-    });
+    const generator = syncBank(rawCreds, bankType, { startDate, isFirstSync });
 
     let bankImported = 0;
     // Terminal outcome flag: set true once this run's sync_runs row has been
@@ -88,7 +143,7 @@ export async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<Sync
     // by the events below. The try/catch is a safety net for GENUINE throws
     // (e.g. importScrapedAccounts hitting a DB error).
     //
-    // S2: scheduled runs call event.otpHandler.skip() above — which rejects the bridge
+    // Scheduled runs call event.otpHandler.skip() above — which rejects the bridge
     // promise with OTP_TIMEOUT. The scraper catches that and yields otp_timeout, which
     // syncRunStatusForEvent maps to otp_skipped below. No special fork needed here.
     try {
@@ -101,7 +156,6 @@ export async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<Sync
             event.otpHandler.skip();
             continue;
           }
-          // Interactive (manual) path — unchanged.
           activeOtpHandler = event.otpHandler;
           yield { type: "otp_required", bank: event.bank, otpHandler: event.otpHandler };
           continue;
@@ -170,40 +224,59 @@ export async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<Sync
           hasScreenshot: false,
         };
       }
+    } finally {
+      // `finally`, not a bare statement after the try/catch: a consumer
+      // walking away (SSE client disconnect) while suspended at the
+      // otp_required yield above unwinds via `.return()`, which skips any
+      // code after the try/catch entirely — only a `finally` still runs,
+      // and without it a live handler stays bridged to an abandoned
+      // promise that `submitOtp` could still resolve.
+      activeOtpHandler = null;
     }
-
-    activeOtpHandler = null;
   }
 
-  // P1: credit-card settlement lump detection
-  const recentTxns = await drizzleReconciliationStore.getRecentTransactions(90);
-  const p1Candidates = detectP1Settlement(recentTxns);
-  const p1Result = await applyReconciliation(p1Candidates, drizzleReconciliationStore);
+  yield* runPostImportPipeline({
+    reconciliationStore: drizzleReconciliationStore,
+    runRecurring: () => runDetection(drizzleRecurringStore),
+    runAiStep: runAiSyncStep,
+    ai: liveAiStepDeps(),
+    importSummary: { total, byBank: importedByBank },
+  });
+}
 
-  // P2: 1:1 mirror detection — re-fetch so P1's updates are visible
-  const recentTxnsAfterP1 = await drizzleReconciliationStore.getRecentTransactions(90);
-  const p2Candidates = detectP2Mirror(recentTxnsAfterP1);
-  const p2Result = await applyP2Mirror(p2Candidates, drizzleReconciliationStore);
+/**
+ * `syncAllBanks`, guarded by the process-lifetime claim: a second concurrent
+ * call while one is already running returns `null` instead of starting —
+ * the caller (the SSE route, the scheduler) must check for `null` and
+ * refuse rather than iterate. On success, `events`'s claim releases once
+ * iteration ends for any reason: completion, a genuine throw, or the
+ * consumer walking away early (SSE client disconnect; the scheduler's own
+ * abort path). The standalone `release` is there for a caller whose own
+ * cleanup path must guarantee release even if it never starts consuming
+ * `events` at all — see `acquireAndRelease`'s doc comment in `claim.ts`.
+ */
+export function syncAllBanksClaimed(opts: SyncOptions = {}): ClaimedRun<SyncSummaryEvent> | null {
+  return acquireAndRelease(syncClaim, () => syncAllBanks(opts));
+}
 
-  // P3: inter-account transfer detection — re-fetch so P2's updates are visible
-  const recentTxnsAfterP2 = await drizzleReconciliationStore.getRecentTransactions(90);
-  const p3Candidates = detectP3InterAccount(recentTxnsAfterP2);
-  const p3Result = await applyP3InterAccount(p3Candidates, drizzleReconciliationStore);
+export type {
+  BackfillStart,
+  BackfillRefusal,
+  BackfillResult,
+  BackfillStreamEvent,
+} from "./backfill";
+export type { AiSummary } from "./ai-step";
 
-  yield {
-    type: "reconciliation_summary",
-    autoApplied: p1Result.autoApplied + p2Result.autoApplied + p3Result.autoApplied,
-    queued: p1Result.queued + p2Result.queued + p3Result.queued,
-  };
-
-  // Recurring detection: runs after reconciliation so category-flipped transactions
-  // are already settled. Wrapped in try/catch so a detection failure never breaks
-  // sync completion — detection results surface on /subscriptions, not the SSE stream.
-  try {
-    await runDetection(drizzleRecurringStore);
-  } catch {
-    // Detection failure is non-fatal. The sync_complete event still fires below.
-  }
-
-  yield { type: "sync_complete", summary: { total, byBank: importedByBank } };
+/**
+ * The categorization backfill (#263) under the same claim `syncAllBanksClaimed`
+ * takes, and with the same AI-step deps a sync wires — which is why it lives
+ * here rather than beside its caller: the claim is this module's singleton.
+ */
+export function backfillCategorization(): Promise<BackfillStart> {
+  return startCategorizationBackfill({
+    claim: syncClaim,
+    isProviderConfigured,
+    runAiStep: runAiSyncStep,
+    ai: liveAiStepDeps(),
+  });
 }

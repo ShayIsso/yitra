@@ -1,52 +1,26 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { Loader2, CheckCircle2, XCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2, CheckCircle2, AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { BankBadge } from "@/components/bank-badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
+import { aiSummaryLines } from "@/components/ai-summary-lines";
+import { LiveBankStatus, OtpEntry, STATUS_TEXT } from "@/components/sync-bank-status";
+import { useSyncStream, type BankSyncState } from "@/components/sync-stream";
+import { takeFrames } from "@/lib/sse-frames";
+import { bankLabel, bankTrustOf } from "@/lib/bank-registry";
+import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
+import type { SyncRunSummary } from "@/lib/sync/runs";
 
-type BankSyncState = {
-  status:
-    | "idle"
-    | "initializing"
-    | "logging_in"
-    | "login_success"
-    | "scraping"
-    | "importing"
-    | "complete"
-    | "error"
-    | "otp_required"
-    | "otp_timeout";
-  error?: string;
-  hasScreenshot?: boolean;
-  screenshotFilename?: string;
-  transactionCount?: number;
-};
-
-type SyncSummary = {
-  total: number;
-  byBank: Record<string, number>;
-};
-
-// Client-side SSE event shape — otpHandler is stripped server-side before sending
-type ClientSyncEvent =
-  | { type: "progress"; bank: string; status: BankSyncState["status"] }
-  | { type: "otp_required"; bank: string }
-  | { type: "otp_timeout"; bank: string }
-  | { type: "bank_complete"; bank: string }
-  | {
-      type: "bank_error";
-      bank: string;
-      error: string;
-      hasScreenshot: boolean;
-      screenshotFilename?: string;
-    }
-  | { type: "reconciliation_summary"; autoApplied: number; queued: number }
-  | { type: "sync_complete"; summary: SyncSummary };
+export {
+  hasSyncComplete,
+  type BankSyncState,
+  type ClientSyncEvent,
+} from "@/components/sync-stream";
 
 type Bank = {
   id: string;
@@ -54,168 +28,97 @@ type Bank = {
   displayName: string;
 };
 
-const BANK_LABELS: Record<string, string> = {
-  discount: "דיסקונט",
-  max: "מקס",
-  visaCal: "Cal",
-};
+// ── Persisted-row precedence (#223) ──────────────────────────────────────────
 
-const STATUS_TEXT: Record<string, string> = {
-  initializing: "מאתחל...",
-  logging_in: "מתחבר...",
-  login_success: "התחברות הצליחה",
-  scraping: "מוריד תנועות...",
-  importing: "מייבא לבסיס נתונים...",
-  complete: "הושלם",
-  error: "שגיאה",
-  otp_required: "נדרש קוד אימות",
-  otp_timeout: "פג תוקף הקוד",
-};
+export type BankDisplay =
+  | { source: "live"; state: BankSyncState }
+  | { source: "persisted"; run: SyncRunSummary }
+  | { source: "none" };
 
-const SPINNING_STATUSES = new Set(["initializing", "logging_in", "scraping", "importing"]);
-
-function formatCountdown(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+/**
+ * Live SSE state always wins over the persisted `sync_runs` row — a sync
+ * that's in progress (or one that just finished this session) is strictly
+ * more current than the snapshot the page loaded with. The persisted row is
+ * only ever a fallback for a bank this tab hasn't heard from yet (a fresh
+ * page load, or a bank the current run hasn't reached). Precedence is
+ * decided here, once, rather than left to fall out of which branch happens
+ * to render first.
+ */
+export function resolveBankDisplay(
+  liveState: BankSyncState | undefined,
+  lastRun: SyncRunSummary | undefined,
+): BankDisplay {
+  if (liveState !== undefined) return { source: "live", state: liveState };
+  if (lastRun !== undefined) return { source: "persisted", run: lastRun };
+  return { source: "none" };
 }
 
-function SyncPanelInner({ banks }: { banks: Bank[] }) {
+/**
+ * Mirrors sync-freshness-pill.tsx's bucket wording (minutes/hours/days) so a
+ * persisted row here and the header pill never disagree on how "3 hours ago"
+ * reads. Not imported from there: the pill only exports its classifier
+ * (`classifySyncFreshness`), not this formatter, and #223's brief keeps that
+ * file read-only — duplicating one small clock-free formatter costs less
+ * than widening that file's surface for it. Takes `ageMs`, never a `Date`,
+ * so it can't reintroduce the `Date.now()`-in-render pattern that is bug
+ * #193.
+ */
+export function formatRelativeAge(ageMs: number): string {
+  const minutes = Math.floor(ageMs / (60 * 1000));
+  if (minutes < 1) return "לפני פחות מדקה";
+  if (minutes < 60) return `לפני ${minutes} דקות`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `לפני ${hours} שעות`;
+
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "אתמול";
+  return `לפני ${days} ימים`;
+}
+
+// ── SSE-over-fetch framing (#246 — EventSource can't read the 409 status) ───
+
+export { takeFrames };
+
+type SyncPanelProps = {
+  banks: Bank[];
+  lastRuns: SyncRunSummary[];
+  /**
+   * Institution ids with a recorded successful sync on this install. Omitted
+   * means no evidence, which can only keep an experimental caveat showing.
+   */
+  observedInstitutions?: readonly string[];
+};
+
+function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPanelProps) {
   const searchParams = useSearchParams();
-  // ?bank=<bankType> deep-link from LastSyncStrip — highlights the flagged bank
+  const router = useRouter();
+  // ?bank=<bankType> deep-link target — highlights the flagged bank card
   const highlightedBank = searchParams.get("bank");
-  const [bankStates, setBankStates] = useState<Record<string, BankSyncState>>({});
-  const [syncing, setSyncing] = useState(false);
-  const [summary, setSummary] = useState<SyncSummary | null>(null);
-  const [reconciliationToast, setReconciliationToast] = useState<{
-    autoApplied: number;
-    queued: number;
-  } | null>(null);
-  const [connectionError, setConnectionError] = useState(false);
-  const [otpCodes, setOtpCodes] = useState<Record<string, string>>({});
-  const [otpCountdowns, setOtpCountdowns] = useState<Record<string, number>>({});
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const countdownIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const lastRunByBank = useMemo(() => {
+    const map: Record<string, SyncRunSummary> = {};
+    for (const run of lastRuns) map[run.bank] = run;
+    return map;
+  }, [lastRuns]);
+  // Mounted-only clock seed — SSR and the hydration pass render the
+  // no-age form below; classification (and its `new Date()` reads) only
+  // runs once this is set, so a clock read never happens in the render
+  // path shared with SSR (bug #193's exact trap; same shape as
+  // sync-freshness-pill.tsx's `nowMs`).
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  const { state, start, setOtpDraft, submitOtp, dismissReconciliation } = useSyncStream({
+    // Re-reads the recorded runs on the server, so an experimental institution
+    // this run just synced loses its caveat. Live SSE state is never evidence.
+    onComplete: () => router.refresh(),
+  });
+  const { bankStates, syncing, summary, aiSummary, connectionError, reconciliation, refusal } =
+    state;
+  const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
 
   useEffect(() => {
-    return () => {
-      eventSourceRef.current?.close();
-      for (const interval of Object.values(countdownIntervalsRef.current)) {
-        clearInterval(interval);
-      }
-    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount flag, mirrors sync-freshness-pill.tsx's nowMs seed
+    setNowMs(Date.now());
   }, []);
-
-  function clearCountdown(bank: string) {
-    if (countdownIntervalsRef.current[bank]) {
-      clearInterval(countdownIntervalsRef.current[bank]);
-      delete countdownIntervalsRef.current[bank];
-    }
-  }
-
-  function startSync() {
-    eventSourceRef.current?.close();
-    for (const interval of Object.values(countdownIntervalsRef.current)) {
-      clearInterval(interval);
-    }
-    countdownIntervalsRef.current = {};
-
-    setBankStates({});
-    setSummary(null);
-    setReconciliationToast(null);
-    setConnectionError(false);
-    setOtpCodes({});
-    setOtpCountdowns({});
-    setSyncing(true);
-
-    const es = new EventSource("/api/sync");
-    eventSourceRef.current = es;
-
-    es.onmessage = (e: MessageEvent<string>) => {
-      const event = JSON.parse(e.data) as ClientSyncEvent;
-
-      if (event.type === "progress") {
-        setBankStates((prev) => ({
-          ...prev,
-          [event.bank]: { ...prev[event.bank], status: event.status },
-        }));
-      } else if (event.type === "otp_required") {
-        setBankStates((prev) => ({
-          ...prev,
-          [event.bank]: { ...prev[event.bank], status: "otp_required" },
-        }));
-        setOtpCountdowns((prev) => ({ ...prev, [event.bank]: 180 }));
-        const { bank } = event;
-        const interval = setInterval(() => {
-          setOtpCountdowns((prev) => {
-            const next = (prev[bank] ?? 1) - 1;
-            if (next <= 0) {
-              clearCountdown(bank);
-              return { ...prev, [bank]: 0 };
-            }
-            return { ...prev, [bank]: next };
-          });
-        }, 1000);
-        countdownIntervalsRef.current[bank] = interval;
-      } else if (event.type === "otp_timeout") {
-        clearCountdown(event.bank);
-        setBankStates((prev) => ({
-          ...prev,
-          [event.bank]: { ...prev[event.bank], status: "otp_timeout" },
-        }));
-      } else if (event.type === "bank_complete") {
-        setBankStates((prev) => ({
-          ...prev,
-          [event.bank]: { ...prev[event.bank], status: "complete" },
-        }));
-      } else if (event.type === "bank_error") {
-        setBankStates((prev) => ({
-          ...prev,
-          [event.bank]: {
-            status: "error",
-            error: event.error,
-            hasScreenshot: event.hasScreenshot,
-            screenshotFilename: event.screenshotFilename,
-          },
-        }));
-      } else if (event.type === "reconciliation_summary") {
-        if (event.autoApplied > 0 || event.queued > 0) {
-          setReconciliationToast({ autoApplied: event.autoApplied, queued: event.queued });
-        }
-      } else if (event.type === "sync_complete") {
-        setBankStates((prev) => {
-          const next = { ...prev };
-          for (const [bank, count] of Object.entries(event.summary.byBank)) {
-            if (next[bank]) {
-              next[bank] = { ...next[bank], transactionCount: count };
-            }
-          }
-          return next;
-        });
-        setSummary(event.summary);
-        setSyncing(false);
-        es.close();
-      }
-    };
-
-    es.onerror = () => {
-      es.close();
-      setSyncing(false);
-      setConnectionError(true);
-    };
-  }
-
-  async function submitOtp(bank: string) {
-    const code = otpCodes[bank];
-    if (!code?.trim()) return;
-    clearCountdown(bank);
-    setOtpCodes((prev) => ({ ...prev, [bank]: "" }));
-    await fetch("/api/sync/otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-  }
 
   if (banks.length === 0) {
     return (
@@ -228,7 +131,7 @@ function SyncPanelInner({ banks }: { banks: Bank[] }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button onClick={startSync} disabled={syncing}>
+        <Button onClick={() => void start()} disabled={syncing || state.starting}>
           {syncing ? (
             <>
               <Loader2 className="animate-spin" />
@@ -239,16 +142,17 @@ function SyncPanelInner({ banks }: { banks: Bank[] }) {
           )}
         </Button>
         {connectionError && <p className="text-destructive text-sm">שגיאת חיבור. נסה שוב.</p>}
+        {refusal && <p className="text-muted-foreground text-sm">{refusal}</p>}
       </div>
 
-      {!syncing && !summary && Object.keys(bankStates).length === 0 && (
+      {!syncing && !summary && Object.keys(bankStates).length === 0 && lastRuns.length === 0 && (
         <Card>
           <CardContent className="p-0">
             <EmptyState
               icon={RefreshCw}
               heading="עדיין לא בוצע סנכרון"
               explainer="הפעל סנכרון כדי להוריד את העסקאות האחרונות מחשבונות הבנק שלך."
-              cta={{ label: "סנכרן עכשיו", onClick: startSync }}
+              cta={{ label: "סנכרן עכשיו", onClick: () => void start() }}
             />
           </CardContent>
         </Card>
@@ -256,106 +160,97 @@ function SyncPanelInner({ banks }: { banks: Bank[] }) {
 
       <div className="space-y-3">
         {banks.map((bank) => {
-          const state = bankStates[bank.bankType];
-          const isSpinning = state !== undefined && SPINNING_STATUSES.has(state.status);
-          const countdown = otpCountdowns[bank.bankType];
+          const display = resolveBankDisplay(
+            bankStates[bank.bankType],
+            lastRunByBank[bank.bankType],
+          );
+          const liveState = display.source === "live" ? display.state : undefined;
           const isHighlighted = highlightedBank === bank.bankType;
+          const persistedAge =
+            display.source === "persisted" && nowMs !== null
+              ? formatRelativeAge(nowMs - new Date(display.run.startedAt).getTime())
+              : null;
+          const trust = bankTrustOf(bank.bankType, observed);
+          const failed =
+            liveState?.status === "error" ||
+            (display.source === "persisted" && display.run.status === "error");
+          const failureNote = failed ? unverifiedFailureNote(bank.bankType, trust) : null;
+          const canRetry =
+            liveState?.status === "error" ||
+            liveState?.status === "otp_timeout" ||
+            (display.source === "persisted" &&
+              (display.run.status === "error" || display.run.status === "otp_skipped"));
 
           return (
             <Card
               key={bank.id}
-              className={isHighlighted ? "border-amber-300 ring-1 ring-amber-200" : undefined}
+              className={isHighlighted ? "border-warning/50 ring-warning/25 ring-1" : undefined}
             >
               <CardContent className="space-y-3 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Badge variant="secondary">{BANK_LABELS[bank.bankType] ?? bank.bankType}</Badge>
+                    <BankBadge bankType={bank.bankType} />
                     <span className="font-medium">{bank.displayName}</span>
+                    <InstitutionTrustBadge trust={trust} />
                   </div>
 
                   <div className="flex items-center gap-1.5 text-sm">
-                    {state === undefined && (
+                    {display.source === "none" && (
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <span className="bg-muted-foreground/40 inline-block h-2 w-2 rounded-full" />
-                        ממתין
+                        מעולם לא סונכרן
                       </span>
                     )}
-                    {isSpinning && (
+                    {liveState !== undefined && <LiveBankStatus state={liveState} />}
+
+                    {display.source === "persisted" && display.run.status === "success" && (
                       <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {STATUS_TEXT[state.status]}
-                      </span>
-                    )}
-                    {state?.status === "login_success" && (
-                      <span className="flex items-center gap-1.5 text-emerald-600">
                         <CheckCircle2 className="h-4 w-4" />
-                        {STATUS_TEXT.login_success}
+                        {`${display.run.transactionsImported} תנועות`}
+                        {persistedAge && ` · ${persistedAge}`}
                       </span>
                     )}
-                    {state?.status === "complete" && (
-                      <span className="flex items-center gap-1.5 text-emerald-600">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {state.transactionCount !== undefined
-                          ? `${state.transactionCount} תנועות`
-                          : STATUS_TEXT.complete}
-                      </span>
-                    )}
-                    {state?.status === "otp_required" && (
+                    {display.source === "persisted" && display.run.status === "otp_skipped" && (
                       <span className="text-muted-foreground flex items-center gap-1.5">
-                        <AlertTriangle className="h-4 w-4" />
-                        {STATUS_TEXT.otp_required}
+                        <Lock className="h-4 w-4" />
+                        <span className="bg-warning text-warning-foreground rounded-full px-2 py-0.5 text-xs font-medium">
+                          קוד אימות לא הוזן בזמן
+                        </span>
+                        {persistedAge && <span>{persistedAge}</span>}
                       </span>
                     )}
-                    {state?.status === "otp_timeout" && (
+                    {display.source === "persisted" && display.run.status === "error" && (
                       <span className="text-destructive flex items-center gap-1.5">
                         <AlertTriangle className="h-4 w-4" />
-                        {STATUS_TEXT.otp_timeout}
-                      </span>
-                    )}
-                    {state?.status === "error" && (
-                      <span className="text-destructive flex items-center gap-1.5">
-                        <XCircle className="h-4 w-4" />
-                        {state.error ?? STATUS_TEXT.error}
+                        {display.run.errorMessage ?? STATUS_TEXT.error}
+                        {persistedAge && ` · ${persistedAge}`}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {state?.status === "otp_required" && (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      className="max-w-[160px]"
-                      placeholder="הזן קוד SMS"
-                      value={otpCodes[bank.bankType] ?? ""}
-                      onChange={(e) =>
-                        setOtpCodes((prev) => ({ ...prev, [bank.bankType]: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void submitOtp(bank.bankType);
-                      }}
-                    />
-                    <Button size="sm" onClick={() => void submitOtp(bank.bankType)}>
-                      אשר
-                    </Button>
-                    {countdown !== undefined && countdown > 0 && (
-                      <span className="text-muted-foreground text-sm">
-                        {formatCountdown(countdown)}
-                      </span>
-                    )}
-                  </div>
+                {failureNote && <p className="text-muted-foreground text-sm">{failureNote}</p>}
+
+                {liveState?.status === "otp_required" && (
+                  <OtpEntry
+                    code={state.otpDrafts[bank.bankType] ?? ""}
+                    secondsLeft={state.otp[bank.bankType]?.secondsLeft}
+                    onCodeChange={(code) => setOtpDraft(bank.bankType, code)}
+                    onSubmit={() => void submitOtp(bank.bankType)}
+                  />
                 )}
 
-                {(state?.status === "error" || state?.status === "otp_timeout") && (
+                {canRetry && (
                   <div className="flex items-center gap-3">
-                    <Button variant="outline" size="sm" onClick={startSync}>
+                    <Button variant="outline" size="sm" onClick={() => void start()}>
                       נסה שוב
                     </Button>
-                    {state?.screenshotFilename && (
+                    {liveState?.screenshotFilename && (
                       <a
-                        href={`/api/screenshots/${state.screenshotFilename}`}
+                        href={`/api/screenshots/${liveState.screenshotFilename}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-primary text-xs hover:underline"
                       >
                         צפה בצילום מסך
                       </a>
@@ -368,28 +263,30 @@ function SyncPanelInner({ banks }: { banks: Bank[] }) {
         })}
       </div>
 
-      {reconciliationToast && (
-        <Card className="border-emerald-200 bg-emerald-50">
-          <CardContent className="flex items-start justify-between py-3">
+      {reconciliation && (
+        <Toast variant="success" onDismiss={dismissReconciliation}>
+          {reconciliation.autoApplied > 0 && (
+            <p className="text-foreground">
+              סווגו אוטומטית {reconciliation.autoApplied} עסקאות כהסדרת כרטיס אשראי
+            </p>
+          )}
+          {reconciliation.queued > 0 && (
+            <p className="text-muted-foreground">{reconciliation.queued} התאמות ממתינות לאישור</p>
+          )}
+        </Toast>
+      )}
+
+      {aiSummary && (
+        <Card>
+          <CardContent className="space-y-2 py-4">
+            <p className="font-semibold">סיווג חכם</p>
             <div className="space-y-0.5 text-sm">
-              {reconciliationToast.autoApplied > 0 && (
-                <p className="text-emerald-800">
-                  סווגו אוטומטית {reconciliationToast.autoApplied} עסקאות כהסדרת כרטיס אשראי
+              {aiSummaryLines(aiSummary).map((line) => (
+                <p key={line} className="text-muted-foreground">
+                  {line}
                 </p>
-              )}
-              {reconciliationToast.queued > 0 && (
-                <p className="text-emerald-700">
-                  {reconciliationToast.queued} התאמות ממתינות לאישור
-                </p>
-              )}
+              ))}
             </div>
-            <button
-              onClick={() => setReconciliationToast(null)}
-              className="mt-0.5 text-xs leading-none text-emerald-600 hover:text-emerald-800"
-              aria-label="סגור"
-            >
-              ✕
-            </button>
           </CardContent>
         </Card>
       )}
@@ -403,7 +300,7 @@ function SyncPanelInner({ banks }: { banks: Bank[] }) {
               <div className="space-y-1">
                 {Object.entries(summary.byBank).map(([bank, count]) => (
                   <p key={bank} className="text-sm">
-                    {BANK_LABELS[bank] ?? bank}: {count} תנועות
+                    {bankLabel(bank)}: {count} תנועות
                   </p>
                 ))}
               </div>
@@ -416,10 +313,10 @@ function SyncPanelInner({ banks }: { banks: Bank[] }) {
 }
 
 // useSearchParams requires a Suspense boundary (Next.js App Router requirement)
-export function SyncPanel({ banks }: { banks: Bank[] }) {
+export function SyncPanel(props: SyncPanelProps) {
   return (
     <Suspense fallback={null}>
-      <SyncPanelInner banks={banks} />
+      <SyncPanelInner {...props} />
     </Suspense>
   );
 }
