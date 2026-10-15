@@ -73,7 +73,7 @@ Which institutions issue an OTP during scraping is a `bank registry` fact — ea
 
 ### `sync claim` — load-bearing
 
-The in-progress guard on `syncAllBanks` (issue #246): one claim, shared by every entry point that can launch a sync (the SSE route, the scheduler), refusing a second concurrent invocation instead of starting it — closing the OTP-bridge race above (two runs could otherwise both set the module-level OTP handler and race to resolve each other's code) and the double-Puppeteer-browser-per-bank hazard ADR-0003 doesn't itself prevent (ADR-0003 guarantees one browser per _bank_, not one _run_).
+The in-progress guard on `syncAllBanks` (issue #246): one claim, shared by every entry point that can launch a sync (the SSE route, the scheduler) and by the `categorization backfill`, refusing a second concurrent invocation instead of starting it — closing the OTP-bridge race above (two runs could otherwise both set the module-level OTP handler and race to resolve each other's code) and the double-Puppeteer-browser-per-bank hazard ADR-0003 doesn't itself prevent (ADR-0003 guarantees one browser per _bank_, not one _run_).
 
 Deliberately **process-lifetime** (an in-memory claim in `src/lib/sync/claim.ts`), not a persisted DB row: this app is single-user/single-instance, so a crashed or killed process holds no claim and recovery on restart is automatic, with no staleness window to reconcile. Held on `globalThis`, not a bare module-level `const` — Next.js bundles the instrumentation hook (→ the scheduler) separately from the App Router route handlers, so a plain module-scoped claim would silently fork into two independent claims across bundles.
 
@@ -160,6 +160,10 @@ Learned merchant-to-category mappings, consulted in bulk before any model call. 
 ### `zero-egress mode`
 
 Running categorization against local Ollama behind the same adapter boundary — same anchored confidence, same review flow, no data leaves the host. Always selectable.
+
+### `categorization backfill`
+
+The explicit trigger (#263) that runs the sync's final AI step on its own over every still-uncategorized transaction, for a provider configured after the history was imported. Same step, same deps, so `tiered auto-apply`, the `overwrite law`, suppression and pacing are a post-sync run's; it holds the `sync claim` for its duration. Offered on the transactions page's uncategorized view only while a provider is configured. Not the one-time `category_source` backfill script of ADR-0010 §7.
 
 ---
 

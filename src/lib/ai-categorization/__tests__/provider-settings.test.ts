@@ -7,6 +7,7 @@ import {
 import {
   clearStoredProviderKey,
   describeProviderSettings,
+  isProviderConfigured,
   providerSelectionSchema,
   saveProviderSelection,
   type ProviderEnvironment,
@@ -180,5 +181,36 @@ describe("clearStoredProviderKey", () => {
     });
     await clearStoredProviderKey({ store });
     expect(writes).toEqual([{ provider: "off", apiKey: null }]);
+  });
+});
+
+describe("isProviderConfigured", () => {
+  it("is false on a fresh install", async () => {
+    const { store } = fakeStore();
+    expect(await isProviderConfigured({ env: {}, store })).toBe(false);
+  });
+
+  it("is false when the environment pins off over a stored provider", async () => {
+    const { store } = fakeStore({ categorizationProvider: "ollama" });
+    expect(await isProviderConfigured({ env: { AI_PROVIDER: "off" }, store })).toBe(false);
+  });
+
+  it("is false for a stored external selection with no key anywhere", async () => {
+    const { store } = fakeStore({ categorizationProvider: "gemini" });
+    expect(await isProviderConfigured({ env: {}, store })).toBe(false);
+  });
+
+  it("is true for a stored local provider", async () => {
+    const { store } = fakeStore({ categorizationProvider: "ollama" });
+    expect(await isProviderConfigured({ env: {}, store })).toBe(true);
+  });
+
+  it("is true for a stored external selection with a stored key, without reading the key", async () => {
+    const { store } = fakeStore({
+      categorizationProvider: "gemini",
+      hasCategorizationApiKey: true,
+    });
+    expect(await isProviderConfigured({ env: {}, store })).toBe(true);
+    expect(store.readCategorizationApiKey).not.toHaveBeenCalled();
   });
 });
