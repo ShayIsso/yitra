@@ -16,13 +16,38 @@ export type BankKind = "bank" | "card";
 /** Whether we have tested the institution ourselves. Presentational only, never a second code path. */
 export type BankTier = "verified" | "experimental";
 
+/**
+ * Library companies that are deliberately neither verified nor experimental.
+ * Declared rather than merely left out, so that excluding one is a reasoned,
+ * reviewable fact and a library upgrade that adds a company fails the
+ * completeness test until someone classifies it.
+ */
+export const excludedInstitutions = Object.freeze([
+  {
+    company: CompanyTypes.oneZero,
+    reason:
+      "Its login needs a long-term MFA token issued by a previous login, which ADR-0003 puts out of scope; listing it would promise what the scraper cannot deliver.",
+  },
+] as const);
+
+type ExcludedCompany = (typeof excludedInstitutions)[number]["company"];
+
+/** Typed so an entry naming an excluded company does not compile. */
+type SupportedCompany = Exclude<CompanyTypes, ExcludedCompany>;
+
 export interface BankRegistryEntry {
   readonly id: string;
   readonly nameHe: string;
   readonly nameEn: string;
   readonly kind: BankKind;
+  /**
+   * Whether the institution's login challenges for an OTP code. A curated fact:
+   * a verified entry records what we observed, and an experimental entry's value
+   * is pinned to its library scraper by the cross-check test. It does not decide
+   * whether the sync prompts — that is event-driven (CONTEXT.md, OTP).
+   */
   readonly issuesOtp: boolean;
-  readonly company: CompanyTypes;
+  readonly company: SupportedCompany;
   /** Ordered as the credential form renders them. */
   readonly credentialFields: readonly CredentialFieldDescriptor[];
   readonly tier: BankTier;
@@ -39,9 +64,10 @@ export interface BankRegistryEntry {
  * `satisfies` keeps compiling. `__tests__/derived-union.test.ts` fails if it
  * is ever dropped.
  *
- * `oneZero` is deliberately absent from both tiers rather than registered as
- * experimental: its login needs a long-term OTP token, which ADR-0003 puts out of
- * scope, so listing it would promise what the scraper structurally cannot deliver.
+ * Every library company is either an entry here or in `excludedInstitutions`.
+ * Experimental entries were hand-checked against the library source: their
+ * field keys against its `loginFields` (pinned by the cross-check test) and
+ * `issuesOtp` against whether its scraper calls the OTP retriever.
  */
 export const bankRegistry = Object.freeze([
   {
@@ -83,6 +109,196 @@ export const bankRegistry = Object.freeze([
       { key: "password", kind: "password", label: "סיסמה" },
     ],
     tier: "verified",
+  },
+  {
+    id: "hapoalim",
+    nameHe: "הפועלים",
+    nameEn: "Bank Hapoalim",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.hapoalim,
+    credentialFields: [
+      { key: "userCode", kind: "text", label: "קוד משתמש" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "leumi",
+    nameHe: "לאומי",
+    nameEn: "Bank Leumi",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.leumi,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "mizrahi",
+    nameHe: "מזרחי טפחות",
+    nameEn: "Mizrahi Tefahot",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.mizrahi,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "mercantile",
+    nameHe: "מרכנתיל",
+    nameEn: "Mercantile",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.mercantile,
+    credentialFields: [
+      { key: "id", kind: "national-id", label: "תעודת זהות" },
+      { key: "password", kind: "password", label: "סיסמה" },
+      { key: "num", kind: "account-number", label: "מספר חשבון" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "beinleumi",
+    nameHe: "הבינלאומי",
+    nameEn: "Beinleumi",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.beinleumi,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "otsarHahayal",
+    nameHe: "אוצר החייל",
+    nameEn: "Otsar Hahayal",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.otsarHahayal,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "massad",
+    nameHe: "מסד",
+    nameEn: "Bank Massad",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.massad,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "pagi",
+    nameHe: "פאג״י",
+    nameEn: "Pagi",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.pagi,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "yahav",
+    nameHe: "יהב",
+    nameEn: "Bank Yahav",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.yahav,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "nationalID", kind: "national-id", label: "תעודת זהות" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "union",
+    nameHe: "איגוד",
+    nameEn: "Union Bank",
+    kind: "bank",
+    issuesOtp: false,
+    company: CompanyTypes.union,
+    credentialFields: [
+      { key: "username", kind: "text", label: "שם משתמש", hint: "שם משתמש לאינטרנט" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "isracard",
+    nameHe: "ישראכרט",
+    nameEn: "Isracard",
+    kind: "card",
+    issuesOtp: false,
+    company: CompanyTypes.isracard,
+    credentialFields: [
+      { key: "id", kind: "national-id", label: "תעודת זהות" },
+      { key: "card6Digits", kind: "card-6-digits", label: "מספר כרטיס", hint: "6 הספרות האחרונות" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "amex",
+    nameHe: "אמריקן אקספרס",
+    nameEn: "American Express",
+    kind: "card",
+    issuesOtp: false,
+    company: CompanyTypes.amex,
+    credentialFields: [
+      { key: "id", kind: "national-id", label: "תעודת זהות" },
+      { key: "card6Digits", kind: "card-6-digits", label: "מספר כרטיס", hint: "6 הספרות האחרונות" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  // A prepaid stored-value card: as `card`, its scraped balance is replaced by a
+  // next-debit estimate (usually 0) and its rows join the card side of settlement
+  // matching. `bank` would be worse — its purchases would meet the card-settlement
+  // transfer guard — so `card` holds until an owner decision on stored-value kinds.
+  {
+    id: "beyahadBishvilha",
+    nameHe: "ביחד בשבילך",
+    nameEn: "Beyahad Bishvilha",
+    kind: "card",
+    issuesOtp: false,
+    company: CompanyTypes.beyahadBishvilha,
+    credentialFields: [
+      { key: "id", kind: "national-id", label: "תעודת זהות" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
+  },
+  {
+    id: "behatsdaa",
+    nameHe: "בהצדעה",
+    nameEn: "Behatsdaa",
+    kind: "card",
+    issuesOtp: false,
+    company: CompanyTypes.behatsdaa,
+    credentialFields: [
+      { key: "id", kind: "national-id", label: "תעודת זהות" },
+      { key: "password", kind: "password", label: "סיסמה" },
+    ],
+    tier: "experimental",
   },
 ] as const satisfies readonly BankRegistryEntry[]);
 

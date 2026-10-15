@@ -1,4 +1,4 @@
-import type { BankRegistryEntry } from "./entries";
+import { findBankEntry, type BankRegistryEntry } from "./entries";
 
 /**
  * The trust to display. `verified` is our claim, `observed` is this install's own
@@ -21,4 +21,17 @@ export interface BankTrustInput {
 export function resolveBankTrust({ entry, hasRecordedSuccessfulSync }: BankTrustInput): BankTrust {
   if (entry.tier === "verified") return "verified";
   return hasRecordedSuccessfulSync ? "observed" : "experimental";
+}
+
+/**
+ * The trust to display for a stored institution id, given the ids this install
+ * has recorded a successful sync for. The evidence is supplied by the caller
+ * because the registry is DB-free; an empty set is the safe default, since it
+ * can only show a caveat, never hide one. Undefined for an id that is not
+ * registered — including an excluded one, whatever the evidence says.
+ */
+export function bankTrustOf(id: string, observed: ReadonlySet<string>): BankTrust | undefined {
+  const entry = findBankEntry(id);
+  if (!entry) return undefined;
+  return resolveBankTrust({ entry, hasRecordedSuccessfulSync: observed.has(id) });
 }

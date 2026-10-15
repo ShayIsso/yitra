@@ -13,6 +13,7 @@
 export type { BankKind, BankTier, BankRegistryEntry, BankType } from "./entries";
 export {
   bankRegistry,
+  excludedInstitutions,
   findBankEntry,
   isBankType,
   enabledBankEntries,
@@ -37,4 +38,4 @@ export { credentialSchemaFor, nonSecretCredentialValues } from "./credential-sch
 export { bankTypeSchema } from "./bank-type-schema";
 
 export type { BankTrust, BankTrustInput } from "./trust";
-export { resolveBankTrust } from "./trust";
+export { resolveBankTrust, bankTrustOf } from "./trust";

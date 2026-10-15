@@ -47,6 +47,10 @@ function makeInMemoryStore(): SyncRunStore & { rows: Map<string, SyncRunRow> } {
         errorMessage: r.errorMessage,
       }));
     },
+
+    async getInstitutionsWithRecordedSuccess(): Promise<string[]> {
+      return [];
+    },
   };
 }
 

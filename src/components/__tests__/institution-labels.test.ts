@@ -3,12 +3,14 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { bankLabel, enabledBankEntries } from "@/lib/bank-registry";
 import { BankBadge } from "@/components/bank-badge";
-import { bankPickerOptions, isEditable } from "@/components/credentials-section";
+import { isEditable } from "@/components/credentials-section";
+import { bankPickerOptions } from "@/components/institution-picker";
 import { SyncPanel } from "@/components/sync-panel";
 import { ReconciliationInbox } from "@/components/reconciliation-inbox";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ refresh: () => undefined }),
 }));
 
 vi.mock("@/app/actions/credentials", () => ({

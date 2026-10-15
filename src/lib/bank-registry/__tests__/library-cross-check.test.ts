@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
 import { CompanyTypes, SCRAPERS, PASSWORD_FIELD } from "israeli-bank-scrapers-core/lib/definitions";
 import { enabledBankEntries } from "../index";
 
@@ -16,6 +18,20 @@ const EXPECTED_COMPANY: Record<string, CompanyTypes> = {
   discount: CompanyTypes.discount,
   max: CompanyTypes.max,
   visaCal: CompanyTypes.visaCal,
+  hapoalim: CompanyTypes.hapoalim,
+  leumi: CompanyTypes.leumi,
+  mizrahi: CompanyTypes.mizrahi,
+  mercantile: CompanyTypes.mercantile,
+  beinleumi: CompanyTypes.beinleumi,
+  otsarHahayal: CompanyTypes.otsarHahayal,
+  massad: CompanyTypes.massad,
+  pagi: CompanyTypes.pagi,
+  yahav: CompanyTypes.yahav,
+  union: CompanyTypes.union,
+  isracard: CompanyTypes.isracard,
+  amex: CompanyTypes.amex,
+  beyahadBishvilha: CompanyTypes.beyahadBishvilha,
+  behatsdaa: CompanyTypes.behatsdaa,
 };
 
 /**
@@ -37,6 +53,42 @@ function userEnteredLoginFields(company: CompanyTypes): string[] {
 }
 
 const ENTRY_CASES = enabledBankEntries().map((entry) => [entry.id, entry] as const);
+const EXPERIMENTAL_CASES = ENTRY_CASES.filter(([, entry]) => entry.tier === "experimental");
+
+const SCRAPERS_DIR = path.join(
+  path.dirname(require.resolve("israeli-bank-scrapers-core/lib/definitions")),
+  "scrapers",
+);
+
+/** The library factory's `case CompanyTypes.x: return new _y.default` plus `_y = require("./file")`. */
+function scraperFileOf(company: CompanyTypes): string {
+  const factory = readFileSync(path.join(SCRAPERS_DIR, "factory.js"), "utf8");
+  const binding = new RegExp(`CompanyTypes\\.${company}:\\s*return new (\\w+)\\.default`).exec(
+    factory,
+  )?.[1];
+  const file = binding
+    ? new RegExp(`var ${binding} = _interopRequireDefault\\(require\\("\\./([\\w-]+)"\\)\\)`).exec(
+        factory,
+      )?.[1]
+    : undefined;
+  if (!file) throw new Error(`no scraper file found for ${company}`);
+  return file;
+}
+
+/** Follows the scraper's local requires, since a shared base class may be what asks. */
+function scraperConsumesOtpRetriever(company: CompanyTypes): boolean {
+  const queue = [scraperFileOf(company)];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const file = queue.shift()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = readFileSync(path.join(SCRAPERS_DIR, `${file}.js`), "utf8");
+    if (/\botpCodeRetriever\b/.test(source)) return true;
+    for (const match of source.matchAll(/require\("\.\/([\w-]+)"\)/g)) queue.push(match[1]);
+  }
+  return false;
+}
 
 describe("registry entries cross-checked against the scraper library", () => {
   it.each(ENTRY_CASES)(
@@ -84,5 +136,23 @@ describe("registry entries cross-checked against the scraper library", () => {
     for (const excluded of NON_USER_ENTERED_LOGIN_FIELDS) {
       expect(everyDeclaredField).toContain(excluded);
     }
+  });
+
+  /**
+   * The verified entries' `issuesOtp` is our own product record and is not
+   * re-derived here. An experimental entry has no such record, so its flag must
+   * agree with the library: true exactly when its scraper (or a local module it
+   * builds on) reads the OTP retriever. Re-read on every run, so an upgrade that
+   * teaches a scraper to ask for a code fails until its entry is re-classified.
+   */
+  it.each(EXPERIMENTAL_CASES)(
+    "%s claims an OTP exactly when its library scraper consumes the retriever",
+    (_id, entry) => {
+      expect(entry.issuesOtp).toBe(scraperConsumesOtpRetriever(entry.company));
+    },
+  );
+
+  it("detects a scraper that consumes the retriever, so the check above is not vacuous", () => {
+    expect(scraperConsumesOtpRetriever(CompanyTypes.oneZero)).toBe(true);
   });
 });

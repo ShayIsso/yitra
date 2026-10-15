@@ -19,6 +19,20 @@ const BANK_COMPANY_MAP = {
   discount: CompanyTypes.discount,
   max: CompanyTypes.max,
   visaCal: CompanyTypes.visaCal,
+  hapoalim: CompanyTypes.hapoalim,
+  leumi: CompanyTypes.leumi,
+  mizrahi: CompanyTypes.mizrahi,
+  mercantile: CompanyTypes.mercantile,
+  beinleumi: CompanyTypes.beinleumi,
+  otsarHahayal: CompanyTypes.otsarHahayal,
+  massad: CompanyTypes.massad,
+  pagi: CompanyTypes.pagi,
+  yahav: CompanyTypes.yahav,
+  union: CompanyTypes.union,
+  isracard: CompanyTypes.isracard,
+  amex: CompanyTypes.amex,
+  beyahadBishvilha: CompanyTypes.beyahadBishvilha,
+  behatsdaa: CompanyTypes.behatsdaa,
 } as const;
 
 export function getSyncStartDate(isFirstSync: boolean): Date {

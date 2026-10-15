@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, Lock, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BankBadge } from "@/components/bank-badge";
@@ -11,7 +11,8 @@ import { Toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { takeFrames } from "@/lib/sse-frames";
-import { bankLabel } from "@/lib/bank-registry";
+import { bankLabel, bankTrustOf } from "@/lib/bank-registry";
+import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
 export type BankSyncState = {
@@ -142,8 +143,19 @@ export function hasSyncComplete(events: ClientSyncEvent[]): boolean {
   return events.some((event) => event.type === "sync_complete");
 }
 
-function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunSummary[] }) {
+type SyncPanelProps = {
+  banks: Bank[];
+  lastRuns: SyncRunSummary[];
+  /**
+   * Institution ids with a recorded successful sync on this install. Omitted
+   * means no evidence, which can only keep an experimental caveat showing.
+   */
+  observedInstitutions?: readonly string[];
+};
+
+function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPanelProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   // ?bank=<bankType> deep-link target — highlights the flagged bank card
   const highlightedBank = searchParams.get("bank");
   const lastRunByBank = useMemo(() => {
@@ -180,6 +192,7 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
   const [otpCodes, setOtpCodes] = useState<Record<string, string>>({});
   const [otpCountdowns, setOtpCountdowns] = useState<Record<string, number>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
+  const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
   const countdownIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   useEffect(() => {
@@ -268,6 +281,9 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
       });
       setSummary(event.summary);
       setSyncing(false);
+      // Re-reads the recorded runs on the server, so an experimental institution
+      // this run just synced loses its caveat. Live SSE state is never evidence.
+      router.refresh();
     }
   }
 
@@ -438,6 +454,11 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
             display.source === "persisted" && nowMs !== null
               ? formatRelativeAge(nowMs - new Date(display.run.startedAt).getTime())
               : null;
+          const trust = bankTrustOf(bank.bankType, observed);
+          const failed =
+            liveState?.status === "error" ||
+            (display.source === "persisted" && display.run.status === "error");
+          const failureNote = failed ? unverifiedFailureNote(bank.bankType, trust) : null;
           const canRetry =
             liveState?.status === "error" ||
             liveState?.status === "otp_timeout" ||
@@ -454,6 +475,7 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
                   <div className="flex items-center gap-3">
                     <BankBadge bankType={bank.bankType} />
                     <span className="font-medium">{bank.displayName}</span>
+                    <InstitutionTrustBadge trust={trust} />
                   </div>
 
                   <div className="flex items-center gap-1.5 text-sm">
@@ -527,6 +549,8 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
                     )}
                   </div>
                 </div>
+
+                {failureNote && <p className="text-muted-foreground text-sm">{failureNote}</p>}
 
                 {liveState?.status === "otp_required" && (
                   <div className="flex items-center gap-2">
@@ -627,10 +651,10 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
 }
 
 // useSearchParams requires a Suspense boundary (Next.js App Router requirement)
-export function SyncPanel({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunSummary[] }) {
+export function SyncPanel(props: SyncPanelProps) {
   return (
     <Suspense fallback={null}>
-      <SyncPanelInner banks={banks} lastRuns={lastRuns} />
+      <SyncPanelInner {...props} />
     </Suspense>
   );
 }
