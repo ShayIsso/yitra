@@ -11,8 +11,8 @@ import { enabledBankEntries } from "../index";
  * `discount`/`mercantile` both declare `["id","password","num"]` — so the
  * field-key cross-check below cannot detect a wrong company on its own.
  *
- * This mirrors `BANK_COMPANY_MAP` in `src/lib/scraper/index.ts`, which #255
- * retires in favour of the registry; until then the two must agree.
+ * This mirrors `BANK_COMPANY_MAP` in `src/lib/scraper/index.ts`, the one
+ * sanctioned site outside the registry (ADR-0013); the two must agree.
  */
 const EXPECTED_COMPANY: Record<string, CompanyTypes> = {
   discount: CompanyTypes.discount,
