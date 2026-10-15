@@ -124,3 +124,16 @@ registry that is the behaviour we want.
 - **Note:** ADR-0003 records the scrape order as "Discount → Max → Cal". The code iterates
   credential rows by `createdAt`, so that ordering has been only incidentally true for some time.
   The registry does not change it; the openness epic should correct the record.
+
+## Clarification 2026-10-15
+
+Section 1 above lists `kind: "bank" | "card"`. The union now has a third member, `prepaid` (#289),
+for a stored-value instrument whose scraped balance is the real remaining value and which never
+settles through a bank payment. It needs no new branch anywhere: every site that reads `kind`
+compares against `bank` or `card` by name, so `prepaid` is excluded from both unless a site names
+it explicitly. The decision itself — behaviour follows a registry property, never an institution
+id — is unchanged.
+
+`issuesOtp` is no longer a hand-recorded fact for the verified entries: the cross-check test now
+pins every entry's flag to whether its library scraper consumes the OTP retriever (#292), which
+corrected Discount's flag to `false`.

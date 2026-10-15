@@ -327,7 +327,7 @@ export function CredentialsSection() {
                     name="bankType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>סוג בנק</FormLabel>
+                        <FormLabel>בנק או חברת אשראי</FormLabel>
                         <FormControl>
                           <InstitutionPicker
                             picker={picker}

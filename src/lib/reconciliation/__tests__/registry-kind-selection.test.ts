@@ -5,6 +5,7 @@ import type { ReconciliationTransaction } from "../types";
 import {
   HYPOTHETICAL_BANK,
   HYPOTHETICAL_CARD,
+  HYPOTHETICAL_PREPAID,
   UNREGISTERED,
 } from "@/lib/bank-registry/__tests__/hypothetical-institutions";
 
@@ -54,6 +55,24 @@ describe("detectP1Settlement — institution selection follows registry kind", (
 
     expect(result).toHaveLength(1);
     expect(result[0].bankLump.id).toBe(lump.id);
+  });
+
+  it("never matches a bank lump against rows from a prepaid institution added to the registry", () => {
+    const lump = tx({ description: "חיוב ויזה", chargedAmount: -300 });
+    const prepaid = tx({ bankType: HYPOTHETICAL_PREPAID, description: "קפה", chargedAmount: -300 });
+
+    expect(detectP1Settlement([lump, prepaid])).toEqual([]);
+  });
+
+  it("never takes a settlement lump from a prepaid institution added to the registry", () => {
+    const lump = tx({
+      bankType: HYPOTHETICAL_PREPAID,
+      description: "חיוב ויזה",
+      chargedAmount: -300,
+    });
+    const card = tx({ bankType: "max", description: "קפה", chargedAmount: -300 });
+
+    expect(detectP1Settlement([lump, card])).toEqual([]);
   });
 
   it("never treats rows from an institution of unknown kind as either side", () => {
@@ -111,6 +130,36 @@ describe("identifyBankSide — the unmarked tiebreak follows registry kind", () 
     });
 
     expect(identifyBankSide([cardRow, bankRow])?.id).toBe("bank-row");
+  });
+
+  it("picks the bank row over a row from a prepaid institution added to the registry", () => {
+    const prepaidRow = pairMember({
+      id: "prepaid-row",
+      bankType: HYPOTHETICAL_PREPAID,
+      createdAt: new Date("2026-01-15T09:00:00Z"),
+    });
+    const bankRow = pairMember({
+      id: "bank-row",
+      bankType: "discount",
+      createdAt: new Date("2026-01-15T11:00:00Z"),
+    });
+
+    expect(identifyBankSide([prepaidRow, bankRow])?.id).toBe("bank-row");
+  });
+
+  it("falls back to the earlier row when a prepaid and a card row meet, neither being a bank", () => {
+    const later = pairMember({
+      id: "later",
+      bankType: HYPOTHETICAL_PREPAID,
+      createdAt: new Date("2026-01-15T11:00:00Z"),
+    });
+    const earlier = pairMember({
+      id: "earlier",
+      bankType: HYPOTHETICAL_CARD,
+      createdAt: new Date("2026-01-15T09:00:00Z"),
+    });
+
+    expect(identifyBankSide([later, earlier])?.id).toBe("earlier");
   });
 
   it("falls back to the earlier row when both sides are of the same kind", () => {

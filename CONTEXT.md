@@ -83,7 +83,7 @@ The `israeli-bank-scrapers-core` library exposes a `futureDebits` array on credi
 
 ### `next-debit estimate` — load-bearing
 
-What the dashboard shows as the "balance" of a card account (any account whose institution's registry `kind` is `card`): an estimate of the upcoming charge (החיוב הקרוב) against the bank account, **derived from stored transactions**, not read from the scraper. Decided in issue #102, shipped in PR #127.
+What the dashboard shows as the "balance" of a card account (any account whose institution's registry `kind` is `card`; a `prepaid` stored-value account is not estimated and shows its reported balance): an estimate of the upcoming charge (החיוב הקרוב) against the bank account, **derived from stored transactions**, not read from the scraper. Decided in issue #102, shipped in PR #127.
 
 The rule: sum of `chargedAmount` over the card's transactions with `processedDate` in `(today, today + 31 days]` — exclusive of today, inclusive at +31 days. Transaction status and type are deliberately ignored; the date predicate alone decides. Empty window → ₪0 (never "—"). The debit-date hint shown next to it is the in-window date carrying the largest absolute summed charge, so a small off-cycle straggler can't outrank the main billing-cycle date.
 
@@ -262,7 +262,7 @@ Locked in [ADR-0013](./docs/adr/0013-declarative-bank-registry.md) and [ADR-0014
 
 ### `bank registry` — load-bearing
 
-The single committed, frozen, DB-free source of every fact about a supported institution: id, Hebrew and English display names, `kind`, `issuesOtp`, scraper company id, credential fields, and tier. Two laws bind it: **a bank literal outside the registry is a bug**, and **code branches on a registry property, never on a bank id**. The second is the load-bearing one — label drift is cosmetic, behaviour drift (a new institution missing from a `CARD_BANK_TYPES` set) is wrong money. Not a table, not a plugin format: an entry cannot make an institution work — only the scraper library can — so runtime-addable entries would only enable broken rows.
+The single committed, frozen, DB-free source of every fact about a supported institution: id, Hebrew and English display names, `kind` (`bank`, `card`, or `prepaid` for a stored-value instrument that never settles through a bank payment), `issuesOtp`, scraper company id, credential fields, and tier. Two laws bind it: **a bank literal outside the registry is a bug**, and **code branches on a registry property, never on a bank id**. The second is the load-bearing one — label drift is cosmetic, behaviour drift (a new institution missing from a `CARD_BANK_TYPES` set) is wrong money. Not a table, not a plugin format: an entry cannot make an institution work — only the scraper library can — so runtime-addable entries would only enable broken rows.
 _Avoid_: bank list, bank map (both name a copy; there is exactly one)
 
 ### `verified tier` / `experimental tier` — load-bearing

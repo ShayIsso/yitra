@@ -8,6 +8,7 @@ import type { BankType } from "@/lib/bank-registry";
 import {
   HYPOTHETICAL_BANK,
   HYPOTHETICAL_CARD,
+  HYPOTHETICAL_PREPAID,
   UNREGISTERED,
 } from "@/lib/bank-registry/__tests__/hypothetical-institutions";
 
@@ -72,6 +73,17 @@ describe("projectAccountBalances — registered institutions", () => {
     ]);
   });
 
+  it("keeps the reported balance of a registered prepaid institution", () => {
+    const [projected] = projectAccountBalances(
+      [account("a1", "beyahadBishvilha", 250)],
+      UPCOMING,
+      TODAY,
+    );
+
+    expect(projected.balance).toBe(250);
+    expect(projected.nextDebitDate).toBeNull();
+  });
+
   it("emits only the account-balance fields, whatever else the input row carries", () => {
     const row = { ...account("a3", "discount", 987), internalNote: "not-for-the-client" };
 
@@ -114,6 +126,17 @@ describe("projectAccountBalances — an institution added to the registry", () =
   it("keeps the reported balance of an account at a new bank institution", () => {
     const [projected] = projectAccountBalances(
       [account("a1", HYPOTHETICAL_BANK, 4321)],
+      UPCOMING,
+      TODAY,
+    );
+
+    expect(projected.balance).toBe(4321);
+    expect(projected.nextDebitDate).toBeNull();
+  });
+
+  it("keeps the reported balance of an account at a new prepaid institution, however much is upcoming", () => {
+    const [projected] = projectAccountBalances(
+      [account("a1", HYPOTHETICAL_PREPAID, 4321)],
       UPCOMING,
       TODAY,
     );

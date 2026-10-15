@@ -53,7 +53,6 @@ function userEnteredLoginFields(company: CompanyTypes): string[] {
 }
 
 const ENTRY_CASES = enabledBankEntries().map((entry) => [entry.id, entry] as const);
-const EXPERIMENTAL_CASES = ENTRY_CASES.filter(([, entry]) => entry.tier === "experimental");
 
 const SCRAPERS_DIR = path.join(
   path.dirname(require.resolve("israeli-bank-scrapers-core/lib/definitions")),
@@ -139,13 +138,10 @@ describe("registry entries cross-checked against the scraper library", () => {
   });
 
   /**
-   * The verified entries' `issuesOtp` is our own product record and is not
-   * re-derived here. An experimental entry has no such record, so its flag must
-   * agree with the library: true exactly when its scraper (or a local module it
-   * builds on) reads the OTP retriever. Re-read on every run, so an upgrade that
-   * teaches a scraper to ask for a code fails until its entry is re-classified.
+   * Re-read on every run, so an upgrade that teaches a scraper to ask for a code
+   * fails until its entry is re-classified.
    */
-  it.each(EXPERIMENTAL_CASES)(
+  it.each(ENTRY_CASES)(
     "%s claims an OTP exactly when its library scraper consumes the retriever",
     (_id, entry) => {
       expect(entry.issuesOtp).toBe(scraperConsumesOtpRetriever(entry.company));

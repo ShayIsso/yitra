@@ -6,12 +6,23 @@ import { CompanyTypes } from "israeli-bank-scrapers-core/lib/definitions";
 import type { CredentialFieldDescriptor } from "./fields";
 
 /**
- * Whether an institution holds an account or issues a card. Code that needs
- * different behaviour for cards branches on this, never on an institution id
- * (ADR-0013 law 2) — an institution missing from a card-shaped set is invisible
- * to settlement reconciliation and to the next-debit estimate.
+ * What an institution's rows and balance mean. Code that needs different
+ * behaviour per kind branches on this, never on an institution id (ADR-0013
+ * law 2) — an institution missing from a card-shaped set is invisible to
+ * settlement reconciliation and to the next-debit estimate.
+ *
+ * - `bank`: holds an account; its lumps can settle card statements.
+ * - `card`: issues credit; its statements settle through a bank, and its
+ *   scraped balance is replaced by the next-debit estimate.
+ * - `prepaid`: a stored-value instrument. Its scraped balance is the real
+ *   remaining value and it never settles through a bank payment, so it is
+ *   neither a settlement lump nor a card statement and its balance is shown as
+ *   reported (#289).
+ *
+ * A site that should treat `prepaid` like a card or a bank must name it
+ * explicitly; comparing against `bank` or `card` alone excludes it.
  */
-export type BankKind = "bank" | "card";
+export type BankKind = "bank" | "card" | "prepaid";
 
 /** Whether we have tested the institution ourselves. Presentational only, never a second code path. */
 export type BankTier = "verified" | "experimental";
@@ -41,10 +52,10 @@ export interface BankRegistryEntry {
   readonly nameEn: string;
   readonly kind: BankKind;
   /**
-   * Whether the institution's login challenges for an OTP code. A curated fact:
-   * a verified entry records what we observed, and an experimental entry's value
-   * is pinned to its library scraper by the cross-check test. It does not decide
-   * whether the sync prompts — that is event-driven (CONTEXT.md, OTP).
+   * Whether the institution's login challenges for an OTP code. Pinned for every
+   * entry to whether its library scraper reads the OTP retriever, by the
+   * cross-check test. It does not decide whether the sync prompts — that is
+   * event-driven (CONTEXT.md, OTP).
    */
   readonly issuesOtp: boolean;
   readonly company: SupportedCompany;
@@ -65,9 +76,9 @@ export interface BankRegistryEntry {
  * is ever dropped.
  *
  * Every library company is either an entry here or in `excludedInstitutions`.
- * Experimental entries were hand-checked against the library source: their
- * field keys against its `loginFields` (pinned by the cross-check test) and
- * `issuesOtp` against whether its scraper calls the OTP retriever.
+ * Every entry's field keys are pinned against the library's `loginFields`, and
+ * its `issuesOtp` against whether its scraper calls the OTP retriever, by the
+ * cross-check test.
  */
 export const bankRegistry = Object.freeze([
   {
@@ -75,7 +86,7 @@ export const bankRegistry = Object.freeze([
     nameHe: "דיסקונט",
     nameEn: "Bank Discount",
     kind: "bank",
-    issuesOtp: true,
+    issuesOtp: false,
     company: CompanyTypes.discount,
     credentialFields: [
       { key: "id", kind: "national-id", label: "תעודת זהות" },
@@ -270,15 +281,11 @@ export const bankRegistry = Object.freeze([
     ],
     tier: "experimental",
   },
-  // A prepaid stored-value card: as `card`, its scraped balance is replaced by a
-  // next-debit estimate (usually 0) and its rows join the card side of settlement
-  // matching. `bank` would be worse — its purchases would meet the card-settlement
-  // transfer guard — so `card` holds until an owner decision on stored-value kinds.
   {
     id: "beyahadBishvilha",
     nameHe: "ביחד בשבילך",
     nameEn: "Beyahad Bishvilha",
-    kind: "card",
+    kind: "prepaid",
     issuesOtp: false,
     company: CompanyTypes.beyahadBishvilha,
     credentialFields: [

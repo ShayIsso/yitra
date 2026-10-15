@@ -45,7 +45,7 @@ export type InboxStore = {
  * 1. If one row has description containing "ביט" (Bit) markers, that is the cardSide;
  *    the other is bankSide.
  * 2. If both or neither have markers, prefer the row whose institution's registry
- *    `kind` is "bank" over one that is not.
+ *    `kind` is "bank" over one that is not (a card, prepaid or unknown kind alike).
  * 3. If that still does not separate them, pick the row with earlier createdAt as
  *    bankSide (deterministic tie-break).
  *

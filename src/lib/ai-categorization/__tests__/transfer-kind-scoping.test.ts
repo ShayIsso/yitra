@@ -5,6 +5,7 @@ import type { MerchantMemoryStore } from "@/lib/merchant-memory";
 import {
   HYPOTHETICAL_BANK,
   HYPOTHETICAL_CARD,
+  HYPOTHETICAL_PREPAID,
   UNREGISTERED,
 } from "@/lib/bank-registry/__tests__/hypothetical-institutions";
 
@@ -97,6 +98,23 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
     ]);
 
     expect(guarded).toEqual(["t-card"]);
+  });
+
+  it("sends a settlement-shaped description from a prepaid institution added to the registry to the provider", async () => {
+    const { guarded, prompts } = await guardedIds([
+      { id: "t-prepaid", description: SETTLEMENT_SHAPED, bankType: HYPOTHETICAL_PREPAID },
+    ]);
+
+    expect(guarded).toEqual([]);
+    expect(prompts.join("\n")).toContain(SETTLEMENT_SHAPED);
+  });
+
+  it("still guards a cross-account description from a prepaid institution added to the registry", async () => {
+    const { guarded } = await guardedIds([
+      { id: "t-prepaid", description: INTER_ACCOUNT_SHAPED, bankType: HYPOTHETICAL_PREPAID },
+    ]);
+
+    expect(guarded).toEqual(["t-prepaid"]);
   });
 
   it("scopes an institution of unknown kind like a card, never widening its guard", async () => {

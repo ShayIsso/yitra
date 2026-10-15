@@ -41,7 +41,7 @@ describe("bankRegistry", () => {
       ["union", "bank"],
       ["isracard", "card"],
       ["amex", "card"],
-      ["beyahadBishvilha", "card"],
+      ["beyahadBishvilha", "prepaid"],
       ["behatsdaa", "card"],
     ]);
   });
