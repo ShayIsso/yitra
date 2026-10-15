@@ -101,7 +101,9 @@ function Donut({
         )}
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-muted-foreground text-xs">סך הוצאות</span>
+        {/* Sum of floored leaves (CONTEXT.md "spend floor"), not Total Expenses:
+            it exceeds the הוצאות KPI by any category that nets to a refund. */}
+        <span className="text-muted-foreground text-xs">סך לפי קטגוריות</span>
         <Amount
           amount={total}
           currency="ILS"

@@ -65,8 +65,10 @@ export function paceHeroViewModel(pace: BudgetPace | null): PaceHeroViewModel | 
     ? Math.min(100, Math.max(0, pace.spentFraction * 100))
     : 100;
   const elapsedPercent = Math.min(100, Math.max(0, pace.elapsedFraction * 100));
+  // Month expenses are a true net and go negative in a net-refund month
+  // (CONTEXT.md "net outflow"); the pace keeps that value, the label shows 0%.
   const spentLabel = Number.isFinite(pace.spentFraction)
-    ? `${Math.round(pace.spentFraction * 100)}%`
+    ? `${Math.max(0, Math.round(pace.spentFraction * 100))}%`
     : "∞%";
 
   return {

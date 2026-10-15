@@ -10,7 +10,11 @@
  * inclusive — day 1 is 1∕daysInMonth elapsed, the month's last day is exactly
  * 1 — matching the inclusive-month convention BGR2 locked for goals.
  */
-import { computeMonthlySummary, type AnalyticsTransaction } from "@/lib/analytics";
+import {
+  computeMonthlySummary,
+  computeCategoryNetSpend,
+  type AnalyticsTransaction,
+} from "@/lib/analytics";
 
 /** A calendar month. Budgets reason per-month; the day lives in {@link MonthElapsed}. */
 export type YearMonth = { year: number; month: number };
@@ -133,20 +137,19 @@ export function computeSubtreeSpend(
 }
 
 /**
- * Per-category expense spend for a month's transactions (absolute value,
- * `expense`-type only — the same rule analytics applies). Uncategorized rows
- * and non-expense types drop out, so a budget's subtree only ever sums real
- * expense leaves.
+ * Per-category expense spend for a month's transactions — analytics'
+ * `computeCategoryNetSpend` verbatim (CONTEXT.md "spend floor"), so a gauge
+ * matches the Dashboard breakdown. A category netting to ≤ 0 is absent (reads
+ * ₪0), and a subtree sums floored leaves: one leaf's refund never offsets a
+ * sibling's spend.
  */
 export function computeCategorySpend(
   transactions: (AnalyticsTransaction & { categoryId: string | null })[],
 ): CategorySpend[] {
-  const byCategory = new Map<string, number>();
-  for (const t of transactions) {
-    if (t.categoryType !== "expense" || !t.categoryId) continue;
-    byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0) + Math.abs(t.chargedAmount));
-  }
-  return Array.from(byCategory.entries()).map(([categoryId, amount]) => ({ categoryId, amount }));
+  return Array.from(computeCategoryNetSpend(transactions), ([categoryId, amount]) => ({
+    categoryId,
+    amount,
+  }));
 }
 
 export type SavingsTargetVerdict = "met" | "missed";
