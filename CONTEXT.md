@@ -45,6 +45,14 @@ Savings Rate  = Net Savings / Total Income × 100
 
 Investment, transfer, and ignore are excluded from both. If a calculation produces a different number, it's wrong.
 
+### `net outflow` — load-bearing
+
+Total Expenses and investment deployment are **net**, never absolute: each row contributes `−chargedAmount`, so an outflow adds and an inflow (refund, returned check, reversal, money back from an investment account) **subtracts** from its own category type. A refund lowers Total Expenses and so raises Net Savings. Investment deployment is deposits minus withdrawals and is **negative** in a net-withdrawal month. `income` stays a plain signed sum. One exported helper owns the sign convention — `outflowContribution` in `src/lib/analytics` — and every expense/investment aggregation goes through it; budgets read category spend from analytics' `computeCategoryNetSpend` rather than restating either rule (#304). Absolute value stays correct only for amount _matching_ (recurring detection, transaction-matching, reconciliation), never for totals.
+
+### `spend floor` — load-bearing
+
+Per-category, per-group and per-merchant figures — the spending breakdown, budget gauges, month-close verdicts, report breakdowns and top merchants — are the `net outflow` **floored at 0 at the leaf grain**: a category's (or merchant's) rows are netted first, then a key netting to ≤ 0 shows ₪0 and drops out of the breakdown (budget spend reads ₪0). Group roll-ups and budget subtrees sum the **floored leaves**, so one leaf's refund never offsets a sibling's spend. Month totals are **never** floored: they stay the true net. So in a month where some category nets to a refund, the breakdown's total exceeds Total Expenses by exactly that refund — the one place the two may differ.
+
 ### `transfer` (vocabulary)
 
 Say "transfer" — never "internal movement", "self-payment", or "between-account move". The category type is `transfer`; the GitHub issue, PR, refactor proposal, and UI copy all use the same word.
@@ -109,7 +117,7 @@ A category with children is **not assignable** — derived from "has children", 
 
 ### `aggregation lens` — load-bearing
 
-The hierarchy invariant: grouping **never changes financial totals**. Net Savings, Total Expenses, and all type-driven calculations flow from leaves exactly as without hierarchy; a group's total is _defined_ as the sum of its leaves' totals, so a transaction contributes through exactly one leaf and double-counting is structurally impossible. Breakdowns present group-first with drill-down; root leaves appear beside groups.
+The hierarchy invariant: grouping **never changes financial totals**. Net Savings, Total Expenses, and all type-driven calculations flow from leaves exactly as without hierarchy; a group's total is _defined_ as the sum of its leaves' totals, so a transaction contributes through exactly one leaf and double-counting is structurally impossible. (Leaves are taken after the `spend floor`, which is why a breakdown can exceed Total Expenses in a month with a net-refund category; grouping itself still adds nothing.) Breakdowns present group-first with drill-down; root leaves appear beside groups.
 
 ### `match type`
 
@@ -195,7 +203,7 @@ Active goals in user-set priority order, filled by a **stateless fold**: at any 
 
 An optional monthly spending cap on a single **expense-type** category (one budget per category; enforced in `src/lib/budgets`, backstopped by the DB `uq_budget_category` index). A budget is a **gauge, not an allocation**: it evaluates one calendar month in isolation on `transactions.date` — the same window analytics uses — and resets (see `goals accumulate, budgets reset monthly`). Deleting a category cascade-deletes its budget (`ON DELETE CASCADE`).
 
-**Budget spend = subtree spend**: the category's own expense spend plus its direct children's, over the one-level hierarchy — so it degenerates to self for a `root leaf`. A parent (group) budget and a child (leaf) budget may **coexist and evaluate independently**; there is no precedence or roll-up law between them.
+**Budget spend = subtree spend**: the category's own expense spend plus its direct children's (each under the `spend floor`), over the one-level hierarchy — so it degenerates to self for a `root leaf`. A parent (group) budget and a child (leaf) budget may **coexist and evaluate independently**; there is no precedence or roll-up law between them.
 
 ### `budget pace` — load-bearing
 

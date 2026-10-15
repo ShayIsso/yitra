@@ -56,6 +56,8 @@ When building new features, follow the deep module pattern:
 - **Savings Rate (%)** = Net Savings / Total Income × 100
 - `investment` does NOT reduce net savings — it's tracked as deployment of savings.
 - `transfer` and `ignore` are invisible to calculations.
+- **Totals are net, never `Math.abs`** (CONTEXT.md "net outflow", #304). Expense and investment rows contribute `−chargedAmount` via `outflowContribution` (`src/lib/analytics`): a refund offsets its category and lowers Total Expenses; investment is net deployment and can be negative.
+- **Per-category/merchant figures are floored at 0** (CONTEXT.md "spend floor"): net per leaf first, then a leaf netting ≤ 0 drops out; groups and budget subtrees sum floored leaves. Month totals are never floored.
 
 ## Code Comments
 

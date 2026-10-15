@@ -29,7 +29,7 @@ describe("computeMonthlySummary", () => {
     expect(result.income).toBe(8000);
   });
 
-  it("sums expenses as absolute values", () => {
+  it("sums expenses as net outflow — charges are negative, so they add", () => {
     const txs: AnalyticsTransaction[] = [
       { chargedAmount: -200, categoryType: "expense" },
       { chargedAmount: -150, categoryType: "expense" },
@@ -402,9 +402,10 @@ describe("aggregation-lens invariant (ADR-0011 §4)", () => {
     expect(summary.investmentTotal).toBe(2000);
     expect(summary.netSavings).toBe(9850);
 
-    // Every fully-categorized expense flows through exactly one leaf: the flat
-    // and rolled-up totals both equal Total Expenses, so grouping can neither
-    // drop nor double-count a shekel.
+    // Every fully-categorized expense flows through exactly one leaf: with no
+    // category netting to a refund (CONTEXT.md "spend floor"), the flat and
+    // rolled-up totals both equal Total Expenses, so grouping can neither drop
+    // nor double-count a shekel.
     const flatTotal = flat.reduce((sum, s) => sum + s.amount, 0);
     const rolledTotal = rolled.reduce((sum, n) => sum + n.amount, 0);
     expect(flatTotal).toBe(summary.expenses);

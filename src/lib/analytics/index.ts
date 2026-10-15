@@ -104,18 +104,78 @@ export type RecentTransaction = {
 // Pure computation functions
 // ---------------------------------------------------------------------------
 
+/**
+ * The one owner of the outflow sign convention (CONTEXT.md "net outflow"): a
+ * signed `chargedAmount` becomes its contribution to spend or investment. An
+ * outflow (negative) adds, an inflow — refund, returned check, reversal, money
+ * back from an investment account — subtracts. Every expense/investment
+ * aggregation goes through here; `Math.abs` would count an inflow as more
+ * spend (#304).
+ */
+export function outflowContribution(chargedAmount: number): number {
+  return -chargedAmount;
+}
+
+/** Below half an agora a net is float residue of rows that cancel, not spend. */
+const SPEND_EPSILON = 0.005;
+
+/**
+ * Net outflow per key with the spend floor applied at the key's grain
+ * (CONTEXT.md "spend floor"): rows sharing a key are netted first, then a key
+ * netting to ≤ 0 is dropped, so a refund-only category or merchant shows no
+ * spend instead of negative spend. `keyOf` returns null to skip a row.
+ */
+function netOutflowsByKey<T extends { chargedAmount: number }, K>(
+  rows: readonly T[],
+  keyOf: (row: T) => K | null,
+): Map<K, number> {
+  const net = new Map<K, number>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (key === null) continue;
+    net.set(key, (net.get(key) ?? 0) + outflowContribution(row.chargedAmount));
+  }
+  for (const [key, amount] of net) {
+    if (amount < SPEND_EPSILON) net.delete(key);
+  }
+  return net;
+}
+
+/**
+ * Per-category expense spend under the spend floor — the one leaf-grain read
+ * the Dashboard breakdown, budget gauges and month-close all share, so they
+ * cannot disagree on a category's figure. Uncategorized and non-expense rows
+ * drop out; a category netting to ≤ 0 is absent.
+ */
+export function computeCategoryNetSpend(
+  transactions: readonly (AnalyticsTransaction & { categoryId: string | null })[],
+): Map<string, number> {
+  return netOutflowsByKey(transactions, (t) =>
+    t.categoryType === "expense" && t.categoryId ? t.categoryId : null,
+  );
+}
+
+function sumOutflows(
+  rows: readonly AnalyticsTransaction[],
+  type: Extract<NonNullable<AnalyticsTransaction["categoryType"]>, "expense" | "investment">,
+) {
+  return rows
+    .filter((t) => t.categoryType === type)
+    .reduce((sum, t) => sum + outflowContribution(t.chargedAmount), 0);
+}
+
+/**
+ * Month totals are true nets, never floored (CONTEXT.md "net outflow"): a
+ * refund lowers `expenses` even when its category floors to zero, and
+ * `investmentTotal` is net deployment — negative in a net-withdrawal month.
+ */
 export function computeMonthlySummary(transactions: AnalyticsTransaction[]): MonthlySummary {
   const income = transactions
     .filter((t) => t.categoryType === "income")
     .reduce((sum, t) => sum + t.chargedAmount, 0);
 
-  const expenses = transactions
-    .filter((t) => t.categoryType === "expense")
-    .reduce((sum, t) => sum + Math.abs(t.chargedAmount), 0);
-
-  const investmentTotal = transactions
-    .filter((t) => t.categoryType === "investment")
-    .reduce((sum, t) => sum + Math.abs(t.chargedAmount), 0);
+  const expenses = sumOutflows(transactions, "expense");
+  const investmentTotal = sumOutflows(transactions, "investment");
 
   const netSavings = income - expenses;
   const savingsRate = income > 0 ? (netSavings / income) * 100 : 0;
@@ -129,28 +189,25 @@ export function computeMonthlySummary(transactions: AnalyticsTransaction[]): Mon
   };
 }
 
+/** Expense leaves under the spend floor: a category netting to ≤ 0 is absent. */
 export function computeSpendingByCategory(
   transactions: TransactionWithCategory[],
 ): CategorySpending[] {
-  const map = new Map<string, CategorySpending>();
-
+  const metaOf = new Map<string, TransactionWithCategory>();
   for (const t of transactions) {
-    if (t.categoryType !== "expense" || !t.categoryId) continue;
-    const existing = map.get(t.categoryId);
-    if (existing) {
-      existing.amount += Math.abs(t.chargedAmount);
-    } else {
-      map.set(t.categoryId, {
-        categoryId: t.categoryId,
-        categoryName: t.categoryName,
-        amount: Math.abs(t.chargedAmount),
-        color: t.categoryColor,
-        icon: t.categoryIcon,
-      });
-    }
+    if (t.categoryId && !metaOf.has(t.categoryId)) metaOf.set(t.categoryId, t);
   }
 
-  return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
+  return Array.from(computeCategoryNetSpend(transactions), ([categoryId, amount]) => {
+    const t = metaOf.get(categoryId)!;
+    return {
+      categoryId,
+      categoryName: t.categoryName,
+      amount,
+      color: t.categoryColor,
+      icon: t.categoryIcon,
+    };
+  }).sort((a, b) => b.amount - a.amount);
 }
 
 export type MerchantTransaction = {
@@ -193,7 +250,9 @@ function isCheckWithdrawalDescriptor(description: string): boolean {
 }
 
 /**
- * Ranks the month's real spending merchants, top-N descending by total spend.
+ * Ranks the month's real spending merchants, top-N descending by net spend
+ * under the spend floor (CONTEXT.md "spend floor": a merchant's refunds offset
+ * its purchases, and one netting to ≤ 0 never ranks).
  * Expense-only (income/investment/transfer/ignore/uncategorized rows never
  * rank), grouped by canonicalized merchant (transaction-matching's
  * `extractMerchant` + `canonicalizeMerchant`, so brand variants like
@@ -210,18 +269,12 @@ export function computeTopMerchants(
   transactions: MerchantTransaction[],
   limit: number = DEFAULT_TOP_MERCHANTS_LIMIT,
 ): TopMerchant[] {
-  const totals = new Map<string, number>();
-
-  for (const t of transactions) {
-    if (t.categoryType !== "expense") continue;
-    if (matchesTransferDescriptor(t.description, ["card_settlement"])) continue;
-    if (isCheckWithdrawalDescriptor(t.description)) continue;
-
-    const merchant = canonicalizeMerchant(extractMerchant(t.description));
-    if (!merchant) continue;
-
-    totals.set(merchant, (totals.get(merchant) ?? 0) + Math.abs(t.chargedAmount));
-  }
+  const totals = netOutflowsByKey(transactions, (t) => {
+    if (t.categoryType !== "expense") return null;
+    if (matchesTransferDescriptor(t.description, ["card_settlement"])) return null;
+    if (isCheckWithdrawalDescriptor(t.description)) return null;
+    return canonicalizeMerchant(extractMerchant(t.description)) || null;
+  });
 
   return Array.from(totals.entries())
     .map(([merchant, amount]) => ({ merchant, amount }))

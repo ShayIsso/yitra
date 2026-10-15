@@ -83,6 +83,13 @@ function formatILS(amount: number): string {
   }).format(amount);
 }
 
+// Investment is net deployment (CONTEXT.md "net outflow"): negative means more
+// came back from investment accounts than went in, so it is named a net
+// withdrawal rather than left to read as a deposit.
+export function formatInvestment(amount: number): string {
+  return amount < 0 ? `${formatILS(amount)} (משיכה נטו)` : formatILS(amount);
+}
+
 function formatPercentValue(v: number): string {
   return `${Math.round(v)}%`;
 }
@@ -336,10 +343,10 @@ function summaryMetrics(s: MonthlyReport["summary"]): SummaryMetric[] {
     },
     {
       key: "investment",
-      label: "הושקע",
+      label: "השקעה נטו",
       value: s.investment,
       good: "neutral",
-      format: formatILS,
+      format: formatInvestment,
     },
   ];
 }
@@ -711,7 +718,8 @@ function TrendsChart({ points }: { points: TrendsMonthPoint[] }) {
   const expenses = points.map((p) => p.expenses);
   const nets = points.map((p) => p.netSavings);
   const yMax = Math.max(0, ...incomes, ...expenses, ...nets);
-  const yMin = Math.min(0, ...nets);
+  // Expenses are a true net (CONTEXT.md "net outflow"): a refund-heavy month can dip below zero.
+  const yMin = Math.min(0, ...nets, ...expenses);
   const span = yMax - yMin || 1;
   const yOf = (v: number) => CHART_PLOT_TOP + ((yMax - v) / span) * plotH;
   const zeroY = yOf(0);
@@ -955,7 +963,7 @@ function YearRowsTable({ years }: { years: TrendsYearRow[] }) {
           <TableHead className="text-left">הכנסות</TableHead>
           <TableHead className="text-left">הוצאות</TableHead>
           <TableHead className="text-left">חיסכון נטו</TableHead>
-          <TableHead className="text-left">הושקע</TableHead>
+          <TableHead className="text-left">השקעה נטו</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -977,7 +985,9 @@ function YearRowsTable({ years }: { years: TrendsYearRow[] }) {
             >
               {formatILS(y.netSavings)}
             </TableCell>
-            <TableCell className="text-left tabular-nums">{formatILS(y.investment)}</TableCell>
+            <TableCell className="text-left tabular-nums">
+              {formatInvestment(y.investment)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

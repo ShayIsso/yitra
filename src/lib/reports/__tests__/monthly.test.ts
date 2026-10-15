@@ -129,7 +129,7 @@ describe("buildMonthlyReport — group-first breakdown", () => {
     expect(transport.amount).toBe(1500);
   });
 
-  it("breakdown total equals the expenses total (aggregation lens never changes a total)", () => {
+  it("breakdown total equals the expenses total when no category nets to a refund (aggregation lens)", () => {
     const report = buildMonthlyReport(currentMonth, null, categories);
     const breakdownTotal = report.breakdown.reduce((s, n) => s + n.amount, 0);
     expect(breakdownTotal).toBe(report.summary.expenses.current);

@@ -126,7 +126,7 @@ describe("computeCategorySpend", () => {
     chargedAmount: number,
   ) => ({ categoryId, categoryType, chargedAmount });
 
-  it("sums absolute expense spend per category, dropping non-expense and uncategorized", () => {
+  it("sums net expense outflow per category, dropping non-expense and uncategorized", () => {
     const spend = computeCategorySpend([
       tx("food", "expense", -100),
       tx("food", "expense", -50),
@@ -140,6 +140,38 @@ describe("computeCategorySpend", () => {
     expect(spend.find((s) => s.categoryId === "moving")).toBeUndefined();
     expect(spend.find((s) => s.categoryId === "invest")).toBeUndefined();
     expect(spend).toHaveLength(1);
+  });
+
+  it("nets a refund against its category's purchases (net outflow rule)", () => {
+    const spend = computeCategorySpend([
+      tx("rent", "expense", -1000),
+      tx("rent", "expense", 1000),
+      tx("rent", "expense", -1000),
+      tx("rent", "expense", -1000),
+      tx("rent", "expense", 1000),
+    ]);
+    expect(spend).toEqual([{ categoryId: "rent", amount: 1000 }]);
+  });
+
+  it("floors a category netting to a refund at zero spend, so its budget gauge reads ₪0", () => {
+    const spend = computeCategorySpend([tx("clothing", "expense", 250)]);
+    const tree = [{ id: "clothing", parentId: null }];
+
+    expect(computeSubtreeSpend("clothing", tree, spend)).toBe(0);
+  });
+
+  it("sums a group budget over floored leaves, so one leaf's refund never offsets a sibling's spend", () => {
+    const spend = computeCategorySpend([
+      tx("clothing", "expense", 250),
+      tx("grocery", "expense", -400),
+    ]);
+    const tree = [
+      { id: "shopping", parentId: null },
+      { id: "clothing", parentId: "shopping" },
+      { id: "grocery", parentId: "shopping" },
+    ];
+
+    expect(computeSubtreeSpend("shopping", tree, spend)).toBe(400);
   });
 });
 

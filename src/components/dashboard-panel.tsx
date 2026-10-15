@@ -10,6 +10,7 @@ import { BankBadge } from "@/components/bank-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
+import { cn } from "@/lib/utils";
 import { SpendingBreakdown } from "@/components/spending-breakdown";
 import { isBankType } from "@/lib/bank-registry";
 import type { Category } from "@/lib/categories";
@@ -419,14 +420,15 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
 
             <KpiTile label="הוצאות">
               {summary ? (
-                // summary.expenses is a stored positive magnitude (analytics sums
-                // Math.abs), so sign-driven colorize would read it as positive money
-                // and go emerald. Expenses are money-out: force the --neg token.
+                // summary.expenses is net outflow, positive for money out (CONTEXT.md
+                // "net outflow"), so sign-driven colorize would read it as positive
+                // money and go emerald. Expenses are money-out: force the --neg token.
+                // A net-refund month (expenses < 0) is not money-out, so it stays neutral.
                 <Amount
                   amount={summary.expenses}
                   fractionDigits={0}
                   colorize={false}
-                  className="text-neg text-2xl font-bold"
+                  className={cn("text-2xl font-bold", summary.expenses > 0 && "text-neg")}
                 />
               ) : (
                 <p className="text-2xl font-bold">—</p>

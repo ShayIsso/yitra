@@ -11,6 +11,22 @@ describe("computeTopMerchants", () => {
     expect(result).toEqual([{ merchant: "סופרמרקט רמי לוי", amount: 150 }]);
   });
 
+  it("nets a merchant's refunds against its purchases (net outflow rule)", () => {
+    const txs: MerchantTransaction[] = [
+      { description: "חנות ספרים לדוגמה", chargedAmount: -300, categoryType: "expense" },
+      { description: "חנות ספרים לדוגמה", chargedAmount: 120, categoryType: "expense" },
+    ];
+    expect(computeTopMerchants(txs)).toEqual([{ merchant: "חנות ספרים לדוגמה", amount: 180 }]);
+  });
+
+  it("drops a merchant that nets to a refund (spend floor), letting the next merchant rank", () => {
+    const txs: MerchantTransaction[] = [
+      { description: "חנות בגדים לדוגמה", chargedAmount: 400, categoryType: "expense" },
+      { description: "מאפייה לדוגמה", chargedAmount: -60, categoryType: "expense" },
+    ];
+    expect(computeTopMerchants(txs)).toEqual([{ merchant: "מאפייה לדוגמה", amount: 60 }]);
+  });
+
   it("collapses cross-script brand aliases via canonicalizeMerchant", () => {
     const txs: MerchantTransaction[] = [
       { description: "רכישה בנטפליקס ישראל", chargedAmount: -40, categoryType: "expense" },
