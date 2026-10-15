@@ -6,7 +6,7 @@ Yitra (יתרה) fetches your transactions with [`israeli-bank-scrapers-core`](h
 
 ## What it does
 
-- **Sync** transactions on demand from the Sync page, or on a daily schedule you switch on in Settings. Institutions are scraped one at a time, and one failing does not stop the rest.
+- **Sync** transactions on demand from the Sync page, or on a daily schedule. The schedule needs both `SCHEDULER_ENABLED=true` in the environment and the toggle in Settings, and the server reads both only at startup, so restart the server after changing either. Institutions are scraped one at a time, and one failing does not stop the rest.
 - **Categorize** with rules you author deliberately, merchant memory learned from your manual assignments, and optional AI suggestions (off by default, see [Privacy and Security](#privacy-and-security)).
 - **Reconcile** credit-card settlement charges, debit/Bit mirrors and inter-account transfers so nothing is counted twice.
 - **Understand your money:** net savings and savings rate, investment tracking, budgets, goals, reports, and recurring-expense and subscription detection.
@@ -40,7 +40,7 @@ Experimental is a statement about testing, not about a different code path: an e
 
 ## Prerequisites
 
-- Node.js >= 22.12.0 (the Docker image uses Node 22)
+- Node.js >= 22.13.0 (required by `israeli-bank-scrapers-core`; the Docker image uses Node 22)
 - Docker and Docker Compose (for PostgreSQL, and for the containerized setup below)
 - Google Chrome or Chromium on the host when running the app natively (scraping drives a real browser)
 
@@ -106,17 +106,17 @@ Notes:
 
 Everything the app reads from the environment (`src/lib/env.ts` is authoritative). Only the first two are required.
 
-| Variable            | Required | Description                                                                                                                                                |
-| ------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`      | yes      | PostgreSQL connection URL, for example `postgres://yitra:change-me@localhost:5432/yitra`. The `.env.example` default matches the bundled compose database. |
-| `ENCRYPTION_KEY`    | yes      | 64 hex characters (32 bytes). Encrypts bank credentials (AES-256-GCM) and signs the session cookie. Generate it with the `node -e` command above.          |
-| `APP_PASSWORD`      | no       | Legacy. A bcrypt hash that overrides the password chosen in the setup wizard and wins when set. New installs leave it unset.                               |
-| `CHROMIUM_PATH`     | no       | Chrome or Chromium executable used for scraping. Set automatically in the Docker image.                                                                    |
-| `SCHEDULER_ENABLED` | no       | `true` registers the daily background sync at server start. Anything else (default `false`) leaves it off. Its time of day is configured in Settings.      |
-| `AI_PROVIDER`       | no       | `gemini`, `ollama` or `off`. When set it wins over the choice made in the app. Unset in both places means off.                                             |
-| `GEMINI_API_KEY`    | no       | Key for the `gemini` provider. It can instead be entered in the app, where it is stored encrypted. `gemini` without a key resolves to off.                 |
-| `OLLAMA_ENDPOINT`   | no       | URL of a local Ollama server, for the `ollama` provider.                                                                                                   |
-| `OLLAMA_MODEL`      | no       | Model name, for the `ollama` provider.                                                                                                                     |
+| Variable            | Required | Description                                                                                                                                                                                                                                                                               |
+| ------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`      | yes      | PostgreSQL connection URL, for example `postgres://yitra:change-me@localhost:5432/yitra`. The `.env.example` default matches the bundled compose database.                                                                                                                                |
+| `ENCRYPTION_KEY`    | yes      | 64 hex characters (32 bytes). Encrypts bank credentials (AES-256-GCM) and signs the session cookie. Generate it with the `node -e` command above.                                                                                                                                         |
+| `APP_PASSWORD`      | no       | Legacy. A bcrypt hash that overrides the password chosen in the setup wizard and wins when set. New installs leave it unset.                                                                                                                                                              |
+| `CHROMIUM_PATH`     | no       | Chrome or Chromium executable used for scraping. Set automatically in the Docker image.                                                                                                                                                                                                   |
+| `SCHEDULER_ENABLED` | no       | `true` or `false` (default `false`); any other value is invalid. `true` lets the server register the daily background sync at startup, but only if the schedule is also switched on in Settings (which sets its time of day). Both are read at startup, so restart after changing either. |
+| `AI_PROVIDER`       | no       | `gemini`, `ollama` or `off`. When set it wins over the choice made in the app. Unset in both places means off.                                                                                                                                                                            |
+| `GEMINI_API_KEY`    | no       | Key for the `gemini` provider. It can instead be entered in the app, where it is stored encrypted. `gemini` without a key resolves to off.                                                                                                                                                |
+| `OLLAMA_ENDPOINT`   | no       | URL of a local Ollama server, for the `ollama` provider.                                                                                                                                                                                                                                  |
+| `OLLAMA_MODEL`      | no       | Model name, for the `ollama` provider.                                                                                                                                                                                                                                                    |
 
 A blank `KEY=` line counts as unset for every optional variable.
 
