@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
+import { aiSummaryLines } from "@/components/ai-summary-lines";
+import { takeFrames } from "@/lib/sse-frames";
 import { bankLabel } from "@/lib/bank-registry";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
@@ -128,22 +130,7 @@ export function formatRelativeAge(ageMs: number): string {
 
 // ── SSE-over-fetch framing (#246 — EventSource can't read the 409 status) ───
 
-/**
- * Splits accumulated SSE text on the `\n\n` frame separator, returning the
- * complete frames and whatever incomplete tail to keep buffering. Pure so it
- * can be pinned against adversarial splits (a separator itself split across
- * two `reader.read()` chunks) without a real fetch stream.
- */
-export function takeFrames(buffer: string): { frames: string[]; rest: string } {
-  const frames: string[] = [];
-  let rest = buffer;
-  let separatorIndex: number;
-  while ((separatorIndex = rest.indexOf("\n\n")) !== -1) {
-    frames.push(rest.slice(0, separatorIndex));
-    rest = rest.slice(separatorIndex + 2);
-  }
-  return { frames, rest };
-}
+export { takeFrames };
 
 /**
  * True once `sync_complete` has been seen anywhere in `events` — the only
@@ -315,7 +302,7 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
           "error" in body &&
           typeof body.error === "string"
             ? body.error
-            : "סנכרון כבר פועל";
+            : "סנכרון או סיווג עסקאות כבר פועלים. נסה שוב בסיומם.";
         setAlreadyRunningMessage(message);
         return;
       }
@@ -608,15 +595,11 @@ function SyncPanelInner({ banks, lastRuns }: { banks: Bank[]; lastRuns: SyncRunS
           <CardContent className="space-y-2 py-4">
             <p className="font-semibold">סיווג חכם</p>
             <div className="space-y-0.5 text-sm">
-              {aiSummary.applied > 0 && (
-                <p className="text-muted-foreground">{aiSummary.applied} עסקאות סווגו אוטומטית</p>
-              )}
-              {aiSummary.queued > 0 && (
-                <p className="text-muted-foreground">{aiSummary.queued} עסקאות ממתינות לבדיקה</p>
-              )}
-              {aiSummary.skipped > 0 && (
-                <p className="text-muted-foreground">{aiSummary.skipped} עסקאות נותרו ללא סיווג</p>
-              )}
+              {aiSummaryLines(aiSummary).map((line) => (
+                <p key={line} className="text-muted-foreground">
+                  {line}
+                </p>
+              ))}
             </div>
           </CardContent>
         </Card>

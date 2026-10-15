@@ -29,7 +29,9 @@ export async function runScheduledSync(): Promise<void> {
   // no SSE listener for a scheduled run, so this is log-only, not an error.
   const claimed = syncAllBanksClaimed({ triggeredBy: "scheduled", otpMode: "skip" });
   if (claimed === null) {
-    logger.info("[scheduler] Skipped scheduled sync — a sync is already in progress");
+    logger.info(
+      "[scheduler] Skipped scheduled sync — a sync or categorization backfill is already in progress",
+    );
     return;
   }
   const { events, release } = claimed;

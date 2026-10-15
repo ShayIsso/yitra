@@ -8,6 +8,7 @@ import { runDetection, drizzleRecurringStore } from "@/lib/recurring-detection";
 import {
   createAiCategorizationStore,
   createConfiguredProvider,
+  isProviderConfigured,
   DEFAULT_PACING,
 } from "@/lib/ai-categorization";
 import { createMerchantMemoryStore } from "@/lib/merchant-memory";
@@ -21,7 +22,8 @@ import {
   syncRunStatusForEvent,
   drizzleSyncRunStore,
 } from "./runs";
-import { runAiSyncStep } from "./ai-step";
+import { runAiSyncStep, type AiStepDeps } from "./ai-step";
+import { startCategorizationBackfill, type BackfillStart } from "./backfill";
 import { runPostImportPipeline, type PostSyncEvent } from "./post-import";
 import { createSyncClaim, acquireAndRelease, type ClaimedRun } from "./claim";
 
@@ -41,8 +43,10 @@ export function submitOtp(code: string): boolean {
 }
 
 // One in-progress sync at a time, across every entry point that can launch
-// one — the SSE route and the scheduler (#246). Without this, two runs could
-// both set `activeOtpHandler` above and race to resolve each other's OTP.
+// one — the SSE route and the scheduler (#246) — and never alongside a
+// categorization backfill (#263), which writes the same uncategorized rows.
+// Without this, two syncs could both set `activeOtpHandler` above and race to
+// resolve each other's OTP.
 //
 // Keyed off `globalThis`, not a bare module-level `const` — Next.js bundles
 // the instrumentation hook (src/instrumentation.ts → the scheduler) into a
@@ -74,6 +78,16 @@ export type SyncSummaryEvent = (SyncEvent & { _credentialId?: string }) | PostSy
 // Real inter-batch pacing wiring: the pure DEFAULT_PACING policy decides the
 // delay; the timer lives here (setTimeout), out of the pure run/policy code.
 const syncBatchSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+function liveAiStepDeps(): AiStepDeps {
+  return {
+    createProvider: createConfiguredProvider,
+    aiStore: createAiCategorizationStore(),
+    memoryStore: createMerchantMemoryStore(),
+    transferRouter: drizzleSuspectedTransferRouter,
+    pacing: { policy: DEFAULT_PACING, sleep: syncBatchSleep },
+  };
+}
 
 // Not exported: every real caller must go through the claim (route.ts and
 // scheduler/index.ts both use `syncAllBanksClaimed` below). Exporting this
@@ -225,13 +239,7 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
     reconciliationStore: drizzleReconciliationStore,
     runRecurring: () => runDetection(drizzleRecurringStore),
     runAiStep: runAiSyncStep,
-    ai: {
-      createProvider: createConfiguredProvider,
-      aiStore: createAiCategorizationStore(),
-      memoryStore: createMerchantMemoryStore(),
-      transferRouter: drizzleSuspectedTransferRouter,
-      pacing: { policy: DEFAULT_PACING, sleep: syncBatchSleep },
-    },
+    ai: liveAiStepDeps(),
     importSummary: { total, byBank: importedByBank },
   });
 }
@@ -249,4 +257,26 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
  */
 export function syncAllBanksClaimed(opts: SyncOptions = {}): ClaimedRun<SyncSummaryEvent> | null {
   return acquireAndRelease(syncClaim, () => syncAllBanks(opts));
+}
+
+export type {
+  BackfillStart,
+  BackfillRefusal,
+  BackfillResult,
+  BackfillStreamEvent,
+} from "./backfill";
+export type { AiSummary } from "./ai-step";
+
+/**
+ * The categorization backfill (#263) under the same claim `syncAllBanksClaimed`
+ * takes, and with the same AI-step deps a sync wires — which is why it lives
+ * here rather than beside its caller: the claim is this module's singleton.
+ */
+export function backfillCategorization(): Promise<BackfillStart> {
+  return startCategorizationBackfill({
+    claim: syncClaim,
+    isProviderConfigured,
+    runAiStep: runAiSyncStep,
+    ai: liveAiStepDeps(),
+  });
 }

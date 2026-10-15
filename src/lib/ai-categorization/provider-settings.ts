@@ -83,6 +83,18 @@ export async function readProviderSettings(
 }
 
 /**
+ * Whether a categorization run would reach a provider — presence only, so a
+ * caller can gate a trigger on it without resolving a provider or reading a key.
+ */
+export async function isProviderConfigured(
+  deps: Pick<ProviderSettingsDeps, "env"> & {
+    store: Pick<AppSettingsStore, "read">;
+  } = defaultDeps(),
+): Promise<boolean> {
+  return (await readProviderSettings(deps)).effective !== "off";
+}
+
+/**
  * Stores a provider choice. Choosing `off` or the local provider also clears
  * any stored external key, so no secret outlives the choice that needed it;
  * re-choosing the external provider without pasting a key keeps the stored one.

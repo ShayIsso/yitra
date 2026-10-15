@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { CategorizationBackfillCallout } from "@/components/categorization-backfill-callout";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import {
   Table,
@@ -413,11 +414,14 @@ export function TransactionsTable({
   categories,
   tree,
   initialCategoryFilter = "",
+  categorizationAvailable = false,
 }: {
   categories: Category[];
   tree: CategoryTreeNode<Category>[];
   /** Seeds the categoryId sentinel from a dashboard deep link (#206) — e.g. `__uncategorized__`. */
   initialCategoryFilter?: string;
+  /** A categorization provider is configured — presence only, never its settings. */
+  categorizationAvailable?: boolean;
 }) {
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -472,6 +476,10 @@ export function TransactionsTable({
       page: key === "page" ? (value as number) : 1,
     }));
     setSelected(new Set());
+  }
+
+  function reloadTransactions() {
+    setFilter("page", 1);
   }
 
   function clearFilters() {
@@ -741,6 +749,13 @@ export function TransactionsTable({
           ייצוא ל-CSV
         </a>
       </div>
+
+      {categorizationAvailable && (
+        <CategorizationBackfillCallout
+          offered={filters.categoryId === "__uncategorized__" && !loading && total > 0}
+          onCompleted={reloadTransactions}
+        />
+      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
