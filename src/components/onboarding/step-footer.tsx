@@ -21,7 +21,8 @@ export type StepFooterProps = {
 
 /**
  * Back, skip and continue, wired to the frame's navigation. A step body renders
- * this once, last; it overrides only `primary`. In RTL the forward direction
+ * this once, last; it overrides only `primary`, and may pass `navigation` with
+ * `skip: null` where its primary already leads where skipping would. In RTL the forward direction
  * is leftward, hence the arrow choice.
  */
 export function StepFooter({ navigation, primary = {} }: StepFooterProps) {

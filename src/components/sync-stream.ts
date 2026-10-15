@@ -54,6 +54,8 @@ export const OTP_WINDOW_SECONDS = 180;
 export type OtpCountdown = { readonly secondsLeft: number; readonly running: boolean };
 
 export type SyncStreamState = {
+  /** A start was requested and the server has not answered yet. */
+  readonly starting: boolean;
   readonly syncing: boolean;
   readonly bankStates: Record<string, BankSyncState>;
   readonly summary: SyncSummary | null;
@@ -85,6 +87,7 @@ export type SyncStreamAction =
 
 export function initialSyncStreamState(): SyncStreamState {
   return {
+    starting: false,
     syncing: false,
     bankStates: {},
     summary: null,
@@ -196,7 +199,7 @@ export function syncStreamReducer(
 ): SyncStreamState {
   switch (action.type) {
     case "start_requested":
-      return { ...state, connectionError: false, refusal: null };
+      return { ...state, starting: true, connectionError: false, refusal: null };
     case "accepted":
       // Only an accepted start may clear the previous run's display: a refused
       // one must not wipe a still-active (or just-completed) run's data.
@@ -204,11 +207,11 @@ export function syncStreamReducer(
     case "refused":
       // `syncing` is left as it is: a run of ours that is genuinely still live
       // must not be hidden by a refused second start.
-      return { ...state, refusal: action.message };
+      return { ...state, starting: false, refusal: action.message };
     case "start_failed":
-      return { ...state, connectionError: true };
+      return { ...state, starting: false, connectionError: true };
     case "stream_failed":
-      return { ...state, syncing: false, connectionError: true };
+      return { ...state, starting: false, syncing: false, connectionError: true };
     case "event":
       return applyEvent(state, action.event);
     case "otp_tick":
@@ -239,22 +242,25 @@ export type SyncStreamOptions = {
 };
 
 /**
- * Unmounting aborts the request, and the route's `cancel()` then stops the
+ * Unmounting aborts every request in flight, and the route's `cancel()` then stops the
  * scrape and releases the sync claim — a consumer that must not lose a run on
  * navigation has to keep itself mounted (or warn) while `syncing`.
  */
 export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStream {
   const [state, dispatch] = useReducer(syncStreamReducer, undefined, initialSyncStreamState);
-  const controllerRef = useRef<AbortController | null>(null);
+  const controllersRef = useRef(new Set<AbortController>());
   const onCompleteRef = useRef(onComplete);
-  const draftsRef = useRef(state.otpDrafts);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
-    draftsRef.current = state.otpDrafts;
   });
 
-  useEffect(() => () => controllerRef.current?.abort(), []);
+  useEffect(() => {
+    const controllers = controllersRef.current;
+    return () => {
+      for (const controller of controllers) controller.abort();
+    };
+  }, []);
 
   const countdownRunning = Object.values(state.otp).some((countdown) => countdown.running);
   useEffect(() => {
@@ -270,7 +276,7 @@ export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStrea
     // the still-useful stream would make the refusal happen *because of* it.
     dispatch({ type: "start_requested" });
     const controller = new AbortController();
-    controllerRef.current = controller;
+    controllersRef.current.add(controller);
     let sawSyncComplete = false;
 
     try {
@@ -308,13 +314,15 @@ export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStrea
           if (!frame.startsWith("data: ")) continue;
           const event = JSON.parse(frame.slice(6)) as ClientSyncEvent;
           dispatch({ type: "event", event });
-          if (event.type === "sync_complete") {
+          if (hasSyncComplete([event])) {
             sawSyncComplete = true;
             onCompleteRef.current?.();
           }
         }
       }
 
+      // sync_complete is the only event that clears `syncing`; treating a
+      // clean EOF without it any other way leaves the spinner stuck forever.
       if (!sawSyncComplete) dispatch({ type: "stream_failed" });
     } catch {
       const wasIntentional = controller.signal.aborted;
@@ -323,6 +331,8 @@ export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStrea
       controller.abort();
       if (wasIntentional) return;
       dispatch({ type: "stream_failed" });
+    } finally {
+      controllersRef.current.delete(controller);
     }
   }, []);
 
@@ -330,16 +340,20 @@ export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStrea
     dispatch({ type: "otp_draft", bank, code });
   }, []);
 
-  const submitOtp = useCallback(async (bank: string) => {
-    const code = draftsRef.current[bank];
-    if (!code?.trim()) return;
-    dispatch({ type: "otp_submitted", bank });
-    await fetch("/api/sync/otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-  }, []);
+  const { otpDrafts } = state;
+  const submitOtp = useCallback(
+    async (bank: string) => {
+      const code = otpDrafts[bank];
+      if (!code?.trim()) return;
+      dispatch({ type: "otp_submitted", bank });
+      await fetch("/api/sync/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+    },
+    [otpDrafts],
+  );
 
   const dismissReconciliation = useCallback(
     () => dispatch({ type: "reconciliation_dismissed" }),

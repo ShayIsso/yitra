@@ -43,17 +43,29 @@ const NOTHING_OBSERVED: ReadonlySet<string> = new Set();
  * Leaving the step unmounts the stream, and the route then aborts the scrape
  * and releases the sync claim — so while a run is live, leaving is confirmed
  * rather than silent. The footer is already disabled; this covers the frame's
- * "continue later" link and a reload or tab close.
+ * "continue later" link and a reload or tab close. The browser's own back
+ * button is not covered: the App Router offers no cancellable navigation event.
  */
 function useLeaveGuard(active: boolean) {
   useEffect(() => {
     if (!active) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Older Safari prompts only when returnValue is set.
+      e.returnValue = "";
+    };
     // Capture phase on the document runs before React's root listener, so a
     // declined confirm stops a Next.js <Link> before it routes.
     const onClick = (e: MouseEvent) => {
       const anchor = e.target instanceof Element ? e.target.closest("a[href]") : null;
-      if (!anchor || window.confirm(LEAVE_WARNING)) return;
+      const opensElsewhere =
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey ||
+        anchor?.getAttribute("target") === "_blank";
+      if (!anchor || opensElsewhere || window.confirm(LEAVE_WARNING)) return;
       e.preventDefault();
       e.stopPropagation();
     };
@@ -299,15 +311,15 @@ function Outcome({
         </div>
       )}
 
-      {settled && (view.credentialFailure || (view.phase === "finished" && view.retryable)) && (
+      {settled && (view.failedInstitution || (view.phase === "finished" && view.retryable)) && (
         <div className="flex flex-col gap-3">
-          {view.credentialFailure && (
+          {view.failedInstitution && (
             <p className="text-muted-foreground text-sm">
               אם פרטי ההתחברות שגויים, אפשר לחזור לשלב החשבון, או לעדכן אותם מאוחר יותר בהגדרות.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            {view.credentialFailure && (
+            {view.failedInstitution && (
               <Link href={INSTITUTION_STEP_HREF} className={buttonVariants({ variant: "outline" })}>
                 חזרה לשלב החשבון
               </Link>

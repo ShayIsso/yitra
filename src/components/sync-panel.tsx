@@ -111,9 +111,8 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
     // this run just synced loses its caveat. Live SSE state is never evidence.
     onComplete: () => router.refresh(),
   });
-  const { bankStates, syncing, summary, aiSummary, connectionError } = state;
-  const reconciliationToast = state.reconciliation;
-  const alreadyRunningMessage = state.refusal;
+  const { bankStates, syncing, summary, aiSummary, connectionError, reconciliation, refusal } =
+    state;
   const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
 
   useEffect(() => {
@@ -143,9 +142,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
           )}
         </Button>
         {connectionError && <p className="text-destructive text-sm">שגיאת חיבור. נסה שוב.</p>}
-        {alreadyRunningMessage && (
-          <p className="text-muted-foreground text-sm">{alreadyRunningMessage}</p>
-        )}
+        {refusal && <p className="text-muted-foreground text-sm">{refusal}</p>}
       </div>
 
       {!syncing && !summary && Object.keys(bankStates).length === 0 && lastRuns.length === 0 && (
@@ -266,17 +263,15 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
         })}
       </div>
 
-      {reconciliationToast && (
+      {reconciliation && (
         <Toast variant="success" onDismiss={dismissReconciliation}>
-          {reconciliationToast.autoApplied > 0 && (
+          {reconciliation.autoApplied > 0 && (
             <p className="text-foreground">
-              סווגו אוטומטית {reconciliationToast.autoApplied} עסקאות כהסדרת כרטיס אשראי
+              סווגו אוטומטית {reconciliation.autoApplied} עסקאות כהסדרת כרטיס אשראי
             </p>
           )}
-          {reconciliationToast.queued > 0 && (
-            <p className="text-muted-foreground">
-              {reconciliationToast.queued} התאמות ממתינות לאישור
-            </p>
+          {reconciliation.queued > 0 && (
+            <p className="text-muted-foreground">{reconciliation.queued} התאמות ממתינות לאישור</p>
           )}
         </Toast>
       )}

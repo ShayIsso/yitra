@@ -5,7 +5,8 @@ import { stepAfter, stepBefore, type SetupStep } from "@/lib/onboarding/steps";
  * Each later step (#259–#262) owns exactly one file under `./steps/`, exporting
  * one component that takes `SetupStepProps` and one `StepMeta` with its copy;
  * the frame owns everything else — order, progress, and where these callbacks
- * lead. A slot changes only its own file.
+ * lead. A slot changes only its own file; logic it shares with another step or
+ * page moves into a module both import rather than being copied.
  *
  * Step bodies are client components. A step that needs to write must do it
  * through a Server Action whose first statement is

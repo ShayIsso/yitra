@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BankSyncState } from "@/components/sync-stream";
 
-/** One institution's live sync status and OTP entry — shared by the Sync page and the wizard. */
+// One institution's live sync status and OTP entry, shared by the Sync page and the wizard.
 
 export const STATUS_TEXT: Record<string, string> = {
   initializing: "מאתחל...",

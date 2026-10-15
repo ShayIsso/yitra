@@ -92,6 +92,16 @@ describe("a sync run as the stream reports it", () => {
   });
 });
 
+describe("a start awaiting the server's answer", () => {
+  it("is pending from the request until the server accepts, refuses or fails it", () => {
+    const requested = run([{ type: "start_requested" }]);
+    expect(requested.starting).toBe(true);
+    expect(run([accepted], requested).starting).toBe(false);
+    expect(run([{ type: "refused", message: "m" }], requested).starting).toBe(false);
+    expect(run([{ type: "start_failed" }], requested).starting).toBe(false);
+  });
+});
+
 describe("a refused or broken start", () => {
   it("holds the refusal message without claiming a run of its own", () => {
     const state = run([{ type: "start_requested" }, { type: "refused", message: "כבר פועל" }]);

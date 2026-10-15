@@ -68,6 +68,12 @@ describe("the first-sync step before a sync starts", () => {
 });
 
 describe("the first-sync step while syncing", () => {
+  it("cannot be started twice while the server has not yet answered the first start", () => {
+    const view = deriveFirstSyncView(connected, stream({ type: "start_requested" }));
+    expect(view.phase).toBe("running");
+    expect(firstSyncFooter(view).primary).toBe("busy");
+  });
+
   it("blocks every way forward or back while the run is live", () => {
     const view = deriveFirstSyncView(
       connected,
@@ -121,7 +127,7 @@ describe("the first-sync step after the run", () => {
     );
     expect(view).toMatchObject({
       phase: "finished",
-      credentialFailure: false,
+      failedInstitution: false,
       retryable: false,
     });
     expect(firstSyncFooter(view)).toEqual({ primary: "finish", skip: false });
@@ -142,7 +148,7 @@ describe("the first-sync step after the run", () => {
         completed({ [CARD]: 2 }),
       ),
     );
-    expect(view).toMatchObject({ phase: "finished", credentialFailure: true, retryable: true });
+    expect(view).toMatchObject({ phase: "finished", failedInstitution: true, retryable: true });
     expect(firstSyncFooter(view).primary).toBe("finish");
   });
 
@@ -156,7 +162,7 @@ describe("the first-sync step after the run", () => {
         completed({}),
       ),
     );
-    expect(view).toMatchObject({ phase: "finished", credentialFailure: false, retryable: true });
+    expect(view).toMatchObject({ phase: "finished", failedInstitution: false, retryable: true });
   });
 
   it("keeps the finished run on screen when a retry is refused", () => {

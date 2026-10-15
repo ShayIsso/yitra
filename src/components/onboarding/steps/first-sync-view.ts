@@ -24,8 +24,8 @@ export type FirstSyncPhase =
 export type FirstSyncView = {
   readonly phase: FirstSyncPhase;
   readonly notice: FirstSyncNotice | null;
-  /** Some institution's run ended in an error — the fix lives in the institution step. */
-  readonly credentialFailure: boolean;
+  /** Some institution's run ended in an error — often its credentials, fixed from the institution step. */
+  readonly failedInstitution: boolean;
   /** Some institution's run ended in an error or a missed OTP window. */
   readonly retryable: boolean;
 };
@@ -44,22 +44,25 @@ export function deriveFirstSyncView(load: ConnectedLoad, stream: SyncStreamState
     load.status === "ready"
       ? load.connected.map((institution) => stream.bankStates[institution.bankType]?.status)
       : [];
-  const credentialFailure = outcomes.includes("error");
-  const retryable = credentialFailure || outcomes.includes("otp_timeout");
+  const failedInstitution = outcomes.includes("error");
+  const retryable = failedInstitution || outcomes.includes("otp_timeout");
 
-  const phase: FirstSyncPhase = stream.syncing
-    ? "running"
-    : load.status === "loading"
-      ? "loading"
-      : load.status === "failed"
-        ? "unavailable"
-        : load.connected.length === 0
-          ? "no-credentials"
-          : stream.summary !== null
-            ? "finished"
-            : "ready";
+  // A start the server has not answered yet counts as running: a second click
+  // must not send a second request, and leaving must not abort it unasked.
+  const phase: FirstSyncPhase =
+    stream.starting || stream.syncing
+      ? "running"
+      : load.status === "loading"
+        ? "loading"
+        : load.status === "failed"
+          ? "unavailable"
+          : load.connected.length === 0
+            ? "no-credentials"
+            : stream.summary !== null
+              ? "finished"
+              : "ready";
 
-  return { phase, notice, credentialFailure, retryable };
+  return { phase, notice, failedInstitution, retryable };
 }
 
 /**
