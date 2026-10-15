@@ -1,7 +1,7 @@
-import { amountsMatch, datesWithin, matchesTransferDescriptor } from "@/lib/transaction-matching";
+import { datesWithin, matchesTransferDescriptor } from "@/lib/transaction-matching";
+import { NO_REJECTIONS, isRejected, type RejectedPairs } from "./rejected-pairs";
 import type { P2MirrorCandidate, ReconciliationTransaction } from "./types";
 
-const EXACT_TOLERANCE = 0.02;
 const DATE_WINDOW_DAYS = 1;
 const OVERLAP_PENALTY = 0.25;
 const MIN_CONFIDENCE = 0.7;
@@ -16,7 +16,10 @@ function parseDate(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00Z`);
 }
 
-export function detectP2Mirror(transactions: ReconciliationTransaction[]): P2MirrorCandidate[] {
+export function detectP2Mirror(
+  transactions: ReconciliationTransaction[],
+  rejected: RejectedPairs = NO_REJECTIONS,
+): P2MirrorCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
   if (unreconciled.length === 0) return [];
@@ -37,12 +40,11 @@ export function detectP2Mirror(transactions: ReconciliationTransaction[]): P2Mir
       // Must be on different bank accounts
       if (a.bankAccountId === b.bankAccountId) continue;
 
-      // Amounts must match within exact tolerance
-      if (
-        !amountsMatch(a.chargedAmount, b.chargedAmount, { amountTolerancePct: EXACT_TOLERANCE })
-      ) {
-        continue;
-      }
+      // A mirror is one charge seen from two accounts, so the amounts are identical;
+      // any tolerance here pairs unrelated charges that merely look alike.
+      if (a.chargedAmount !== b.chargedAmount) continue;
+
+      if (isRejected(rejected, a.id, b.id)) continue;
 
       // Dates must be within ±1 day
       const bDate = parseDate(b.date);

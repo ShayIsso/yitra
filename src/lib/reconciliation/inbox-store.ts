@@ -10,10 +10,12 @@ import {
   bankAccounts,
   bankCredentials,
   categoryRules,
+  reconciliationRejections,
 } from "@/db/schema";
 import { eq, isNull, isNotNull, inArray, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { InboxStore, InboxTransaction } from "./inbox-ops";
+import { canonicalPair, type RejectedPair } from "./rejected-pairs";
 import type { CategoryRule } from "@/lib/categories/rules";
 
 // ── Row shape returned by the inbox query ───────────────────────────────────
@@ -267,8 +269,19 @@ export const drizzleInboxStore: InboxStore = {
     });
   },
 
-  async clearGroup(groupIds: string[]): Promise<void> {
+  async clearGroup(groupIds: string[], rejections: RejectedPair[] = []): Promise<void> {
     await db.transaction(async (tx) => {
+      if (rejections.length > 0) {
+        await tx
+          .insert(reconciliationRejections)
+          .values(
+            rejections.map(([a, b]) => {
+              const [txnAId, txnBId] = canonicalPair(a, b);
+              return { txnAId, txnBId };
+            }),
+          )
+          .onConflictDoNothing();
+      }
       for (const groupId of groupIds) {
         await tx
           .update(transactions)

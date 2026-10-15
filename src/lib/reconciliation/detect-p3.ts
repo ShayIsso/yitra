@@ -1,4 +1,5 @@
 import { amountsMatch, datesWithin, matchesTransferDescriptor } from "@/lib/transaction-matching";
+import { NO_REJECTIONS, isRejected, type RejectedPairs } from "./rejected-pairs";
 import type { P3InterAccountCandidate, ReconciliationTransaction } from "./types";
 
 const EXACT_TOLERANCE = 0.02;
@@ -19,6 +20,7 @@ function parseDate(dateStr: string): Date {
 
 export function detectP3InterAccount(
   transactions: ReconciliationTransaction[],
+  rejected: RejectedPairs = NO_REJECTIONS,
 ): P3InterAccountCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
@@ -35,6 +37,8 @@ export function detectP3InterAccount(
 
       // Must be on different bank accounts
       if (a.bankAccountId === b.bankAccountId) continue;
+
+      if (isRejected(rejected, a.id, b.id)) continue;
 
       // Must have opposite signs (one positive incoming, one negative outgoing)
       if (a.chargedAmount === 0 || b.chargedAmount === 0) continue;

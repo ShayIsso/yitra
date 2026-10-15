@@ -6,6 +6,7 @@
 
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
 import { bankKindOf } from "@/lib/bank-registry";
+import { pairsToRecordOnReject, type RejectedPair } from "./rejected-pairs";
 
 export type InboxTransaction = {
   id: string;
@@ -31,7 +32,8 @@ export type InboxStore = {
   getGroupMembers(groupId: string): Promise<InboxTransaction[]>;
   getGroupMembersByIds(groupIds: string[]): Promise<Map<string, InboxTransaction[]>>;
   confirmGroup(groupId: string, now: Date, transferCategoryId: string | null): Promise<void>;
-  clearGroup(groupIds: string[]): Promise<void>;
+  /** Clears the groups and persists `rejections` in the same transaction. */
+  clearGroup(groupIds: string[], rejections?: RejectedPair[]): Promise<void>;
   clearRows(txnIds: string[]): Promise<void>;
   setCategory(txnId: string, categoryId: string | null): Promise<void>;
   getCategoryIdByName(name: string): Promise<string | null>;
@@ -122,7 +124,8 @@ export async function rejectGroup(groupId: string, store: InboxStore): Promise<{
   // Queued candidates do NOT have their category flipped — only re-rule-engine
   // rows that were part of an auto-applied group (reconciliationConfirmedAt set).
   // For the queue case, just clear reconciliation columns; category is unchanged.
-  await store.clearGroup([groupId]);
+  // The rejected pairs are recorded with the clear, so no sync can re-propose them.
+  await store.clearGroup([groupId], pairsToRecordOnReject(members));
 
   // Re-run rule engine for any rows whose category may have been system-assigned
   const rules = await store.getRulesOrderedByPriority();

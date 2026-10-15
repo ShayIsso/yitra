@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { transactions } from "@/db/schema";
-import { inArray, isNull, and } from "drizzle-orm";
+import { transactions, reconciliationRejections } from "@/db/schema";
+import { inArray, isNull, and, notExists, eq } from "drizzle-orm";
 
 /**
  * Routes transfer-guarded-but-unpaired transactions into the reconciliation
@@ -13,7 +13,10 @@ import { inArray, isNull, and } from "drizzle-orm";
  * transfer, it only hands over the ids.
  */
 export interface SuspectedTransferRouter {
-  /** Of the given ids, the ones with no reconciliation group yet (unpaired after P3). */
+  /**
+   * Of the given ids, the ones with no reconciliation group yet (unpaired after P3)
+   * and not previously rejected as a suspected transfer (a rejected pair).
+   */
   filterUnpaired(txnIds: string[]): Promise<string[]>;
   /** Queue a single row as a pending suspected-transfer inbox item. */
   queueSuspectedTransfer(txnId: string): Promise<void>;
@@ -30,7 +33,23 @@ export const drizzleSuspectedTransferRouter: SuspectedTransferRouter = {
     const rows = await db
       .select({ id: transactions.id })
       .from(transactions)
-      .where(and(inArray(transactions.id, txnIds), isNull(transactions.reconciliationGroupId)));
+      .where(
+        and(
+          inArray(transactions.id, txnIds),
+          isNull(transactions.reconciliationGroupId),
+          notExists(
+            db
+              .select({ one: reconciliationRejections.txnAId })
+              .from(reconciliationRejections)
+              .where(
+                and(
+                  eq(reconciliationRejections.txnAId, transactions.id),
+                  eq(reconciliationRejections.txnBId, transactions.id),
+                ),
+              ),
+          ),
+        ),
+      );
     return rows.map((r) => r.id);
   },
 

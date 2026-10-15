@@ -12,6 +12,8 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  primaryKey,
+  check,
   customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -174,6 +176,30 @@ export const transactions = pgTable(
     uniqueIndex("uq_external_id_account")
       .on(table.externalId, table.bankAccountId)
       .where(sql`external_id IS NOT NULL`),
+  ],
+);
+
+/**
+ * Rejected pairs (CONTEXT.md): reconciliation matches the user declined, so no
+ * detector proposes them again. The pair is stored lowest id first, which makes
+ * the primary key the ordered-pair uniqueness constraint; a suspected-transfer
+ * singleton is stored as (id, id). Deleting either transaction cascades the row.
+ */
+export const reconciliationRejections = pgTable(
+  "reconciliation_rejections",
+  {
+    txnAId: uuid("txn_a_id")
+      .references(() => transactions.id, { onDelete: "cascade" })
+      .notNull(),
+    txnBId: uuid("txn_b_id")
+      .references(() => transactions.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.txnAId, table.txnBId] }),
+    index("idx_reconciliation_rejections_txn_b").on(table.txnBId),
+    check("ck_reconciliation_rejections_ordered", sql`${table.txnAId} <= ${table.txnBId}`),
   ],
 );
 

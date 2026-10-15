@@ -1,10 +1,19 @@
 import { db } from "@/db";
-import { transactions, categories, bankAccounts, bankCredentials } from "@/db/schema";
+import {
+  transactions,
+  categories,
+  bankAccounts,
+  bankCredentials,
+  reconciliationRejections,
+} from "@/db/schema";
 import { eq, gte, inArray } from "drizzle-orm";
+import { toRejectedPairs, type RejectedPairs } from "./rejected-pairs";
 import type { ReconciliationTransaction } from "./types";
 
 export interface ReconciliationStore {
   getRecentTransactions(windowDays: number): Promise<ReconciliationTransaction[]>;
+  /** Every pair the user rejected; the detectors never re-propose these. */
+  getRejectedPairs(): Promise<RejectedPairs>;
   getCategoryIdByName(name: string): Promise<string | null>;
   applyAutoReconciliation(args: {
     groupId: string;
@@ -79,6 +88,13 @@ export const drizzleReconciliationStore: ReconciliationStore = {
       categoryId: row.categoryId,
       reconciliationGroupId: row.reconciliationGroupId,
     }));
+  },
+
+  async getRejectedPairs(): Promise<RejectedPairs> {
+    const rows = await db
+      .select({ a: reconciliationRejections.txnAId, b: reconciliationRejections.txnBId })
+      .from(reconciliationRejections);
+    return toRejectedPairs(rows.map((r) => [r.a, r.b] as const));
   },
 
   async getCategoryIdByName(name: string): Promise<string | null> {
