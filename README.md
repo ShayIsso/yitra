@@ -101,8 +101,39 @@ Notes:
 - The container does not run migrations. Apply them with `npm run db:migrate` from a checkout, against the compose database (the default `DATABASE_URL` in `.env.example` reaches it on `localhost:5432`), before the first start and after any update that adds a file under `drizzle/`.
 - Compose overrides `DATABASE_URL` and `CHROMIUM_PATH` for the container itself. Everything else comes from `.env`.
 - Compose publishes ports 3000 and 5432 on all host interfaces, and the database ships with development credentials. Run it on a machine you control behind a firewall, or restrict the published ports in your own compose override. Do not expose it to the internet.
-- Database data lives in the named volume `shayfinance_pgdata`.
+- Database data lives in the named volume `yitra_pgdata`. The Compose project is pinned to `yitra`, so the checkout directory's name never matters.
 - Under Compose a legacy `APP_PASSWORD` hash needs `$` written as `$$`. New installs do not set it.
+
+### Upgrading from the ShayFinance name
+
+Installs set up before the rename keep their data in a volume named `shayfinance_pgdata`, in a database and user both named `shayfinance`. The new `docker-compose.yml` looks for `yitra_pgdata` instead, so starting it unchanged would give you an empty database. Move the data across once; the old volume is only read, never changed, so it stays a complete rollback until you delete it.
+
+```bash
+# 1. Back up and stop the old container (named after your checkout directory)
+docker exec shayfinance-db-1 pg_dump -U shayfinance -Fc shayfinance > backup.dump
+docker stop shayfinance-db-1
+
+# 2. Copy the data into a new volume
+docker volume create --label com.docker.compose.project=yitra \
+  --label com.docker.compose.volume=pgdata yitra_pgdata
+docker run --rm -v shayfinance_pgdata:/from:ro -v yitra_pgdata:/to \
+  --entrypoint sh postgres:16-alpine -c 'cp -a /from/. /to/'
+
+# 3. Rename the database and user inside the copy
+docker run -d --name yitra-rename -v yitra_pgdata:/var/lib/postgresql/data postgres:16-alpine
+docker exec yitra-rename pg_isready   # repeat until it reports "accepting connections"
+docker exec yitra-rename psql -U shayfinance -d postgres \
+  -c "ALTER DATABASE shayfinance RENAME TO yitra" -c "CREATE ROLE rename_admin SUPERUSER LOGIN"
+docker exec yitra-rename psql -U rename_admin -d postgres \
+  -c "ALTER ROLE shayfinance RENAME TO yitra" -c "ALTER ROLE yitra PASSWORD 'yitra_dev'"
+docker exec yitra-rename psql -U yitra -d postgres -c "DROP ROLE rename_admin"
+docker rm -f yitra-rename
+
+# 4. Start the renamed database
+docker compose up db -d
+```
+
+Then set `DATABASE_URL=postgresql://yitra:yitra_dev@localhost:5432/yitra` in your environment file and restart the app. Once everything checks out, `docker rm shayfinance-db-1` and `docker volume rm shayfinance_pgdata` remove the old copies.
 
 ## Environment Variables
 

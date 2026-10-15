@@ -1,17 +1,21 @@
+# Pinned so the Compose project (and its container names) never depend on the
+# checkout directory's name.
+name: yitra
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: shayfinance
-      POSTGRES_USER: shayfinance
-      POSTGRES_PASSWORD: shayfinance_dev
+      POSTGRES_DB: yitra
+      POSTGRES_USER: yitra
+      POSTGRES_PASSWORD: yitra_dev
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shayfinance"]
+      test: ["CMD-SHELL", "pg_isready -U yitra"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,7 +32,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://shayfinance:shayfinance_dev@db:5432/shayfinance
+      - DATABASE_URL=postgresql://yitra:yitra_dev@db:5432/yitra
       - CHROMIUM_PATH=/usr/bin/chromium
     env_file:
       - .env
@@ -37,7 +41,8 @@ services:
 
 volumes:
   pgdata:
-    # Pinned: Compose derives the default name from the checkout directory, and
-    # the real data lives in this volume. A re-clone under another directory
-    # name would otherwise start the app on a silently empty database.
-    name: shayfinance_pgdata
+    # Pinned: the data lives in this volume, and a derived name would change
+    # with the project name, starting the app on a silently empty database.
+    # Installs from before the rename keep their data in `shayfinance_pgdata`
+    # (README, "Upgrading from the ShayFinance name").
+    name: yitra_pgdata
