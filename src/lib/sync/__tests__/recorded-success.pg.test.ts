@@ -11,7 +11,7 @@ import { buildInstitutionsWithRecordedSuccessQuery, isRecordedSuccess } from "..
  * throwaway database whose name starts with `yitra_wt` or `yitra_it`; it
  * deletes every `sync_runs` row, so it refuses any other name.
  *
- *   docker exec shayfinance-db-1 createdb -U shayfinance yitra_wt_check
+ *   docker exec yitra-db-1 createdb -U yitra yitra_wt_check
  *   DATABASE_URL=…/yitra_wt_check npx drizzle-kit migrate
  *   YITRA_PG_TEST_URL=…/yitra_wt_check npx vitest run recorded-success.pg
  */
