@@ -57,6 +57,15 @@ describe("net outflow rule — expense (#304)", () => {
     expect(computeSpendingByCategory(month)).toEqual([]);
   });
 
+  it("rounds month expenses to agorot, so purchases and refunds that cancel total exactly 0", () => {
+    const month = [
+      row("gifts", "expense", -10.1),
+      row("gifts", "expense", -20.2),
+      row("gifts", "expense", 30.3),
+    ];
+    expect(computeMonthlySummary(month).expenses).toBe(0);
+  });
+
   it("raises net savings by a refund in an expense category", () => {
     const month = [
       row("salary", "income", 8000),
@@ -71,6 +80,15 @@ describe("net outflow rule — investment (#304)", () => {
   it("is net deployment: deposits minus withdrawals", () => {
     const month = [row("fund", "investment", -1500), row("fund", "investment", 500)];
     expect(computeMonthlySummary(month).investmentTotal).toBe(1000);
+  });
+
+  it("rounds net deployment to agorot, so a withdrawal cancelling the deposits is exactly 0, not −0", () => {
+    const month = [
+      row("fund", "investment", 0.1),
+      row("fund", "investment", 0.2),
+      row("fund", "investment", -0.3),
+    ];
+    expect(computeMonthlySummary(month).investmentTotal).toBe(0);
   });
 
   it("goes negative in a month whose withdrawals exceed its deposits, leaving net savings untouched", () => {

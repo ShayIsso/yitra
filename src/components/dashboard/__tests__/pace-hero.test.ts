@@ -66,4 +66,12 @@ describe("paceHeroViewModel", () => {
     expect(vm?.elapsedPercent).toBeCloseTo(33.3);
     expect(vm?.elapsedLabel).toBe("33%");
   });
+
+  it("shows 0% spent, never a negative percent, for a net-refund month (expenses below zero)", () => {
+    const vm = paceHeroViewModel(
+      pace({ spent: -350, spentFraction: -350 / 7000, verdict: "comfortably-under" }),
+    );
+    expect(vm?.spentLabel).toBe("0%");
+    expect(vm?.fillPercent).toBe(0);
+  });
 });

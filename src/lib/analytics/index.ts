@@ -116,8 +116,14 @@ export function outflowContribution(chargedAmount: number): number {
   return -chargedAmount;
 }
 
-/** Below half an agora a net is float residue of rows that cancel, not spend. */
-const SPEND_EPSILON = 0.005;
+/**
+ * Nets are rounded to agorot so float residue of rows that cancel (−10.1 −20.2
+ * +30.3) is exactly 0 — never a phantom ₪0 bar, a red "₪0" or a "−0" — and so
+ * leaves and month totals agree on what "net ≤ 0" means. `|| 0` folds −0 to 0.
+ */
+function toAgorot(amount: number): number {
+  return Math.round(amount * 100) / 100 || 0;
+}
 
 /**
  * Net outflow per key with the spend floor applied at the key's grain
@@ -136,7 +142,9 @@ function netOutflowsByKey<T extends { chargedAmount: number }, K>(
     net.set(key, (net.get(key) ?? 0) + outflowContribution(row.chargedAmount));
   }
   for (const [key, amount] of net) {
-    if (amount < SPEND_EPSILON) net.delete(key);
+    const rounded = toAgorot(amount);
+    if (rounded <= 0) net.delete(key);
+    else net.set(key, rounded);
   }
   return net;
 }
@@ -159,9 +167,11 @@ function sumOutflows(
   rows: readonly AnalyticsTransaction[],
   type: Extract<NonNullable<AnalyticsTransaction["categoryType"]>, "expense" | "investment">,
 ) {
-  return rows
-    .filter((t) => t.categoryType === type)
-    .reduce((sum, t) => sum + outflowContribution(t.chargedAmount), 0);
+  return toAgorot(
+    rows
+      .filter((t) => t.categoryType === type)
+      .reduce((sum, t) => sum + outflowContribution(t.chargedAmount), 0),
+  );
 }
 
 /**

@@ -51,7 +51,7 @@ Total Expenses and investment deployment are **net**, never absolute: each row c
 
 ### `spend floor` — load-bearing
 
-Per-category, per-group and per-merchant figures — the spending breakdown, budget gauges, month-close verdicts, report breakdowns and top merchants — are the `net outflow` **floored at 0 at the leaf grain**: a category's (or merchant's) rows are netted first, then a key netting to ≤ 0 shows ₪0 and drops out of the breakdown (budget spend reads ₪0). Group roll-ups and budget subtrees sum the **floored leaves**, so one leaf's refund never offsets a sibling's spend. Month totals are **never** floored: they stay the true net. So in a month where some category nets to a refund, the breakdown's total exceeds Total Expenses by exactly that refund — the one place the two may differ.
+Per-category, per-group and per-merchant figures — the spending breakdown, budget gauges, month-close verdicts, report breakdowns and top merchants — are the `net outflow` **floored at 0 at the leaf grain**: a category's (or merchant's) rows are netted first, then a key netting to ≤ 0 shows ₪0 and drops out of the breakdown (budget spend reads ₪0). Group roll-ups and budget subtrees sum the **floored leaves**, so one leaf's refund never offsets a sibling's spend. Month totals are **never** floored: they stay the true net. So in a month where some category nets to a refund, the breakdown's total exceeds Total Expenses by exactly that refund — the one place the two may differ, which is why a breakdown's own total is labelled a by-category sum (סך לפי קטגוריות), never "Total Expenses". Every net — leaf and month total alike — is rounded to agorot, so rows that cancel net to exactly 0 on both sides.
 
 ### `transfer` (vocabulary)
 
