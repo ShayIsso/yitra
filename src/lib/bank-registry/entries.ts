@@ -17,8 +17,10 @@ import type { CredentialFieldDescriptor } from "./fields";
  * - `prepaid`: a stored-value instrument. Its scraped balance is the real
  *   remaining value and it never settles through a bank payment, so it is
  *   neither a settlement lump nor a card statement and its balance is shown as
- *   reported. Every kind-reading site compares against `bank` or `card`, which
- *   `prepaid` fails by construction (#289).
+ *   reported (#289).
+ *
+ * A site that should treat `prepaid` like a card or a bank must name it
+ * explicitly; comparing against `bank` or `card` alone excludes it.
  */
 export type BankKind = "bank" | "card" | "prepaid";
 

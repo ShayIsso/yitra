@@ -140,8 +140,9 @@ const MEMORY_CACHE_CONFIDENCE = 6;
  * `card_settlement` shape would false-match, so cards scope the transfer guard
  * to genuine cross-account shapes only; bank accounts get all three kinds
  * (owner-adjudicated, PR #150). Mirrors reconciliation P1's kind gate. Prepaid
- * stored-value cards and institutions of unknown kind get the narrower scope:
- * their purchases never meet the settlement shape's false matches.
+ * stored-value cards get the narrower scope because they never carry a genuine
+ * settlement, and their merchant names would false-match the settlement shape
+ * just like a card's. So do institutions of unknown kind.
  */
 function transferKindsFor(bankType: string): TransferDescriptorKind[] {
   return bankKindOf(bankType) === "bank"
