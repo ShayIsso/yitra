@@ -87,7 +87,7 @@ Always say "settlement charge" or "The Paradox" — these names are used in BACK
 
 ### `rejected pair`
 
-A pair of transactions the user declined (דחה) in the reconciliation inbox, persisted in `reconciliation_rejections` so no sync proposes it again. Rejection is **per pair**, never per row: each row stays free to pair with a different genuine counterpart. The pair is stored lowest id first; deleting either transaction (including the pending sweep) cascades its rejection away.
+A pair of transactions the user declined (דחה) in the reconciliation inbox — or **undid** after it was auto-applied or approved: undo is a rejection — persisted in `reconciliation_rejections` so no sync proposes it again. Rejection is **per pair**, never per row: each row stays free to pair with a different genuine counterpart. The pair is stored lowest id first; deleting either transaction (including the pending sweep) cascades its rejection away.
 
 What rejecting a group records: a **settlement group** records the lump against each card detail (the same lump/detail set is never re-proposed, while the lump can still settle against other card rows); a **transfer pair** records its two members; a **suspected transfer** (singleton, no counterpart) records the row against itself, which only keeps the AI step's router from queueing it again — the row can still pair via P2/P3. Every detector (P1, P2, P3) receives the rejected set from the store and skips those pairs.
 
