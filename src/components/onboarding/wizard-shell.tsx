@@ -2,10 +2,10 @@
 
 import type { ComponentType } from "react";
 import type { PasswordSource } from "@/lib/auth";
-import { stepAfter, stepBefore, type SetupStep } from "@/lib/onboarding/steps";
+import type { SetupStep } from "@/lib/onboarding/steps";
 import { PasswordStep, type SubmitPassword } from "./password-step";
 import { SetupFrame } from "./setup-frame";
-import type { SetupStepProps, StepNavigation } from "./step-navigation";
+import { buildStepNavigation, type SetupStepProps } from "./step-navigation";
 import { CategoriesStep } from "./steps/categories-step";
 import { FirstSyncStep } from "./steps/first-sync-step";
 import { InstitutionStep } from "./steps/institution-step";
@@ -38,17 +38,7 @@ export function WizardShell({
   submitPassword,
   exitHref,
 }: WizardShellProps) {
-  const next = stepAfter(step);
-  const previous = stepBefore(step);
-  const forward = () => (next ? onNavigate(next) : onFinish());
-
-  const navigation: StepNavigation = {
-    advance: forward,
-    skip: step === "password" ? null : forward,
-    back: previous ? () => onNavigate(previous) : null,
-    isLast: next === null,
-    pending,
-  };
+  const navigation = buildStepNavigation(step, { onNavigate, onFinish, pending });
 
   const Body = step === "password" ? null : STEP_BODIES[step];
 

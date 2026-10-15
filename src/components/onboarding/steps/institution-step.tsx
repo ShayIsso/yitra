@@ -28,6 +28,7 @@ import {
   emptyCredentialValues,
   type CredentialValues,
 } from "@/lib/credentials/form";
+import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
 import { StepFooter } from "../step-footer";
 import type { SetupStepProps, StepMeta } from "../step-navigation";
 
@@ -38,11 +39,9 @@ export const institutionStepMeta: StepMeta = {
   description: "הוסיפו את פרטי ההתחברות לחשבון הראשון. הפרטים נשמרים מוצפנים במסד הנתונים שלכם.",
 };
 
-type Connected = { readonly id: string; readonly bankType: string; readonly displayName: string };
-
 type ConnectedLoad =
   | { readonly status: "loading" }
-  | { readonly status: "ready"; readonly connected: Connected[] };
+  | { readonly status: "ready"; readonly connected: ConnectedInstitution[] };
 
 type InstitutionFormValues = {
   bankType: BankType;
@@ -53,21 +52,6 @@ type InstitutionFormValues = {
 function emptyForm(): InstitutionFormValues {
   const [first] = enabledBankEntries();
   return { bankType: first.id, displayName: "", credentials: emptyCredentialValues(first) };
-}
-
-function isConnected(row: unknown): row is Connected {
-  if (row === null || typeof row !== "object") return false;
-  const { id, bankType, displayName } = row as Record<string, unknown>;
-  return typeof id === "string" && typeof bankType === "string" && typeof displayName === "string";
-}
-
-/**
- * Anything but a list reads as nothing connected, so a failed read falls back
- * to the form: a second credential is recoverable in Settings, a step that
- * cannot connect anything is not.
- */
-function connectedFrom(body: unknown): Connected[] {
-  return Array.isArray(body) ? body.filter(isConnected) : [];
 }
 
 /**
@@ -82,12 +66,11 @@ export function InstitutionStep({ navigation }: SetupStepProps) {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/credentials")
-      .then((res) => (res.ok ? res.json() : null))
-      .catch(() => null)
-      .then((body: unknown) => {
-        if (active) setExisting({ status: "ready", connected: connectedFrom(body) });
-      });
+    // A failed read falls back to the form: a second credential is recoverable
+    // in Settings, a step that cannot connect anything is not.
+    fetchConnectedInstitutions().then((connected) => {
+      if (active) setExisting({ status: "ready", connected: connected ?? [] });
+    });
     return () => {
       active = false;
     };
@@ -124,7 +107,7 @@ function ConnectedSummary({
   onAddAnother,
   navigation,
 }: {
-  connected: Connected[];
+  connected: ConnectedInstitution[];
   onAddAnother: () => void;
 } & SetupStepProps) {
   return (
