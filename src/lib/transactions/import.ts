@@ -1,5 +1,6 @@
 import type { ScrapedTransaction } from "@/lib/scraper/types";
 import type { CategorySource } from "@/lib/merchant-memory";
+import { sameMerchant } from "@/lib/transaction-matching";
 
 export type StoredTransaction = {
   id: string;
@@ -11,6 +12,9 @@ export type StoredTransaction = {
   chargedAmount: number;
   status: "completed" | "pending";
   categoryId: string | null;
+  categorySource?: CategorySource | null;
+  customDescription?: string | null;
+  reconciliationGroupId?: string | null;
 };
 
 export type NewTransaction = Omit<ScrapedTransaction, ""> & {
@@ -62,33 +66,57 @@ export type ImportOutcome = "inserted" | "updated" | "skipped";
 
 const DAY_MS = 86_400_000;
 
+/**
+ * The library emits full ISO timestamps (`2026-10-14T21:00:00.000Z`); Postgres
+ * stores a `date` column's calendar part, ignoring time and zone. Every date
+ * compared or queried here is reduced the same way, or `Date.parse` yields NaN.
+ */
+export function calendarDate(isoDate: string): string {
+  return isoDate.slice(0, 10);
+}
+
 function dayNumber(isoDate: string): number {
-  return Math.floor(Date.parse(`${isoDate}T00:00:00Z`) / DAY_MS);
+  return Math.floor(Date.parse(`${calendarDate(isoDate)}T00:00:00Z`) / DAY_MS);
 }
 
 function shiftDate(isoDate: string, days: number): string {
   return new Date((dayNumber(isoDate) + days) * DAY_MS).toISOString().slice(0, 10);
 }
 
+/** Lower is stronger: exact, then description-only, then amount-only. */
+function matchTier(
+  tx: Pick<ScrapedTransaction, "chargedAmount" | "description">,
+  c: StoredTransaction,
+): number | null {
+  const sameAmount = c.chargedAmount === tx.chargedAmount;
+  const sameDescription = c.description === tx.description;
+  if (sameAmount && sameDescription) return 0;
+  if (sameDescription) return 1;
+  // Amounts collide across unrelated merchants, so amount alone needs the same merchant.
+  if (sameAmount && sameMerchant(c.description, tx.description)) return 2;
+  return null;
+}
+
 /**
  * The open pending row a posted charge supersedes (CONTEXT.md "pending
- * lifecycle"): same amount OR same description — banks alter one of them on
- * posting, rarely both — and the closest date wins.
+ * lifecycle"): the strongest match tier wins, then the closest date. Banks
+ * alter the amount or the description on posting, rarely both.
  */
 export function pickPendingTakeover(
   tx: Pick<ScrapedTransaction, "date" | "chargedAmount" | "description">,
   candidates: StoredTransaction[],
 ): StoredTransaction | null {
   let best: StoredTransaction | null = null;
-  let bestGap = Infinity;
+  let bestRank: [number, number] = [Infinity, Infinity];
   for (const c of candidates) {
     if (c.status !== "pending" || c.externalId !== null) continue;
-    if (c.chargedAmount !== tx.chargedAmount && c.description !== tx.description) continue;
+    const tier = matchTier(tx, c);
+    if (tier === null) continue;
     const gap = Math.abs(dayNumber(c.date) - dayNumber(tx.date));
     if (gap > PENDING_TAKEOVER_WINDOW_DAYS) continue;
-    if (gap < bestGap) {
+    if (tier < bestRank[0] || (tier === bestRank[0] && gap < bestRank[1])) {
       best = c;
-      bestGap = gap;
+      bestRank = [tier, gap];
     }
   }
   return best;

@@ -2,10 +2,16 @@ import { describe, it, expect } from "vitest";
 import { importTransaction } from "../import";
 import type { Categorization, StoredTransaction } from "../import";
 import { importAccountTransactions } from "../account-import";
+import { planPendingSweep } from "../sweep";
 import type { ScrapedTransaction } from "@/lib/scraper/types";
 import { createMemoryStore, createMemorySweepStore } from "./memory-store";
 
 const noCategorize = async (): Promise<Categorization> => ({ categoryId: null, source: null });
+
+/** The library emits full ISO timestamps, not calendar dates. */
+function ts(day: string, time = "22:00:00.000Z"): string {
+  return `${day}T${time}`;
+}
 
 function shiftIso(iso: string, days: number): string {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
@@ -14,8 +20,8 @@ function shiftIso(iso: string, days: number): string {
 function posted(overrides: Partial<ScrapedTransaction> = {}): ScrapedTransaction {
   return {
     externalId: "ext-9",
-    date: "2024-03-10",
-    processedDate: "2024-03-12",
+    date: ts("2024-03-10"),
+    processedDate: ts("2024-03-12"),
     description: "Fuel Depot",
     memo: null,
     originalAmount: -80,
@@ -46,7 +52,7 @@ function pendingRow(overrides: Partial<StoredTransaction> = {}): StoredTransacti
 }
 
 describe("pending takeover by a posted transaction", () => {
-  it("updates the pending row in place when date, amount and description match", async () => {
+  it("updates the pending row in place when scraped dates are full timestamps", async () => {
     const store = createMemoryStore([pendingRow()]);
     const result = await importTransaction(posted(), "acct-1", store, noCategorize);
     expect(result).toBe("updated");
@@ -55,8 +61,20 @@ describe("pending takeover by a posted transaction", () => {
       id: "p1",
       status: "completed",
       externalId: "ext-9",
-      processedDate: "2024-03-12",
+      date: "2024-03-10",
     });
+  });
+
+  it("handles a timestamp whose UTC date differs from the local calendar day", async () => {
+    const store = createMemoryStore([pendingRow({ date: "2024-03-10" })]);
+    const result = await importTransaction(
+      posted({ date: "2024-03-09T21:00:00.000Z" }),
+      "acct-1",
+      store,
+      noCategorize,
+    );
+    expect(result).toBe("updated");
+    expect(store.rows).toHaveLength(1);
   });
 
   it.each([1, 3, 7, -1, -4, -7])(
@@ -85,12 +103,19 @@ describe("pending takeover by a posted transaction", () => {
     expect(store.rows[0].chargedAmount).toBe(-80);
   });
 
-  it("takes over when the description changed but the amount matches", async () => {
+  it("takes over when the description changed to the same merchant and the amount matches", async () => {
     const store = createMemoryStore([pendingRow({ description: "FUEL DEPOT TLV 123" })]);
     const result = await importTransaction(posted(), "acct-1", store, noCategorize);
     expect(result).toBe("updated");
     expect(store.rows).toHaveLength(1);
     expect(store.rows[0].description).toBe("Fuel Depot");
+  });
+
+  it("does not take over on amount alone when the merchant differs", async () => {
+    const store = createMemoryStore([pendingRow({ description: "Cafe Nova" })]);
+    const result = await importTransaction(posted(), "acct-1", store, noCategorize);
+    expect(result).toBe("inserted");
+    expect(store.rows).toHaveLength(2);
   });
 
   it("does not take over when both amount and description differ", async () => {
@@ -100,7 +125,7 @@ describe("pending takeover by a posted transaction", () => {
     expect(store.rows).toHaveLength(2);
   });
 
-  it("prefers the pending row with the closest date", async () => {
+  it("prefers the pending row with the closest date within a match tier", async () => {
     const store = createMemoryStore([
       pendingRow({ id: "far", date: "2024-03-05" }),
       pendingRow({ id: "near", date: "2024-03-09" }),
@@ -108,6 +133,21 @@ describe("pending takeover by a posted transaction", () => {
     await importTransaction(posted(), "acct-1", store, noCategorize);
     expect(store.rows.find((r) => r.id === "near")?.status).toBe("completed");
     expect(store.rows.find((r) => r.id === "far")?.status).toBe("pending");
+  });
+
+  it("ranks match strength before date gap", async () => {
+    const store = createMemoryStore([
+      pendingRow({ id: "cafe", description: "Cafe", chargedAmount: -20, date: "2024-03-10" }),
+      pendingRow({ id: "bakery", description: "Bakery", chargedAmount: -20, date: "2024-03-07" }),
+    ]);
+    await importTransaction(
+      posted({ description: "Bakery", chargedAmount: -20, date: ts("2024-03-10") }),
+      "acct-1",
+      store,
+      noCategorize,
+    );
+    expect(store.rows.find((r) => r.id === "bakery")?.status).toBe("completed");
+    expect(store.rows.find((r) => r.id === "cafe")?.status).toBe("pending");
   });
 
   it("keeps the pending row's category and never writes category or custom description", async () => {
@@ -129,7 +169,7 @@ describe("pending takeover by a posted transaction", () => {
     const store = createMemoryStore();
     await importTransaction(posted({ externalId: "a" }), "acct-1", store, noCategorize);
     const second = await importTransaction(
-      posted({ externalId: "b", date: "2024-03-13" }),
+      posted({ externalId: "b", date: ts("2024-03-13") }),
       "acct-1",
       store,
       noCategorize,
@@ -157,7 +197,7 @@ describe("pending takeover by a posted transaction", () => {
   it("never lets an incoming pending transaction take over another pending row", async () => {
     const store = createMemoryStore([pendingRow()]);
     const result = await importTransaction(
-      posted({ externalId: null, status: "pending", date: "2024-03-11" }),
+      posted({ externalId: null, status: "pending", date: ts("2024-03-11") }),
       "acct-1",
       store,
       noCategorize,
@@ -175,7 +215,7 @@ describe("pending takeover by a posted transaction", () => {
   });
 });
 
-describe("importAccountTransactions pending sweep", () => {
+describe("importAccountTransactions", () => {
   const WINDOW = "2024-01-01";
   const importWith = (
     rows: StoredTransaction[],
@@ -198,113 +238,322 @@ describe("importAccountTransactions pending sweep", () => {
   };
   const stillPending = (overrides: Partial<ScrapedTransaction> = {}) =>
     posted({ externalId: null, status: "pending", ...overrides });
+  /** A live pending charge unrelated to the rows under test: satisfies the sweep guard. */
+  const livePending = () =>
+    stillPending({ description: "Live Charge", chargedAmount: -1, date: ts("2024-03-20") });
 
-  it("deletes an in-window pending row the scrape no longer reports", async () => {
-    const { store, run } = importWith(
-      [pendingRow({ id: "gone", date: "2024-02-10" })],
-      [posted({ externalId: "e1", description: "Cafe", chargedAmount: -9, date: "2024-02-20" })],
-    );
-    const counts = await run();
-    expect(counts.swept).toBe(1);
-    expect(store.rows.map((r) => r.id)).not.toContain("gone");
+  describe("resolution order", () => {
+    it("resolves still-pending rows before completed ones, whatever the scrape order", async () => {
+      const { store, run } = importWith(
+        [
+          pendingRow({ id: "P1", date: "2024-10-01", categoryId: "cat-a" }),
+          pendingRow({ id: "P2", date: "2024-10-08", categoryId: "cat-b" }),
+        ],
+        [
+          posted({ externalId: "c1", date: ts("2024-10-06") }),
+          stillPending({ date: ts("2024-10-08") }),
+        ],
+      );
+      const counts = await run();
+      expect(counts).toMatchObject({ updated: 1, skipped: 1, inserted: 0, swept: 0 });
+      const p1 = store.rows.find((r) => r.id === "P1");
+      const p2 = store.rows.find((r) => r.id === "P2");
+      expect(p1).toMatchObject({ status: "completed", externalId: "c1", categoryId: "cat-a" });
+      expect(p2).toMatchObject({ status: "pending", externalId: null, categoryId: "cat-b" });
+    });
   });
 
-  it("sweeps nothing when the scrape returned no transactions", async () => {
-    const { store, run } = importWith([pendingRow({ id: "kept", date: "2024-02-10" })], []);
-    const counts = await run();
-    expect(counts.swept).toBe(0);
-    expect(store.rows).toHaveLength(1);
+  describe("pending sweep", () => {
+    it("deletes an in-window pending row the scrape no longer reports", async () => {
+      const { store, run } = importWith(
+        [pendingRow({ id: "gone", date: "2024-02-10", description: "Cafe", chargedAmount: -9 })],
+        [livePending()],
+      );
+      const counts = await run();
+      expect(counts.swept).toBe(1);
+      expect(store.rows.map((r) => r.id)).not.toContain("gone");
+    });
+
+    it("keeps a pending row the scrape re-reports", async () => {
+      const { store, run } = importWith([pendingRow()], [stillPending()]);
+      const counts = await run();
+      expect(counts).toMatchObject({ skipped: 1, swept: 0 });
+      expect(store.rows.map((r) => r.id)).toEqual(["p1"]);
+    });
+
+    it("keeps a pending row that was taken over by a posted transaction", async () => {
+      const { store, run } = importWith([pendingRow()], [posted(), livePending()]);
+      const counts = await run();
+      expect(counts).toMatchObject({ updated: 1, swept: 0 });
+      expect(store.rows.map((r) => r.id)).toContain("p1");
+    });
+
+    it("sweeps nothing when the scrape reported completed rows but zero pending", async () => {
+      const { store, run } = importWith(
+        [pendingRow({ id: "orphan", date: "2024-02-10", description: "Cafe", chargedAmount: -9 })],
+        [posted({ externalId: "e1", description: "Bakery", chargedAmount: -3 })],
+      );
+      const counts = await run();
+      expect(counts.swept).toBe(0);
+      expect(store.rows.map((r) => r.id)).toContain("orphan");
+    });
+
+    it("sweeps nothing when the scrape returned no transactions", async () => {
+      const { store, run } = importWith([pendingRow({ id: "kept", date: "2024-02-10" })], []);
+      const counts = await run();
+      expect(counts.swept).toBe(0);
+      expect(store.rows).toHaveLength(1);
+    });
+
+    it("leaves a pending row older than the scrape window untouched", async () => {
+      const { store, run } = importWith(
+        [pendingRow({ id: "old", date: "2023-12-31", description: "Cafe", chargedAmount: -9 })],
+        [livePending()],
+      );
+      const counts = await run();
+      expect(counts.swept).toBe(0);
+      expect(store.rows.map((r) => r.id)).toContain("old");
+    });
+
+    it("leaves other accounts' pending rows untouched", async () => {
+      const { store, run } = importWith(
+        [
+          pendingRow({
+            id: "other-acct",
+            bankAccountId: "acct-2",
+            date: "2024-02-10",
+            description: "Cafe",
+            chargedAmount: -9,
+          }),
+        ],
+        [livePending()],
+      );
+      const counts = await run();
+      expect(counts.swept).toBe(0);
+      expect(store.rows.map((r) => r.id)).toContain("other-acct");
+    });
+
+    it("leaves completed rows untouched", async () => {
+      const { store, run } = importWith(
+        [
+          pendingRow({
+            id: "done",
+            status: "completed",
+            externalId: "x",
+            date: "2024-02-10",
+            description: "Cafe",
+            chargedAmount: -9,
+          }),
+        ],
+        [livePending()],
+      );
+      const counts = await run();
+      expect(counts.swept).toBe(0);
+      expect(store.rows.map((r) => r.id)).toContain("done");
+    });
+
+    it("sweeps nothing when the import throws midway", async () => {
+      const store = createMemoryStore([
+        pendingRow({ id: "gone", date: "2024-02-10", description: "Cafe", chargedAmount: -9 }),
+      ]);
+      store.insert = async () => {
+        throw new Error("db down");
+      };
+      await expect(
+        importAccountTransactions({
+          transactions: [livePending()],
+          bankAccountId: "acct-1",
+          windowStart: WINDOW,
+          store,
+          sweepStore: createMemorySweepStore(store.rows),
+          categorize: noCategorize,
+        }),
+      ).rejects.toThrow("db down");
+      expect(store.rows).toHaveLength(1);
+    });
+
+    it("sweeps nothing when no window start is given", async () => {
+      const { store, run } = importWith(
+        [pendingRow({ date: "2024-02-10", description: "Cafe", chargedAmount: -9 })],
+        [livePending()],
+        null,
+      );
+      const counts = await run();
+      expect(counts.swept).toBe(0);
+      expect(store.rows).toHaveLength(2);
+    });
+
+    it("is idempotent when the same scrape is imported twice", async () => {
+      const txs = [posted(), livePending()];
+      const { store, run } = importWith(
+        [
+          pendingRow(),
+          pendingRow({ id: "gone", date: "2024-02-10", description: "Cafe", chargedAmount: -9 }),
+        ],
+        txs,
+      );
+      await run();
+      const snapshot = JSON.stringify(store.rows);
+      const second = await run();
+      expect(second).toMatchObject({ inserted: 0, updated: 0, swept: 0 });
+      expect(JSON.stringify(store.rows)).toBe(snapshot);
+    });
   });
 
-  it("does not let a completed charge take over a pending row this scrape re-reported", async () => {
-    const { store, run } = importWith(
-      [pendingRow()],
-      [stillPending(), posted({ externalId: "e2", date: "2024-03-07" })],
-    );
-    const counts = await run();
-    expect(counts).toMatchObject({ skipped: 1, inserted: 1, swept: 0 });
-    expect(store.rows.filter((r) => r.status === "pending")).toHaveLength(1);
+  describe("healing pending rows older than the window", () => {
+    const oldPending = (overrides: Partial<StoredTransaction> = {}) =>
+      pendingRow({
+        id: "old",
+        date: "2023-12-20",
+        description: "Cafe",
+        chargedAmount: -9,
+        categoryId: "cat-food",
+        categorySource: "user",
+        customDescription: "Morning coffee",
+        ...overrides,
+      });
+    const twin = (overrides: Partial<StoredTransaction> = {}) =>
+      pendingRow({
+        id: "twin",
+        status: "completed",
+        externalId: "t-1",
+        date: "2023-12-22",
+        description: "Cafe",
+        chargedAmount: -9,
+        categoryId: null,
+        categorySource: null,
+        customDescription: null,
+        ...overrides,
+      });
+
+    it("removes an old pending row with an exact completed twin and carries its category over", async () => {
+      const { store, run } = importWith([oldPending(), twin()], []);
+      const counts = await run();
+      expect(counts.swept).toBe(1);
+      expect(store.rows.map((r) => r.id)).toEqual(["twin"]);
+      expect(store.rows[0]).toMatchObject({
+        categoryId: "cat-food",
+        categorySource: "user",
+        customDescription: "Morning coffee",
+      });
+    });
+
+    it("keeps an old pending row that has no twin", async () => {
+      const { store, run } = importWith([oldPending()], []);
+      await run();
+      expect(store.rows.map((r) => r.id)).toEqual(["old"]);
+    });
+
+    it.each([
+      ["amount", { chargedAmount: -10 }],
+      ["description", { description: "Bakery" }],
+      ["date beyond 7 days", { date: "2023-12-29" }],
+    ])("keeps an old pending row whose twin differs in %s", async (_name, change) => {
+      const { store, run } = importWith([oldPending(), twin(change)], []);
+      await run();
+      expect(store.rows.map((r) => r.id).sort()).toEqual(["old", "twin"]);
+    });
+  });
+});
+
+describe("planPendingSweep", () => {
+  const base = { windowStart: "2024-01-01", reportedPending: true, seenIds: new Set<string>() };
+  const completed = (o: Partial<StoredTransaction> = {}) =>
+    pendingRow({
+      id: "c",
+      status: "completed",
+      externalId: "x",
+      categoryId: null,
+      categorySource: null,
+      ...o,
+    });
+
+  it("carries a trusted category onto an uncategorised twin", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [pendingRow({ categorySource: "rule" })],
+      completed: [completed()],
+    });
+    expect(plan.carryovers).toEqual([
+      { completedId: "c", categoryId: "cat-fuel", categorySource: "rule", customDescription: null },
+    ]);
   });
 
-  it("keeps a pending row the scrape re-reports", async () => {
-    const { store, run } = importWith([pendingRow()], [stillPending()]);
-    const counts = await run();
-    expect(counts).toMatchObject({ skipped: 1, swept: 0 });
-    expect(store.rows.map((r) => r.id)).toEqual(["p1"]);
+  it("overwrites an ai-sourced twin category", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [pendingRow({ categorySource: "user" })],
+      completed: [completed({ categoryId: "cat-ai", categorySource: "ai" })],
+    });
+    expect(plan.carryovers[0]).toMatchObject({ categoryId: "cat-fuel", categorySource: "user" });
   });
 
-  it("keeps a pending row that was taken over by a posted transaction", async () => {
-    const { store, run } = importWith([pendingRow()], [posted()]);
-    const counts = await run();
-    expect(counts).toMatchObject({ updated: 1, swept: 0 });
-    expect(store.rows).toHaveLength(1);
+  it.each(["user", "rule", "memory"] as const)(
+    "never overwrites a %s-sourced twin category",
+    (source) => {
+      const plan = planPendingSweep({
+        ...base,
+        pending: [pendingRow({ categorySource: "user" })],
+        completed: [completed({ categoryId: "cat-keep", categorySource: source })],
+      });
+      expect(plan.deleteIds).toEqual(["p1"]);
+      expect(plan.carryovers).toEqual([]);
+    },
+  );
+
+  it("does not carry an ai-sourced category", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [pendingRow({ categorySource: "ai" })],
+      completed: [completed()],
+    });
+    expect(plan.carryovers).toEqual([]);
   });
 
-  it("sweeps a pre-existing pending twin of a completed row and an orphan", async () => {
-    const { store, run } = importWith(
-      [
-        pendingRow({ id: "twin", date: "2024-03-10" }),
-        pendingRow({ id: "orphan", date: "2024-02-01", description: "Cafe", chargedAmount: -9 }),
-        pendingRow({ id: "posted", status: "completed", externalId: "ext-9", description: "Z" }),
+  it("carries custom_description only when the twin has none", () => {
+    const withCustom = pendingRow({ categoryId: null, customDescription: "Mine" });
+    expect(
+      planPendingSweep({ ...base, pending: [withCustom], completed: [completed()] }).carryovers[0],
+    ).toMatchObject({ customDescription: "Mine", categoryId: null });
+    expect(
+      planPendingSweep({
+        ...base,
+        pending: [withCustom],
+        completed: [completed({ customDescription: "Theirs" })],
+      }).carryovers,
+    ).toEqual([]);
+  });
+
+  it("uses each completed twin for one pending row only", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [
+        pendingRow({ id: "a", categorySource: "user" }),
+        pendingRow({ id: "b", categorySource: "user", categoryId: "cat-other" }),
       ],
-      [posted()],
-    );
-    const counts = await run();
-    expect(counts.swept).toBe(2);
-    expect(store.rows.map((r) => r.id)).toEqual(["posted"]);
+      completed: [completed()],
+    });
+    expect(plan.deleteIds).toEqual(["a", "b"]);
+    expect(plan.carryovers).toHaveLength(1);
   });
 
-  it("leaves a pending row older than the scrape window untouched", async () => {
-    const { store, run } = importWith([pendingRow({ id: "old", date: "2023-12-31" })], []);
-    const counts = await run();
-    expect(counts.swept).toBe(0);
-    expect(store.rows).toHaveLength(1);
+  it("releases the reconciliation groups of deleted rows", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [pendingRow({ reconciliationGroupId: "g1" }), pendingRow({ id: "p2" })],
+      completed: [],
+    });
+    expect(plan.deleteIds).toEqual(["p1", "p2"]);
+    expect(plan.releaseGroupIds).toEqual(["g1"]);
   });
 
-  it("leaves other accounts' pending rows and completed rows untouched", async () => {
-    const { store, run } = importWith(
-      [
-        pendingRow({ id: "other-acct", bankAccountId: "acct-2", date: "2024-02-10" }),
-        pendingRow({ id: "done", status: "completed", externalId: "x", date: "2024-02-10" }),
-      ],
-      [],
-    );
-    await run();
-    expect(store.rows).toHaveLength(2);
-  });
-
-  it("sweeps nothing when the import throws midway", async () => {
-    const store = createMemoryStore([pendingRow({ id: "gone", date: "2024-02-10" })]);
-    store.insert = async () => {
-      throw new Error("db down");
-    };
-    await expect(
-      importAccountTransactions({
-        transactions: [posted({ externalId: "new", description: "Cafe", chargedAmount: -9 })],
-        bankAccountId: "acct-1",
-        windowStart: WINDOW,
-        store,
-        sweepStore: createMemorySweepStore(store.rows),
-        categorize: noCategorize,
-      }),
-    ).rejects.toThrow("db down");
-    expect(store.rows).toHaveLength(1);
-  });
-
-  it("sweeps nothing when no window start is given", async () => {
-    const { store, run } = importWith([pendingRow({ date: "2024-02-10" })], [], null);
-    const counts = await run();
-    expect(counts.swept).toBe(0);
-    expect(store.rows).toHaveLength(1);
-  });
-
-  it("is idempotent when the same scrape is imported twice", async () => {
-    const txs = [posted(), stillPending({ description: "Cafe", chargedAmount: -9 })];
-    const { store, run } = importWith([pendingRow()], txs);
-    await run();
-    const snapshot = JSON.stringify(store.rows);
-    const second = await run();
-    expect(second).toMatchObject({ inserted: 0, updated: 0, swept: 0 });
-    expect(JSON.stringify(store.rows)).toBe(snapshot);
+  it("deletes nothing in-window when no pending was reported", () => {
+    const plan = planPendingSweep({
+      ...base,
+      reportedPending: false,
+      pending: [pendingRow()],
+      completed: [],
+    });
+    expect(plan.deleteIds).toEqual([]);
   });
 });

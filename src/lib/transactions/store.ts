@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { transactions, recurringExpenses } from "@/db/schema";
-import { eq, and, isNull, isNotNull, gte, lte, inArray, notInArray } from "drizzle-orm";
+import { eq, and, isNull, gte, lte, inArray, notInArray } from "drizzle-orm";
 import type { TransactionStore, StoredTransaction, NewTransaction } from "./import";
 import type { PendingSweepStore } from "./sweep";
 
@@ -15,6 +15,9 @@ function rowToStored(row: typeof transactions.$inferSelect): StoredTransaction {
     chargedAmount: Number(row.chargedAmount),
     status: row.status,
     categoryId: row.categoryId ?? null,
+    categorySource: row.categorySource ?? null,
+    customDescription: row.customDescription ?? null,
+    reconciliationGroupId: row.reconciliationGroupId ?? null,
   };
 }
 
@@ -98,38 +101,50 @@ export function createDbStore(): TransactionStore {
 
 export function createDbPendingSweepStore(): PendingSweepStore {
   return {
-    async findPendingIds(bankAccountId, fromDate) {
-      const rows = await db
-        .select({ id: transactions.id })
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.bankAccountId, bankAccountId),
-            eq(transactions.status, "pending"),
-            gte(transactions.date, fromDate),
-          ),
-        );
-      return rows.map((r) => r.id);
+    async findPendingRows(bankAccountId) {
+      const rows = await db.query.transactions.findMany({
+        where: and(
+          eq(transactions.bankAccountId, bankAccountId),
+          eq(transactions.status, "pending"),
+        ),
+      });
+      return rows.map(rowToStored);
+    },
+
+    async findCompletedRows(bankAccountId, fromDate) {
+      const rows = await db.query.transactions.findMany({
+        where: and(
+          eq(transactions.bankAccountId, bankAccountId),
+          eq(transactions.status, "completed"),
+          gte(transactions.date, fromDate),
+        ),
+      });
+      return rows.map(rowToStored);
     },
 
     // ai_suggestions cascade and category_corrections.transaction_id is SET NULL;
     // recurring_expenses.last_matched_txn_id has no ON DELETE action and would
     // abort the delete, and reconciliation groups are a bare uuid column, so
     // both are resolved here.
-    async deleteTransactions(ids) {
-      if (ids.length === 0) return;
+    async applySweep(plan) {
+      if (plan.deleteIds.length === 0) return;
       await db.transaction(async (tx) => {
+        for (const c of plan.carryovers) {
+          const changes: Partial<typeof transactions.$inferInsert> = { updatedAt: new Date() };
+          if (c.categoryId) {
+            changes.categoryId = c.categoryId;
+            changes.categorySource = c.categorySource;
+          }
+          if (c.customDescription) changes.customDescription = c.customDescription;
+          await tx.update(transactions).set(changes).where(eq(transactions.id, c.completedId));
+        }
+
         await tx
           .update(recurringExpenses)
           .set({ lastMatchedTxnId: null })
-          .where(inArray(recurringExpenses.lastMatchedTxnId, ids));
+          .where(inArray(recurringExpenses.lastMatchedTxnId, plan.deleteIds));
 
-        const groups = await tx
-          .selectDistinct({ groupId: transactions.reconciliationGroupId })
-          .from(transactions)
-          .where(and(inArray(transactions.id, ids), isNotNull(transactions.reconciliationGroupId)));
-        const groupIds = groups.flatMap((g) => (g.groupId ? [g.groupId] : []));
-        if (groupIds.length > 0) {
+        if (plan.releaseGroupIds.length > 0) {
           await tx
             .update(transactions)
             .set({
@@ -140,15 +155,15 @@ export function createDbPendingSweepStore(): PendingSweepStore {
             })
             .where(
               and(
-                inArray(transactions.reconciliationGroupId, groupIds),
-                notInArray(transactions.id, ids),
+                inArray(transactions.reconciliationGroupId, plan.releaseGroupIds),
+                notInArray(transactions.id, plan.deleteIds),
               ),
             );
         }
 
         await tx
           .delete(transactions)
-          .where(and(inArray(transactions.id, ids), eq(transactions.status, "pending")));
+          .where(and(inArray(transactions.id, plan.deleteIds), eq(transactions.status, "pending")));
       });
     },
   };
