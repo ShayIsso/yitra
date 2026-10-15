@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { getCategories, getCategoryTree } from "@/lib/categories";
+import { isProviderConfigured } from "@/lib/ai-categorization";
 import { TransactionsTable } from "@/components/transactions-table";
 
 export default async function TransactionsPage({
@@ -8,10 +9,11 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<{ uncategorized?: string; needsReview?: string }>;
 }) {
-  const [categories, tree, params] = await Promise.all([
+  const [categories, tree, params, categorizationAvailable] = await Promise.all([
     getCategories(),
     getCategoryTree(),
     searchParams,
+    isProviderConfigured(),
   ]);
   // Deep-links from the dashboard's attention counters (#206) land here as
   // `?uncategorized=true` / `?needsReview=true` — the same literal values
@@ -33,6 +35,7 @@ export default async function TransactionsPage({
         categories={categories}
         tree={tree}
         initialCategoryFilter={initialCategoryFilter}
+        categorizationAvailable={categorizationAvailable}
       />
     </div>
   );

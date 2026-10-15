@@ -1,6 +1,7 @@
 // In-progress claim for `syncAllBanks` (#246). One claim, shared by every
-// entry point that can launch a sync — the SSE route and the scheduler —
-// so two concurrent runs can never both hold it. Deliberately process-lifetime
+// entry point that can launch a sync — the SSE route and the scheduler — and
+// by the categorization backfill (#263), so no two of these runs can ever
+// hold it at once. Deliberately process-lifetime
 // (an in-memory boolean, not a DB row): this app is single-user/single-instance
 // (CONTEXT.md "single-user, self-hosted"), so a crashed or killed process
 // holds no claim — recovery on restart is automatic, with no staleness
