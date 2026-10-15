@@ -13,7 +13,7 @@ import type { SuspectedTransferRouter } from "@/lib/reconciliation";
  * bucket: `applied` (categorized — memory or auto-apply), `queued` (an AI review
  * suggestion, or a suspected transfer routed to the reconciliation inbox), or
  * `skipped` (still uncategorized — low confidence, suppressed, overwrite-locked,
- * or transfer-guarded without a routing). So applied + queued + skipped equals
+ * transfer-guarded without a routing, or already awaiting an earlier review suggestion). So applied + queued + skipped equals
  * the total the run examined.
  */
 export interface AiSummary {

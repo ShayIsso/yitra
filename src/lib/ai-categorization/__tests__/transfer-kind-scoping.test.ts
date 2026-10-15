@@ -34,6 +34,9 @@ function storesServing(txns: UncategorizedTxn[]): {
       getRecentAiCorrections: async () => [],
       getSuppressedPairs: async () => [],
       insertSuggestion: unused,
+      getAwaitingReviewIds: async () => [],
+      supersedeOpenSuggestions: async () => {},
+      supersedeSuggestionsOnCategorized: async () => {},
     },
     memoryStore: {
       findEntriesByKeys: async () => [],

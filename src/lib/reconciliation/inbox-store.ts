@@ -12,6 +12,7 @@ import {
   categoryRules,
 } from "@/db/schema";
 import { eq, isNull, isNotNull, inArray, asc } from "drizzle-orm";
+import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { InboxStore, InboxTransaction } from "./inbox-ops";
 import type { CategoryRule } from "@/lib/categories/rules";
 
@@ -254,6 +255,7 @@ export const drizzleInboxStore: InboxStore = {
                 categorySource: "rule",
               })
               .where(eq(transactions.id, member.id));
+            await supersedeOpenSuggestions([member.id], tx);
           } else {
             await tx
               .update(transactions)
@@ -302,6 +304,7 @@ export const drizzleInboxStore: InboxStore = {
       .update(transactions)
       .set({ categoryId, categorySource: categoryId === null ? null : "rule" })
       .where(eq(transactions.id, txnId));
+    if (categoryId !== null) await supersedeOpenSuggestions([txnId]);
   },
 
   async getCategoryIdByName(name: string): Promise<string | null> {

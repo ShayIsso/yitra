@@ -8,8 +8,9 @@ import {
   bankAccounts,
   bankCredentials,
 } from "@/db/schema";
-import { eq, and, isNull, inArray, desc } from "drizzle-orm";
+import { eq, and, isNull, inArray, desc, sql } from "drizzle-orm";
 import { matchesRule, filterAssignable } from "@/lib/categories";
+import { supersedeOpenSuggestions } from "./supersede";
 import type {
   AiCategorizationStore,
   UncategorizedTxn,
@@ -20,7 +21,7 @@ import type {
   SuggestionInsert,
 } from "./run";
 
-type DbClient = Pick<typeof db, "select" | "insert">;
+type DbClient = Pick<typeof db, "select" | "selectDistinct" | "insert" | "update">;
 
 /** Recent AI corrections fed as anti-examples. Bounded so the prompt stays small. */
 const AI_CORRECTION_LIMIT = 50;
@@ -150,6 +151,40 @@ export function createAiCategorizationStore(client: DbClient = db): AiCategoriza
         model: row.model,
         status: row.status,
       });
+    },
+
+    async getAwaitingReviewIds(transactionIds: string[]): Promise<string[]> {
+      if (transactionIds.length === 0) return [];
+      const rows = await client
+        .selectDistinct({ transactionId: aiSuggestions.transactionId })
+        .from(aiSuggestions)
+        .where(
+          and(
+            inArray(aiSuggestions.transactionId, transactionIds),
+            eq(aiSuggestions.status, "pending_review"),
+          ),
+        );
+      return rows.map((r) => r.transactionId);
+    },
+
+    async supersedeOpenSuggestions(transactionIds: string[]): Promise<void> {
+      await supersedeOpenSuggestions(transactionIds, client);
+    },
+
+    async supersedeSuggestionsOnCategorized(): Promise<void> {
+      await client
+        .update(aiSuggestions)
+        .set({ status: "superseded", updatedAt: new Date() })
+        .where(
+          and(
+            eq(aiSuggestions.status, "pending_review"),
+            sql`exists (
+              select 1 from ${transactions}
+              where ${transactions.id} = ${aiSuggestions.transactionId}
+                and ${transactions.categoryId} is not null
+            )`,
+          ),
+        );
     },
   };
 }

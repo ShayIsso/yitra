@@ -3,6 +3,7 @@ import { transactions, categoryRules, categories } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { categorize, type CategoryRule } from "./rules";
 import { canOverwrite, overwriteLawSql, type CategorySource } from "@/lib/merchant-memory";
+import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import { NotAssignableCategoryError } from "./errors";
 
 export type OverwritableTransaction = {
@@ -116,10 +117,13 @@ export const drizzleRetroactiveStore: RetroactiveStore = {
 
   async categorizeTransactions(ids: string[], categoryId: string): Promise<number> {
     // A rule claiming a row sets provenance to 'rule'.
-    await db
-      .update(transactions)
-      .set({ categoryId, categorySource: "rule" })
-      .where(inArray(transactions.id, ids));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(transactions)
+        .set({ categoryId, categorySource: "rule" })
+        .where(inArray(transactions.id, ids));
+      await supersedeOpenSuggestions(ids, tx);
+    });
     return ids.length;
   },
 };

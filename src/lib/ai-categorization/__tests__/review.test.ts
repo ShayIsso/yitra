@@ -29,7 +29,7 @@ type StoredSuggestion = {
   categoryId: string;
   categoryName: string;
   confidence: number;
-  status: "pending_review" | "auto_applied" | "accepted" | "rejected" | "undone";
+  status: "pending_review" | "auto_applied" | "accepted" | "rejected" | "undone" | "superseded";
 };
 
 function createFake(seed: {
@@ -152,6 +152,11 @@ function createFake(seed: {
       const s = suggestions.find((x) => x.id === suggestionId);
       if (s) s.status = status;
     },
+    async supersedeOpenSuggestions(transactionIds) {
+      for (const s of suggestions)
+        if (transactionIds.includes(s.transactionId) && s.status === "pending_review")
+          s.status = "superseded";
+    },
     async getPendingSuggestionCount() {
       // Distinct transactions, not raw rows — mirrors needsReviewSql's
       // per-transaction EXISTS semantics (a transaction can carry more than
@@ -181,6 +186,37 @@ function createFake(seed: {
 // ── acceptSuggestion ─────────────────────────────────────────────────────────
 
 describe("acceptSuggestion", () => {
+  it("supersedes sibling open suggestions on the accepted and fanned-out transactions", async () => {
+    const pending = (id: string, transactionId: string, categoryId: string) => ({
+      id,
+      transactionId,
+      categoryId,
+      categoryName: categoryId,
+      confidence: 4,
+      status: "pending_review" as const,
+    });
+    const { memoryStore, reviewStore, suggestions } = createFake({
+      txns: [
+        { id: "target", description: "שופרסל דיל", categoryId: null, categorySource: null },
+        { id: "sib", description: "שופרסל דיל", categoryId: null, categorySource: null },
+      ],
+      suggestions: [
+        pending("s-1", "target", "cat-food"),
+        pending("s-2", "target", "cat-rest"),
+        pending("s-3", "sib", "cat-rest"),
+      ],
+    });
+
+    await acceptSuggestion(
+      { transactionId: "target", suggestionId: "s-1" },
+      reviewStore,
+      memoryStore,
+    );
+
+    expect(suggestions.map((s) => s.status)).toEqual(["accepted", "superseded", "superseded"]);
+    expect(await reviewStore.getPendingSuggestionCount()).toBe(0);
+  });
+
   it("applies the category as user-tier, writes user-tier memory, fans out, and marks accepted", async () => {
     const { memoryStore, reviewStore, txns, entries, suggestions } = createFake({
       txns: [

@@ -82,6 +82,11 @@ function makeStores(seed: { txns: StoredTxn[]; categories: StoredCategory[] }) {
     async insertSuggestion(row) {
       suggestions.push(row);
     },
+    async getAwaitingReviewIds() {
+      return [];
+    },
+    async supersedeOpenSuggestions() {},
+    async supersedeSuggestionsOnCategorized() {},
   };
 
   return { aiStore, memoryStore, txns, suggestions };
@@ -160,6 +165,11 @@ describe("runAiSyncStep", () => {
         return [];
       },
       async insertSuggestion() {},
+      async getAwaitingReviewIds() {
+        return [];
+      },
+      async supersedeOpenSuggestions() {},
+      async supersedeSuggestionsOnCategorized() {},
     };
 
     const events = await collect(
@@ -194,6 +204,11 @@ describe("runAiSyncStep", () => {
         return [];
       },
       async insertSuggestion() {},
+      async getAwaitingReviewIds() {
+        return [];
+      },
+      async supersedeOpenSuggestions() {},
+      async supersedeSuggestionsOnCategorized() {},
     };
 
     const events = await collect(

@@ -48,13 +48,13 @@ export interface ReviewStore {
    */
   getActiveAutoApplied(transactionId: string): Promise<ActiveAutoAppliedSuggestion | null>;
   markSuggestionStatus(suggestionId: string, status: ReviewSuggestionStatus): Promise<void>;
+  /** Closes the open `pending_review` rows of these transactions as `superseded` (non-suppressing). */
+  supersedeOpenSuggestions(transactionIds: string[]): Promise<void>;
   /**
    * Count of DISTINCT transactions with a pending-review suggestion — the
    * dashboard's attention feeder (#196). Mirrors the transaction-level
-   * `{ mode: "needsReview" }` row filter, not raw suggestion-row count: a
-   * transaction can carry more than one `pending_review` row (no uniqueness
-   * guard on insert), and counting rows there would overstate what that
-   * filter lists.
+   * `{ mode: "needsReview" }` row filter, so the count is per transaction by
+   * construction rather than per suggestion row.
    */
   getPendingSuggestionCount(): Promise<number>;
 }
@@ -70,7 +70,9 @@ export interface AcceptSuggestionInput {
  * fan-out under the overwrite law, no corrections-log row) rather than adding
  * new memory semantics. The category comes from the stored suggestion row,
  * never the client, and only a still-pending suggestion for this transaction
- * accepts — a stale or tampered request is a no-op.
+ * accepts — a stale or tampered request is a no-op. Siblings left open on the
+ * accepted transaction (and on fanned-out rows, which this categorizes too)
+ * are superseded so nothing stays under "needs review".
  */
 export async function acceptSuggestion(
   input: AcceptSuggestionInput,
@@ -88,6 +90,10 @@ export async function acceptSuggestion(
     now,
   );
   await reviewStore.markSuggestionStatus(input.suggestionId, "accepted");
+  await reviewStore.supersedeOpenSuggestions([
+    input.transactionId,
+    ...result.fannedOut.map((r) => r.id),
+  ]);
   return { accepted: true, ...result };
 }
 

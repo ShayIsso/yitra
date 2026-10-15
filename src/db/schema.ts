@@ -64,12 +64,17 @@ export const memorySourceEnum = pgEnum("memory_source", ["user", "ai"]);
 // Lifecycle of an AI categorization suggestion (ADR-0008 §7). `pending_review`
 // and `auto_applied` are written by an AI run; `accepted` / `rejected` /
 // `undone` are user actions on a suggestion (review + undo flows, ticket #148).
+// `superseded` closes an open suggestion that something else resolved (a
+// non-AI categorization, or a sibling accepted); unlike `rejected`/`undone` it
+// is not suppressing, so the pair may be suggested again if the row is
+// uncategorized later.
 export const aiSuggestionStatusEnum = pgEnum("ai_suggestion_status", [
   "pending_review",
   "auto_applied",
   "accepted",
   "rejected",
   "undone",
+  "superseded",
 ]);
 
 // Tables
