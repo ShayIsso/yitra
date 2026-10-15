@@ -1,5 +1,11 @@
-import type { CategorySource } from "@/lib/merchant-memory";
-import { calendarDate, PENDING_TAKEOVER_WINDOW_DAYS, type StoredTransaction } from "./import";
+import { canOverwrite, type CategorySource } from "@/lib/merchant-memory";
+import {
+  calendarDate,
+  dayNumber,
+  shiftDate,
+  PENDING_TAKEOVER_WINDOW_DAYS,
+  type StoredTransaction,
+} from "./import";
 
 export type SweepCarryover = {
   completedId: string;
@@ -14,6 +20,8 @@ export type SweepPlan = {
   carryovers: SweepCarryover[];
   /** Groups that lost a member; the executor clears them on the survivors. */
   releaseGroupIds: string[];
+  /** Twins that received a carried category: their open AI suggestions are now moot. */
+  supersedeSuggestionIds: string[];
 };
 
 export type PendingSweepStore = {
@@ -25,28 +33,9 @@ export type PendingSweepStore = {
   applySweep(plan: SweepPlan): Promise<void>;
 };
 
-const DAY_MS = 86_400_000;
-
-function dayGap(a: string, b: string): number {
-  return Math.abs(
-    (Date.parse(`${calendarDate(a)}T00:00:00Z`) - Date.parse(`${calendarDate(b)}T00:00:00Z`)) /
-      DAY_MS,
-  );
-}
-
-function shiftDays(isoDate: string, days: number): string {
-  return new Date(Date.parse(`${calendarDate(isoDate)}T00:00:00Z`) + days * DAY_MS)
-    .toISOString()
-    .slice(0, 10);
-}
-
 /** Overwrite law (ADR-0010): only trusted-tier assignments survive onto a posted row. */
 function carriesCategory(row: StoredTransaction): boolean {
   return row.categoryId !== null && row.categorySource != null && row.categorySource !== "ai";
-}
-
-function acceptsCategory(row: StoredTransaction): boolean {
-  return row.categoryId === null || row.categorySource === "ai" || row.categorySource == null;
 }
 
 function exactTwin(
@@ -60,7 +49,7 @@ function exactTwin(
     if (taken.has(c.id)) continue;
     if (c.chargedAmount !== pending.chargedAmount || c.description !== pending.description)
       continue;
-    const gap = dayGap(c.date, pending.date);
+    const gap = Math.abs(dayNumber(c.date) - dayNumber(pending.date));
     if (gap > PENDING_TAKEOVER_WINDOW_DAYS || gap >= bestGap) continue;
     best = c;
     bestGap = gap;
@@ -68,18 +57,23 @@ function exactTwin(
   return best;
 }
 
+function byDateThenId(a: StoredTransaction, b: StoredTransaction): number {
+  return calendarDate(a.date).localeCompare(calendarDate(b.date)) || a.id.localeCompare(b.id);
+}
+
 /**
  * Decides which pending rows go and what their exact completed twins inherit
- * (CONTEXT.md "pending lifecycle"):
- *  - an in-window pending row the scrape did not resolve to is stale, but only
- *    when this scrape reported pending rows for the account (`reportedPending`):
- *    the library silently drops pending fetches on an otherwise successful scrape;
- *  - a pending row dated before the window with an exact completed twin
- *    (same amount and description, within the takeover window) is removed
- *    regardless of `reportedPending`. The twin is stored proof that the charge
- *    posted, so this relies on evidence, not on the scrape's absence of the row.
+ * (CONTEXT.md "pending lifecycle"). A row this scrape resolved to is never
+ * stale. Otherwise it goes when either:
+ *  - it has an exact completed twin (same amount and description, within the
+ *    takeover window): stored proof that the charge posted, so this holds in or
+ *    out of the window and regardless of `reportedPending`;
+ *  - it is in-window and this scrape reported pending rows for the account
+ *    (`reportedPending`): absence is evidence only then, because the library
+ *    silently drops pending fetches on an otherwise successful scrape.
  * A removed row's trusted category, `category_source` and `custom_description`
- * move to its twin when the twin has none.
+ * move to its twin when the twin has none. Inputs are sorted so twin pairing
+ * does not depend on DB row order.
  */
 export function planPendingSweep(args: {
   pending: StoredTransaction[];
@@ -88,7 +82,9 @@ export function planPendingSweep(args: {
   windowStart: string;
   reportedPending: boolean;
 }): SweepPlan {
-  const { pending, completed, seenIds, windowStart, reportedPending } = args;
+  const { seenIds, windowStart, reportedPending } = args;
+  const pending = [...args.pending].sort(byDateThenId);
+  const completed = [...args.completed].sort(byDateThenId);
   const deleteIds: string[] = [];
   const carryovers: SweepCarryover[] = [];
   const releaseGroups = new Set<string>();
@@ -97,7 +93,7 @@ export function planPendingSweep(args: {
   for (const row of pending) {
     const inWindow = calendarDate(row.date) >= windowStart;
     const twin = exactTwin(row, completed, taken);
-    const stale = inWindow ? reportedPending && !seenIds.has(row.id) : twin !== null;
+    const stale = !seenIds.has(row.id) && (twin !== null || (inWindow && reportedPending));
     if (!stale) continue;
 
     deleteIds.push(row.id);
@@ -105,7 +101,7 @@ export function planPendingSweep(args: {
 
     if (twin) {
       taken.add(twin.id);
-      const category = carriesCategory(row) && acceptsCategory(twin);
+      const category = carriesCategory(row) && canOverwrite(twin.categorySource ?? null);
       const custom =
         row.customDescription && !twin.customDescription ? row.customDescription : null;
       if (category || custom) {
@@ -119,7 +115,12 @@ export function planPendingSweep(args: {
     }
   }
 
-  return { deleteIds, carryovers, releaseGroupIds: [...releaseGroups] };
+  return {
+    deleteIds,
+    carryovers,
+    releaseGroupIds: [...releaseGroups],
+    supersedeSuggestionIds: carryovers.filter((c) => c.categoryId).map((c) => c.completedId),
+  };
 }
 
 /**
@@ -141,7 +142,7 @@ export async function sweepStalePending(args: {
   const earliest = pending.map((p) => calendarDate(p.date)).sort()[0];
   const completed = await store.findCompletedRows(
     bankAccountId,
-    shiftDays(earliest, -PENDING_TAKEOVER_WINDOW_DAYS),
+    shiftDate(earliest, -PENDING_TAKEOVER_WINDOW_DAYS),
   );
   const plan = planPendingSweep({ pending, completed, seenIds, windowStart, reportedPending });
   if (plan.deleteIds.length > 0) await store.applySweep(plan);

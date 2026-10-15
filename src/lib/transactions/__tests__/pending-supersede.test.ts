@@ -547,6 +547,77 @@ describe("planPendingSweep", () => {
     expect(plan.releaseGroupIds).toEqual(["g1"]);
   });
 
+  it("never deletes a row this scrape resolved to, even pre-window with an exact twin", () => {
+    const plan = planPendingSweep({
+      ...base,
+      seenIds: new Set(["p1"]),
+      pending: [pendingRow({ date: "2023-12-20" })],
+      completed: [completed({ date: "2023-12-22" })],
+    });
+    expect(plan.deleteIds).toEqual([]);
+  });
+
+  it("deletes an unseen in-window row with an exact twin even when no pending was reported", () => {
+    const plan = planPendingSweep({
+      ...base,
+      reportedPending: false,
+      pending: [pendingRow({ date: "2024-02-10" })],
+      completed: [completed({ date: "2024-02-12" })],
+    });
+    expect(plan.deleteIds).toEqual(["p1"]);
+  });
+
+  it("keeps an unseen in-window row without a twin when no pending was reported", () => {
+    const plan = planPendingSweep({
+      ...base,
+      reportedPending: false,
+      pending: [pendingRow({ date: "2024-02-10" })],
+      completed: [],
+    });
+    expect(plan.deleteIds).toEqual([]);
+  });
+
+  it("deletes only one of two pre-window pending rows competing for one twin", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [
+        pendingRow({ id: "b", date: "2023-12-21" }),
+        pendingRow({ id: "a", date: "2023-12-21" }),
+      ],
+      completed: [completed({ date: "2023-12-22" })],
+    });
+    expect(plan.deleteIds).toEqual(["a"]);
+  });
+
+  it("pairs twins deterministically whatever the input order", () => {
+    const rows = [
+      pendingRow({ id: "z", date: "2023-12-20", categoryId: "cat-z", categorySource: "user" }),
+      pendingRow({ id: "y", date: "2023-12-20", categoryId: "cat-y", categorySource: "user" }),
+    ];
+    const args = { ...base, completed: [completed({ date: "2023-12-22" })] };
+    const forward = planPendingSweep({ ...args, pending: rows });
+    const reversed = planPendingSweep({ ...args, pending: [...rows].reverse() });
+    expect(reversed).toEqual(forward);
+  });
+
+  it("lists twins that received a category for suggestion superseding", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [pendingRow({ categorySource: "user" })],
+      completed: [completed()],
+    });
+    expect(plan.supersedeSuggestionIds).toEqual(["c"]);
+  });
+
+  it("supersedes no suggestions when only a custom description was carried", () => {
+    const plan = planPendingSweep({
+      ...base,
+      pending: [pendingRow({ categoryId: null, customDescription: "Mine" })],
+      completed: [completed()],
+    });
+    expect(plan.supersedeSuggestionIds).toEqual([]);
+  });
+
   it("deletes nothing in-window when no pending was reported", () => {
     const plan = planPendingSweep({
       ...base,

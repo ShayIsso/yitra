@@ -75,11 +75,11 @@ export function calendarDate(isoDate: string): string {
   return isoDate.slice(0, 10);
 }
 
-function dayNumber(isoDate: string): number {
+export function dayNumber(isoDate: string): number {
   return Math.floor(Date.parse(`${calendarDate(isoDate)}T00:00:00Z`) / DAY_MS);
 }
 
-function shiftDate(isoDate: string, days: number): string {
+export function shiftDate(isoDate: string, days: number): string {
   return new Date((dayNumber(isoDate) + days) * DAY_MS).toISOString().slice(0, 10);
 }
 

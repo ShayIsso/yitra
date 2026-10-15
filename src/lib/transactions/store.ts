@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { transactions, recurringExpenses } from "@/db/schema";
 import { eq, and, isNull, gte, lte, inArray, notInArray } from "drizzle-orm";
 import type { TransactionStore, StoredTransaction, NewTransaction } from "./import";
+import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { PendingSweepStore } from "./sweep";
 
 function rowToStored(row: typeof transactions.$inferSelect): StoredTransaction {
@@ -99,7 +100,9 @@ export function createDbStore(): TransactionStore {
   };
 }
 
-export function createDbPendingSweepStore(): PendingSweepStore {
+export function createDbPendingSweepStore(
+  supersede: typeof supersedeOpenSuggestions = supersedeOpenSuggestions,
+): PendingSweepStore {
   return {
     async findPendingRows(bankAccountId) {
       const rows = await db.query.transactions.findMany({
@@ -138,6 +141,8 @@ export function createDbPendingSweepStore(): PendingSweepStore {
           if (c.customDescription) changes.customDescription = c.customDescription;
           await tx.update(transactions).set(changes).where(eq(transactions.id, c.completedId));
         }
+
+        await supersede(plan.supersedeSuggestionIds, tx);
 
         await tx
           .update(recurringExpenses)
