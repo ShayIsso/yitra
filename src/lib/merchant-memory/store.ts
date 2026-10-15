@@ -41,6 +41,17 @@ function merchantKeyPrefilter(merchantKey: string): SQL | undefined {
   return ilike(transactions.description, `%${escaped.join("%")}%`);
 }
 
+/**
+ * Runs inside the categorization transaction with every row it categorized
+ * (target and fan-out). The composing layer supplies it, so merchant-memory
+ * stays free of modules that import it (e.g. ai-categorization closing open
+ * suggestions).
+ */
+export type AfterCategorizeWrite = (
+  transactionIds: string[],
+  tx: Pick<typeof db, "update">,
+) => Promise<void>;
+
 export function createMerchantMemoryStore(client: DbClient = db): MerchantMemoryStore {
   return {
     async findEntriesByKeys(keys) {
@@ -206,19 +217,19 @@ export function createMerchantMemoryStore(client: DbClient = db): MerchantMemory
 export async function changeTransactionCategory(
   transactionId: string,
   toCategoryId: string,
+  afterWrite?: AfterCategorizeWrite,
 ): Promise<{ fanOutCount: number; fannedOut: FannedOutRow[]; wasCorrection: boolean }> {
   return db.transaction(async (tx) => {
     const store = createMerchantMemoryStore(tx);
     const txn = await store.getTransaction(transactionId);
     if (!txn) return { fanOutCount: 0, fannedOut: [], wasCorrection: false };
 
-    if (txn.categoryId === null) {
-      const result = await recordAssignment({ transactionId, toCategoryId, tier: "user" }, store);
-      return { ...result, wasCorrection: false };
-    }
-
-    const result = await applyCorrection({ transactionId, toCategoryId }, store);
-    return { ...result, wasCorrection: true };
+    const wasCorrection = txn.categoryId !== null;
+    const result = wasCorrection
+      ? await applyCorrection({ transactionId, toCategoryId }, store)
+      : await recordAssignment({ transactionId, toCategoryId, tier: "user" }, store);
+    await afterWrite?.([transactionId, ...result.fannedOut.map((r) => r.id)], tx);
+    return { ...result, wasCorrection };
   });
 }
 
@@ -230,10 +241,16 @@ export async function changeTransactionCategory(
 export async function bulkChangeTransactionCategories(
   transactionIds: string[],
   toCategoryId: string,
+  afterWrite?: AfterCategorizeWrite,
 ): Promise<{ fanOutCount: number; fannedOut: FannedOutRow[] }> {
-  return db.transaction(async (tx) =>
-    applyBulkCategorization({ transactionIds, toCategoryId }, createMerchantMemoryStore(tx)),
-  );
+  return db.transaction(async (tx) => {
+    const result = await applyBulkCategorization(
+      { transactionIds, toCategoryId },
+      createMerchantMemoryStore(tx),
+    );
+    await afterWrite?.([...transactionIds, ...result.fannedOut.map((r) => r.id)], tx);
+    return result;
+  });
 }
 
 /** DB entry point for one-click fan-out undo — restores in one transaction. */

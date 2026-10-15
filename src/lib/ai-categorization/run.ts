@@ -71,6 +71,16 @@ export interface AiCategorizationStore {
    */
   getSuppressedPairs(transactionIds: string[]): Promise<SuppressedPair[]>;
   insertSuggestion(row: SuggestionInsert): Promise<void>;
+  /** The subset of `transactionIds` that currently carry an open `pending_review` suggestion. */
+  getAwaitingReviewIds(transactionIds: string[]): Promise<string[]>;
+  /** Closes the open `pending_review` rows of these transactions as `superseded` (non-suppressing). */
+  supersedeOpenSuggestions(transactionIds: string[]): Promise<void>;
+  /**
+   * Closes open `pending_review` rows whose transaction is already categorized.
+   * Heals rows stale from before supersede existed and backstops any
+   * categorization path that did not close its own suggestions.
+   */
+  supersedeSuggestionsOnCategorized(): Promise<void>;
 }
 
 export interface RunOptions {
@@ -97,6 +107,8 @@ export interface AiCategorizationSummary {
   readonly transferSkippedIds: readonly string[];
   readonly autoApplied: number;
   readonly queuedForReview: number;
+  /** Uncategorized rows that already hold an open suggestion — kept out of the provider so the run never re-asks (or re-suggests) while a decision is pending. */
+  readonly awaitingReview: number;
   readonly discarded: number;
   readonly suppressed: number;
   /** Automation applies (memory or auto-apply) dropped because the row was no longer overwritable (overwrite law). */
@@ -152,8 +164,9 @@ function transferKindsFor(bankType: string): TransferDescriptorKind[] {
 
 /**
  * Runs uncategorized transactions through the ADR-0010 precedence order:
- * merchant memory → transfer guard → AI provider batches. Memory hits and
- * transfer-shaped descriptions never reach a provider. Provider answers route by
+ * merchant memory → transfer guard → AI provider batches. Memory hits,
+ * transfer-shaped descriptions and rows already awaiting review never reach a
+ * provider. Provider answers route by
  * anchored confidence (ADR-0008 §7): 6–7 auto-apply marked-as-AI (writing
  * ai-tier memory + an `auto_applied` suggestion), 3–5 queue a `pending_review`
  * suggestion, 1–2 discard. Every apply obeys the overwrite law (NULL/`ai` only)
@@ -167,12 +180,14 @@ export async function runAiCategorization(
   const { aiStore, memoryStore, provider } = deps;
   const batchSize = deps.options?.batchSize ?? BATCH_SIZE;
 
+  await aiStore.supersedeSuggestionsOnCategorized();
   const all = await aiStore.getUncategorizedTransactions();
   const failures: RunFailure[] = [];
   let memoryApplied = 0;
   let transferSkipped = 0;
   let autoApplied = 0;
   let queuedForReview = 0;
+  let awaitingReview = 0;
   let discarded = 0;
   let suppressedCount = 0;
   let overwriteBlocked = 0;
@@ -191,6 +206,7 @@ export async function runAiCategorization(
   const hits = await lookupMemory(uniqueKeys, memoryStore, now);
 
   const afterMemory: UncategorizedTxn[] = [];
+  const memoryAppliedIds: string[] = [];
   for (const txn of all) {
     const key = keyByTxn.get(txn.id) ?? "";
     const entry = key ? hits.get(key) : undefined;
@@ -223,20 +239,27 @@ export async function runAiCategorization(
         status: "auto_applied",
       });
     }
+    memoryAppliedIds.push(txn.id);
     memoryApplied++;
   }
+  await aiStore.supersedeOpenSuggestions(memoryAppliedIds);
 
   // ── Step 2: transfer guard (never sent to a provider) ──
-  const afterTransfer: UncategorizedTxn[] = [];
+  const guarded: UncategorizedTxn[] = [];
   const transferSkippedIds: string[] = [];
   for (const txn of afterMemory) {
     if (matchesTransferDescriptor(txn.description, transferKindsFor(txn.bankType))) {
       transferSkipped++;
       transferSkippedIds.push(txn.id);
     } else {
-      afterTransfer.push(txn);
+      guarded.push(txn);
     }
   }
+
+  // ── Step 2b: open suggestions are not re-asked (no egress, no duplicate row) ──
+  const awaiting = new Set(await aiStore.getAwaitingReviewIds(guarded.map((t) => t.id)));
+  const afterTransfer = guarded.filter((t) => !awaiting.has(t.id));
+  awaitingReview = guarded.length - afterTransfer.length;
 
   // ── Step 3: provider batches ──
   let batchCount = 0;
@@ -313,14 +336,15 @@ export async function runAiCategorization(
           continue;
         }
 
+        // Re-check at apply time for both tiers: a row categorized while the
+        // provider call was in flight must neither be overwritten (auto-apply)
+        // nor collect a stale open suggestion (queue).
+        const current = await memoryStore.getTransaction(txn.id);
+        if (!current || !canOverwrite(current.categorySource)) {
+          overwriteBlocked++;
+          continue;
+        }
         if (tier === "auto_apply") {
-          // Re-check the overwrite law at apply time: a row categorized as
-          // user/rule/memory since fetch is never overwritten by automation.
-          const current = await memoryStore.getTransaction(txn.id);
-          if (!current || !canOverwrite(current.categorySource)) {
-            overwriteBlocked++;
-            continue;
-          }
           // ai-tier recordAssignment sets category_source='ai' and writes an
           // ai-tier memory entry (cached guess, still undoable).
           await recordAssignment(
@@ -350,6 +374,7 @@ export async function runAiCategorization(
     transferSkippedIds,
     autoApplied,
     queuedForReview,
+    awaitingReview,
     discarded,
     suppressed: suppressedCount,
     overwriteBlocked,

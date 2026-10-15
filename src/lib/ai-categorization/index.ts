@@ -73,3 +73,4 @@ export type {
 } from "./review";
 export { acceptSuggestion, rejectSuggestion, undoAiAssignment } from "./review";
 export { createReviewStore, needsReviewSql } from "./review-store";
+export { supersedeOpenSuggestions } from "./supersede";

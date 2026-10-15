@@ -1,0 +1,1 @@
+ALTER TYPE "public"."ai_suggestion_status" ADD VALUE 'superseded';

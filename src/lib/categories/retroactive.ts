@@ -81,45 +81,59 @@ export async function applyRetroactively(
   return { applied };
 }
 
-export const drizzleRetroactiveStore: RetroactiveStore = {
-  async getRuleById(ruleId: string): Promise<CategoryRule | null> {
-    const rows = await db.select().from(categoryRules).where(eq(categoryRules.id, ruleId));
-    if (!rows[0]) return null;
-    return {
-      id: rows[0].id,
-      categoryId: rows[0].categoryId,
-      matchType: rows[0].matchType,
-      pattern: rows[0].pattern,
-      priority: rows[0].priority,
-    };
-  },
+/**
+ * `onCategorized` runs inside the same DB transaction as the category write.
+ * The composing layer injects it (closing open AI suggestions) so this module
+ * never imports ai-categorization, which itself imports categories.
+ */
+export function createRetroactiveStore(
+  onCategorized?: (ids: string[], tx: Pick<typeof db, "update">) => Promise<void>,
+): RetroactiveStore {
+  return {
+    async getRuleById(ruleId: string): Promise<CategoryRule | null> {
+      const rows = await db.select().from(categoryRules).where(eq(categoryRules.id, ruleId));
+      if (!rows[0]) return null;
+      return {
+        id: rows[0].id,
+        categoryId: rows[0].categoryId,
+        matchType: rows[0].matchType,
+        pattern: rows[0].pattern,
+        priority: rows[0].priority,
+      };
+    },
 
-  async getOverwritableTransactions(): Promise<OverwritableTransaction[]> {
-    return db
-      .select({
-        id: transactions.id,
-        description: transactions.description,
-        categorySource: transactions.categorySource,
-      })
-      .from(transactions)
-      .where(overwriteLawSql());
-  },
+    async getOverwritableTransactions(): Promise<OverwritableTransaction[]> {
+      return db
+        .select({
+          id: transactions.id,
+          description: transactions.description,
+          categorySource: transactions.categorySource,
+        })
+        .from(transactions)
+        .where(overwriteLawSql());
+    },
 
-  async categoryHasChildren(categoryId: string): Promise<boolean> {
-    const [row] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.parentId, categoryId))
-      .limit(1);
-    return row !== undefined;
-  },
+    async categoryHasChildren(categoryId: string): Promise<boolean> {
+      const [row] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.parentId, categoryId))
+        .limit(1);
+      return row !== undefined;
+    },
 
-  async categorizeTransactions(ids: string[], categoryId: string): Promise<number> {
-    // A rule claiming a row sets provenance to 'rule'.
-    await db
-      .update(transactions)
-      .set({ categoryId, categorySource: "rule" })
-      .where(inArray(transactions.id, ids));
-    return ids.length;
-  },
-};
+    async categorizeTransactions(ids: string[], categoryId: string): Promise<number> {
+      // A rule claiming a row sets provenance to 'rule'.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(transactions)
+          .set({ categoryId, categorySource: "rule" })
+          .where(inArray(transactions.id, ids));
+        await onCategorized?.(ids, tx);
+      });
+      return ids.length;
+    },
+  };
+}
+
+export const drizzleRetroactiveStore: RetroactiveStore = createRetroactiveStore();

@@ -29,4 +29,5 @@ export {
   bulkChangeTransactionCategories,
   undoCategoryFanOut,
   overwriteLawSql,
+  type AfterCategorizeWrite,
 } from "./store";

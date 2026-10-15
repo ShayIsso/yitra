@@ -9,6 +9,7 @@ import {
   undoCategoryFanOut,
   type FannedOutRow,
 } from "@/lib/merchant-memory";
+import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import { NotAssignableCategoryError } from "@/lib/categories";
 import {
   updateTransactionActionSchema,
@@ -51,8 +52,11 @@ export async function updateTransactionAction(data: unknown): Promise<{
       // Category changes route through merchant memory: a first-time label is a
       // memory write, a change to an already-categorized row is a logged
       // correction — and either fans out to same-key siblings (ADR-0010 §4).
+      // merchant-memory cannot import ai-categorization (it imports memory), so
+      // the open suggestions of every row categorized are closed by an injected
+      // hook inside the same DB transaction.
       try {
-        fanOut = await changeTransactionCategory(id, changes.categoryId);
+        fanOut = await changeTransactionCategory(id, changes.categoryId, supersedeOpenSuggestions);
       } catch (err) {
         if (err instanceof NotAssignableCategoryError) return notAssignableResult();
         throw err;
@@ -86,6 +90,7 @@ export async function bulkCategorizeAction(data: unknown): Promise<{
     const { fanOutCount, fannedOut } = await bulkChangeTransactionCategories(
       transactionIds,
       categoryId,
+      supersedeOpenSuggestions,
     );
     revalidateTransactionPages();
     return { updated: transactionIds.length, fanOutCount, fannedOut };

@@ -22,7 +22,12 @@ vi.mock("@/lib/merchant-memory", () => ({
   undoCategoryFanOut: vi.fn(),
 }));
 
+vi.mock("@/lib/ai-categorization", () => ({
+  supersedeOpenSuggestions: vi.fn(async () => {}),
+}));
+
 import { revalidatePath } from "next/cache";
+import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import { updateTransaction } from "@/lib/transactions";
 import {
   changeTransactionCategory,
@@ -108,7 +113,11 @@ describe("updateTransactionAction", () => {
     });
 
     expect(result).toEqual({ updated: true, fanOutCount: 1, fannedOut });
-    expect(changeTransactionCategory).toHaveBeenCalledWith(VALID_TXN_ID, VALID_CATEGORY_ID);
+    expect(changeTransactionCategory).toHaveBeenCalledWith(
+      VALID_TXN_ID,
+      VALID_CATEGORY_ID,
+      supersedeOpenSuggestions,
+    );
     // Assignment does not go through the plain update path.
     expect(updateTransaction).not.toHaveBeenCalled();
   });
@@ -213,6 +222,7 @@ describe("bulkCategorizeAction", () => {
     expect(bulkChangeTransactionCategories).toHaveBeenCalledWith(
       [VALID_TXN_ID, OTHER_TXN_ID],
       VALID_CATEGORY_ID,
+      supersedeOpenSuggestions,
     );
     // Bulk touches many rows — revalidate ONCE per action call, not per row.
     expect(vi.mocked(revalidatePath).mock.calls).toEqual([["/transactions"], ["/"]]);

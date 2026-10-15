@@ -84,7 +84,7 @@ export async function* runAiSyncStep(deps: AiStepDeps): AsyncGenerator<AiStepEve
   }
 
   const applied = summary.memoryApplied + summary.autoApplied;
-  const queued = summary.queuedForReview + routed;
+  const queued = summary.queuedForReview + summary.awaitingReview + routed;
   const skipped = Math.max(0, summary.totalUncategorized - applied - queued);
   yield { type: "ai_summary", applied, queued, skipped };
 }

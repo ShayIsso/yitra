@@ -24,7 +24,7 @@ type StoredSuggestion = {
   categoryId: string;
   confidence: number;
   model: string;
-  status: "pending_review" | "auto_applied" | "accepted" | "rejected" | "undone";
+  status: "pending_review" | "auto_applied" | "accepted" | "rejected" | "undone" | "superseded";
 };
 // parentId is optional so existing seeds (flat category sets) need no change;
 // ADR-0011 hierarchy tests set it to exercise the assignable-only answer space.
@@ -164,6 +164,25 @@ function createFake(seed: {
     },
     async insertSuggestion(row) {
       suggestions.push({ ...row });
+    },
+    async getAwaitingReviewIds(ids) {
+      return [
+        ...new Set(
+          suggestions
+            .filter((s) => ids.includes(s.transactionId) && s.status === "pending_review")
+            .map((s) => s.transactionId),
+        ),
+      ];
+    },
+    async supersedeOpenSuggestions(ids) {
+      for (const s of suggestions)
+        if (ids.includes(s.transactionId) && s.status === "pending_review") s.status = "superseded";
+    },
+    async supersedeSuggestionsOnCategorized() {
+      const categorized = new Set(txns.filter((t) => t.categoryId !== null).map((t) => t.id));
+      for (const s of suggestions)
+        if (categorized.has(s.transactionId) && s.status === "pending_review")
+          s.status = "superseded";
     },
   };
 
@@ -761,5 +780,140 @@ describe("runAiCategorization — assignable-only answer space", () => {
       categoryId: "c-food",
       categorySource: "ai",
     });
+  });
+});
+
+describe("runAiCategorization — open suggestions", () => {
+  const txn = (id: string, description: string): StoredTxn => ({
+    id,
+    description,
+    bankType: "max",
+    categoryId: null,
+    categorySource: null,
+  });
+  const open = (transactionId: string, categoryId = "c-food") => ({
+    transactionId,
+    categoryId,
+    confidence: 4,
+    model: "x",
+    status: "pending_review" as const,
+  });
+
+  it("keeps a row with an open suggestion away from the provider and adds no suggestion", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [txn("t-open", "ביגוד אופנה"), txn("t-new", "חנות ספרים")],
+      suggestions: [open("t-open")],
+    });
+    const provider = scriptedProvider([
+      { match: "ביגוד", category: "מסעדות וקפה", confidence: 4 },
+      { match: "חנות", category: "מסעדות וקפה", confidence: 4 },
+    ]);
+
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider,
+    });
+
+    expect(summary).toMatchObject({ awaitingReview: 1, queuedForReview: 1, totalUncategorized: 2 });
+    expect(provider.prompts.join("\n")).not.toContain("ביגוד");
+    expect(fake.suggestions.filter((s) => s.transactionId === "t-open")).toHaveLength(1);
+    expect(fake.suggestions.filter((s) => s.transactionId === "t-new")).toHaveLength(1);
+  });
+
+  it("sends no provider call when every candidate is awaiting review", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [txn("t-open", "ביגוד אופנה")],
+      suggestions: [open("t-open")],
+    });
+    const provider = scriptedProvider([]);
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider,
+    });
+    expect(summary).toMatchObject({ awaitingReview: 1, batches: 0 });
+    expect(provider.prompts).toHaveLength(0);
+  });
+
+  it("still applies a user-tier memory hit and supersedes the open suggestion", async () => {
+    const fake = createFake({
+      categories: CATS,
+      entries: [
+        { merchantKey: keyOf("שופרסל דיל"), categoryId: "c-food", source: "user", hitCount: 0 },
+      ],
+      txns: [txn("t-open", "שופרסל דיל")],
+      suggestions: [open("t-open", "c-rest")],
+    });
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider: scriptedProvider([]),
+    });
+    expect(summary).toMatchObject({ memoryApplied: 1, awaitingReview: 0 });
+    expect(fake.txns[0]).toMatchObject({ categoryId: "c-food", categorySource: "memory" });
+    expect(fake.suggestions[0].status).toBe("superseded");
+  });
+
+  it("supersedes open suggestions on already-categorized rows at run start", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [
+        { ...txn("t-done", "חנות ספרים"), categoryId: "c-food", categorySource: "user" },
+        txn("t-open", "ביגוד אופנה"),
+      ],
+      suggestions: [open("t-done"), open("t-done", "c-rest"), open("t-open")],
+    });
+    await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider: scriptedProvider([]),
+    });
+    expect(fake.suggestions.filter((s) => s.transactionId === "t-done")).toSatisfy(
+      (rows: StoredSuggestion[]) => rows.every((s) => s.status === "superseded"),
+    );
+    expect(fake.suggestions.find((s) => s.transactionId === "t-open")?.status).toBe(
+      "pending_review",
+    );
+  });
+
+  it("does not suppress a superseded pair: a later run may suggest it again", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [txn("t-1", "ביגוד אופנה")],
+      suggestions: [{ ...open("t-1"), status: "superseded" }],
+    });
+    const provider = scriptedProvider([{ match: "ביגוד", category: "מזון וסופר", confidence: 4 }]);
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider,
+    });
+    expect(summary).toMatchObject({ suppressed: 0, queuedForReview: 1 });
+    expect(fake.suggestions.filter((s) => s.status === "pending_review")).toHaveLength(1);
+  });
+
+  it("does not queue a suggestion for a row categorized while the provider call was in flight", async () => {
+    const fake = createFake({ categories: CATS, txns: [txn("t-1", "ביגוד אופנה")] });
+    const inner = scriptedProvider([{ match: "ביגוד", category: "מזון וסופר", confidence: 4 }]);
+    const provider: CategorizationProvider = {
+      modelId: inner.modelId,
+      async generate(prompt, options) {
+        fake.txns[0].categoryId = "c-rest";
+        fake.txns[0].categorySource = "user";
+        return inner.generate(prompt, options);
+      },
+    };
+
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider,
+    });
+
+    expect(summary).toMatchObject({ overwriteBlocked: 1, queuedForReview: 0 });
+    expect(fake.suggestions).toHaveLength(0);
   });
 });
