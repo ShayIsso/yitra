@@ -57,6 +57,14 @@ Say "ignore" — never "excluded", "skipped", or "hidden". The category type is 
 
 A monthly charge that's part of a multi-payment purchase. Stored as **individual rows per monthly charge**, not collapsed. Each row has `installment_number` and `installment_total`. UI shows installment progress (e.g. "3/12") rendered from these fields.
 
+### `pending lifecycle` — load-bearing
+
+A charge is reported first as `pending` **with no `externalId`**, later as `completed` **with one**; banks may shift its date (up to 7 days), description or amount on posting. Its identity is therefore the **row**, never a bank id:
+
+- **Takeover.** A completed transaction matching no `externalId` (and no exact composite) supersedes the account's open pending row — no id, date within ±7 days, same `chargedAmount` _or_ same `description`, closest date wins — **in place**, so the row keeps its category, `category_source`, `custom_description` and links. Only pending rows are takeover candidates; two completed same-amount charges stay two rows.
+- **Sweep.** After an account's import succeeds, its `pending` rows dated inside the scrape window that this scrape did not resolve to (matched, taken over or inserted) are deleted: the bank re-reports every live pending charge, so an unreported one posted elsewhere or was cancelled. Never after a bank error, OTP skip or a thrown import; never for rows older than the window start.
+- **Deleting a swept row** cascades its `ai_suggestions`, nulls its `category_corrections` and recurring `last_matched_txn_id` references, and releases the reconciliation group (the surviving members' group columns are cleared so detection can re-form it).
+
 ---
 
 ## Bank-domain vocabulary

@@ -1,44 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { importTransaction } from "../import";
-import type { TransactionStore, StoredTransaction, Categorization } from "../import";
+import type { StoredTransaction, Categorization } from "../import";
+import { createMemoryStore } from "./memory-store";
 import type { ScrapedTransaction } from "@/lib/scraper/types";
-
-// In-memory store for testing
-function createMemoryStore(
-  initial: StoredTransaction[] = [],
-): TransactionStore & { rows: StoredTransaction[] } {
-  const rows: StoredTransaction[] = [...initial];
-  let nextId = 1;
-
-  return {
-    rows,
-    async findByExternalId(externalId, bankAccountId) {
-      return (
-        rows.find((r) => r.externalId === externalId && r.bankAccountId === bankAccountId) ?? null
-      );
-    },
-    async findByComposite(date, chargedAmount, description, bankAccountId) {
-      return (
-        rows.find(
-          (r) =>
-            r.date === date &&
-            r.chargedAmount === chargedAmount &&
-            r.description === description &&
-            r.bankAccountId === bankAccountId,
-        ) ?? null
-      );
-    },
-    async insert(tx) {
-      const id = String(nextId++);
-      rows.push({ ...tx, id });
-      return id;
-    },
-    async update(id, changes) {
-      const idx = rows.findIndex((r) => r.id === id);
-      if (idx !== -1) Object.assign(rows[idx], changes);
-    },
-  };
-}
 
 const noCategorize = async (_desc: string): Promise<Categorization> => ({
   categoryId: null,

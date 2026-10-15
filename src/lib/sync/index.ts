@@ -188,7 +188,7 @@ async function* syncAllBanks(opts: SyncOptions = {}): AsyncGenerator<SyncSummary
 
         if (event.type === "bank_complete") {
           yield { type: "progress", bank: event.bank, status: "importing" };
-          const counts = await importScrapedAccounts(cred.id, event.accounts);
+          const counts = await importScrapedAccounts(cred.id, event.accounts, startDate);
           bankImported = counts.inserted + counts.updated;
           total += bankImported;
           importedByBank[event.bank] = bankImported;
