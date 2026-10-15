@@ -44,10 +44,12 @@ Experimental is a statement about testing, not about a different code path: an e
 - Docker and Docker Compose (for PostgreSQL, and for the containerized setup below)
 - Google Chrome or Chromium on the host when running the app natively (scraping drives a real browser)
 
+Developed and run on macOS. The app image is built from Linux base images for your machine's architecture (amd64 or arm64), so the containerized setup should also work on Windows through Docker Desktop with WSL 2, but nobody has tested Windows yet; running natively on Windows is untested too.
+
 ## Getting Started
 
 ```bash
-git clone git@github.com:ShayIsso/yitra.git
+git clone https://github.com/ShayIsso/yitra.git
 cd yitra
 npm install
 
@@ -140,53 +142,25 @@ docs/adr/           # Architecture decision records
 
 Run `ls src/lib` for the current module list: a module's name states its responsibility, its `index.ts` its public surface, and its tests its behavior. Domain vocabulary is in [CONTEXT.md](CONTEXT.md).
 
-## How This Project Is Built — AI-Assisted Development
+## How This Project Is Built
 
-Yitra is developed with a structured human + agent workflow. Every phase moves through the same pipeline:
+Yitra is built with a structured human + AI-agent workflow, and the repository keeps the artifacts of it.
 
-```
- Grill Me  →  to-prd  →  PRD as GitHub Issue  →  to-issues  →  feature branches  →  review  →  merge
-```
+- **Planning.** Each body of work starts with an interview that locks the decisions, becomes a spec issue on GitHub, and is sliced into small vertical tickets. Decisions that outlive a ticket become ADRs in [`docs/adr/`](docs/adr/README.md); domain vocabulary lives in [CONTEXT.md](CONTEXT.md).
+- **Roles.** An orchestrator agent writes a self-contained brief per ticket, routes it to a worker agent sized to its risk, and reviews every PR. Each worker implements one ticket in its own git worktree and opens a PR. The maintainer approves decisions and merges.
+- **Review by risk.** Routine slices get an architect review. Anything touching shared modules, the schema, security or sync also gets an independent review by an agent that never saw the implementer's reasoning, and UI slices get a headless visual pass in light, dark and phone widths against synthetic data.
+- **Guard rails in CI.** Every PR runs six gates: tests, Prettier, ESLint, `tsc --noEmit`, a migration drift check and a production build. Architecture rules are enforced by tests too: no branching on institution ids, every setup Server Action checks the session first, and the bank registry is pinned to the scraper library.
 
-### Roles
+Rules the workflow enforces:
 
-- **Orchestrator (Opus):** designs architecture, runs `grill-me` interviews, writes the PRD, reviews every PR, makes architectural calls, writes self-contained worker prompts.
-- **Workers (Sonnet):** implement one issue at a time from the orchestrator's prompt. Never see prior conversation context — the prompt is the briefing.
-- **Human (Shay):** approves architectural decisions, validates PRDs, reviews PRs, runs manual verification against real bank data.
+- **Deep modules:** pure functional cores testable without the database; a Store pattern at database boundaries.
+- **TDD for computation:** analytics, the rule engine, reconciliation and recurring detection are all written test-first.
+- **Zod at every API boundary,** with Hebrew error messages.
+- **Zero-leak logging:** no credentials, OTP codes or raw scraper output in logs.
+- **Generated migrations only** ([ADR-0009](docs/adr/0009-generated-migrations-from-baseline.md)): schema changes go through `npm run db:generate`, never hand-written SQL.
+- **Feature branches and PRs only,** formatted with `npm run format` before every commit.
 
-### Skills used
-
-A mix of global skills (Matt Pocock's set, installed via `npx`) and project-local skills under `.claude/skills/` encode repeatable workflows:
-
-| Skill                           | Role                                                                       |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| `grill-me`                      | Interview the user to lock architectural decisions before coding           |
-| `grill-with-docs`               | Stress-test a plan against `CONTEXT.md` and `docs/adr/` decisions          |
-| `to-prd`                        | Synthesize current conversation into a PRD submitted as a GitHub issue     |
-| `to-issues`                     | Slice the PRD into tracer-bullet vertical GitHub issues                    |
-| `improve-codebase-architecture` | Find shallow modules, recommend deepening, produce `ARCHITECTURE.md`       |
-| `tdd`                           | Red-green-refactor loop for pure computation modules                       |
-| `diagnose`                      | Disciplined reproduce → minimise → hypothesise loop for hard bugs          |
-| `triage`                        | State-machine triage of incoming issues into the project tracker           |
-| `generate-commit-message`       | Produce concise, why-focused commit messages from staged diffs (mandatory) |
-| `simplify`                      | Post-implementation review for code reuse, quality, and efficiency         |
-| `obsidian-markdown`             | Mirror PRDs and decisions to the Obsidian vault with frontmatter+wikilinks |
-
-### Core rules enforced by the workflow
-
-- **Deep modules:** pure functional cores testable without the DB; Store pattern for DB boundaries.
-- **TDD for computation:** analytics, rule engine, reconciliation, recurring detection — all test-first.
-- **Zod at every API boundary** with Hebrew error messages.
-- **Zero-leak logging:** no credentials, OTP codes, or raw scraper output in logs.
-- **Feature branches only:** never commit directly to `main`.
-- **PRs include `Closes #N`** so issues auto-close on merge.
-- **`npm run format` before every commit** — CI rejects unformatted code.
-
-### Knowledge capture
-
-- Every PRD and kickoff doc lives in `/docs`.
-- Every PRD is mirrored to an Obsidian vault (`Self_projects/ShayFinance/`) with frontmatter, wikilinks, and callouts.
-- Planned enrichments: JSON Canvas module graphs, inline screenshots, workflow walkthrough videos.
+Agent protocols, security rules and known gotchas are in [CLAUDE.md](CLAUDE.md).
 
 ## Documentation
 
