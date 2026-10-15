@@ -92,7 +92,7 @@ These are non-negotiable:
 
 ### Key Constraints
 
-- **Deduplication:** Unique on `(external_id, bank_account_id)` where external_id is not null. Fallback: composite match on `(date, charged_amount, description)` for pending transactions.
+- **Deduplication:** Unique on `(external_id, bank_account_id)` where external_id is not null. Pending transactions carry no id and are superseded in place by their completed version (±7 days, ranked by match strength then date; pending rows only), then stale pending rows are swept after a successful per-account import (an unseen row goes with an exact completed twin, or in-window when the scrape reported pending) — see `CONTEXT.md` "pending lifecycle". Exact composite match `(date, charged_amount, description)` still covers id-less rows.
 - **Bank accounts:** `onConflictDoUpdate` upsert — updates balance on every sync.
 - **Installments:** Individual rows per monthly charge. `installment_number` / `installment_total` fields.
 - **Custom descriptions:** `custom_description` (nullable) overrides display. Original `description` is never modified.

@@ -4,8 +4,9 @@ import { eq, and, gte, lte, ilike, isNull, count, inArray } from "drizzle-orm";
 import { categorize, getRules } from "@/lib/categories/rules";
 import { getGroupLeafIndex } from "@/lib/categories";
 import type { ScrapedAccount } from "@/lib/scraper/types";
-import { importTransaction, type Categorization } from "./import";
-import { createDbStore } from "./store";
+import type { Categorization } from "./import";
+import { importAccountTransactions } from "./account-import";
+import { createDbStore, createDbPendingSweepStore } from "./store";
 import type { transactionFiltersSchema } from "./schemas";
 import type { z } from "zod";
 import { extractMerchant, amountsMatch } from "@/lib/transaction-matching";
@@ -16,14 +17,25 @@ import {
   type PendingSuggestionRow,
 } from "@/lib/ai-categorization";
 
+/** `getSyncStartDate` builds local-midnight dates, so format with local getters. */
+function toLocalIsoDate(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 export async function importScrapedAccounts(
   credentialId: string,
   scrapedAccounts: ScrapedAccount[],
-): Promise<{ inserted: number; updated: number; skipped: number }> {
+  windowStart?: Date,
+): Promise<{ inserted: number; updated: number; skipped: number; swept: number }> {
   const store = createDbStore();
+  const sweepStore = createDbPendingSweepStore();
+  const windowStartDate = windowStart ? toLocalIsoDate(windowStart) : undefined;
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+  let swept = 0;
 
   // Precedence at the import seam: rules (deliberately-authored law) → merchant
   // memory (learned exact-key mappings). AI is a later slice (ADR-0010 §1).
@@ -65,15 +77,21 @@ export async function importScrapedAccounts(
     const accountId = bankAccount?.id;
     if (!accountId) continue;
 
-    for (const tx of account.transactions) {
-      const result = await importTransaction(tx, accountId, store, categorizer);
-      if (result === "inserted") inserted++;
-      else if (result === "updated") updated++;
-      else skipped++;
-    }
+    const counts = await importAccountTransactions({
+      transactions: account.transactions,
+      bankAccountId: accountId,
+      windowStart: windowStartDate,
+      store,
+      sweepStore,
+      categorize: categorizer,
+    });
+    inserted += counts.inserted;
+    updated += counts.updated;
+    skipped += counts.skipped;
+    swept += counts.swept;
   }
 
-  return { inserted, updated, skipped };
+  return { inserted, updated, skipped, swept };
 }
 
 // ── Pure helpers (DB-free, unit-tested) ──────────────────────────────────────

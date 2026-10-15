@@ -65,6 +65,16 @@ Say "ignore" — never "excluded", "skipped", or "hidden". The category type is 
 
 A monthly charge that's part of a multi-payment purchase. Stored as **individual rows per monthly charge**, not collapsed. Each row has `installment_number` and `installment_total`. UI shows installment progress (e.g. "3/12") rendered from these fields.
 
+### `pending lifecycle` — load-bearing
+
+A charge is reported first as `pending` **with no `externalId`**, later as `completed` **with one**; banks may shift its date (up to 7 days), description or amount on posting. Its identity is therefore the **row**, never a bank id:
+
+- **Takeover.** A completed transaction matching no `externalId` (and no exact composite) supersedes the account's open pending row — no id, date within ±7 days, closest date within the strongest match tier — **in place**, so the row keeps its category, `category_source`, `custom_description` and links. Tiers: same amount and description; same description; same amount _and_ same `merchant identity`. Within an account's scrape, still-pending transactions resolve first so their rows are claimed before a completed one can take over. Only pending rows are candidates; two completed same-amount charges stay two rows.
+- **Sweep.** After an account's import succeeds, a `pending` row this scrape did not resolve to (matched, taken over or inserted) is deleted when it is **in-window and the scrape reported at least one pending transaction for that account** — the library silently drops a failed pending fetch on an otherwise successful scrape, so absence alone is not evidence otherwise. An orphan on an account with no live pending waits until a pending row appears. A row the scrape resolved to is never swept. Never after a bank error, OTP skip or a thrown import.
+- **Twin healing.** An unseen `pending` row with an exact completed twin (same `chargedAmount` and `description`, completed date within ±7 days) is removed on any successful import, in or out of the window and regardless of what the scrape reported: the twin is stored proof the charge posted. Each twin retires one pending row. Pre-window pending rows without a twin are never touched.
+- **Carry-over.** A removed pending row's trusted category (`user`/`rule`/`memory`), its `category_source` and its `custom_description` move onto its exact completed twin when the twin has none (the `overwrite law` applies: a trusted twin category is never overwritten; an `ai`-sourced one may be); the twin's open `pending_review` AI suggestions are superseded so accepting one later cannot overwrite the carried category.
+- **Deleting a pending row** cascades its `ai_suggestions`, nulls its `category_corrections` and recurring `last_matched_txn_id` references, and releases the reconciliation group (the surviving members' group columns are cleared so detection can re-form it).
+
 ---
 
 ## Bank-domain vocabulary
