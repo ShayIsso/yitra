@@ -14,6 +14,8 @@ import {
 import { eq, isNull, isNotNull, inArray, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { InboxStore, InboxTransaction } from "./inbox-ops";
+import type { RejectedPair } from "./rejected-pairs";
+import { recordRejections } from "./rejection-writes";
 import type { CategoryRule } from "@/lib/categories/rules";
 
 // ── Row shape returned by the inbox query ───────────────────────────────────
@@ -267,8 +269,9 @@ export const drizzleInboxStore: InboxStore = {
     });
   },
 
-  async clearGroup(groupIds: string[]): Promise<void> {
+  async clearGroup(groupIds: string[], rejections: RejectedPair[] = []): Promise<void> {
     await db.transaction(async (tx) => {
+      await recordRejections(tx, rejections);
       for (const groupId of groupIds) {
         await tx
           .update(transactions)
@@ -283,17 +286,20 @@ export const drizzleInboxStore: InboxStore = {
     });
   },
 
-  async clearRows(txnIds: string[]): Promise<void> {
+  async clearRows(txnIds: string[], rejections: RejectedPair[] = []): Promise<void> {
     if (txnIds.length === 0) return;
-    await db
-      .update(transactions)
-      .set({
-        reconciliationGroupId: null,
-        reconciliationRole: null,
-        reconciliationConfidence: null,
-        reconciliationConfirmedAt: null,
-      })
-      .where(inArray(transactions.id, txnIds));
+    await db.transaction(async (tx) => {
+      await recordRejections(tx, rejections);
+      await tx
+        .update(transactions)
+        .set({
+          reconciliationGroupId: null,
+          reconciliationRole: null,
+          reconciliationConfidence: null,
+          reconciliationConfirmedAt: null,
+        })
+        .where(inArray(transactions.id, txnIds));
+    });
   },
 
   async setCategory(txnId: string, categoryId: string | null): Promise<void> {

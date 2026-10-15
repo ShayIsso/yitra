@@ -45,17 +45,17 @@ export async function* runPostImportPipeline(deps: PostImportDeps): AsyncGenerat
 
   // P1: credit-card settlement lump detection
   const recentTxns = await store.getRecentTransactions(90);
-  const p1Candidates = detectP1Settlement(recentTxns);
+  const p1Candidates = detectP1Settlement(recentTxns, await store.getRejectedPairs());
   const p1Result = await applyReconciliation(p1Candidates, store);
 
   // P2: 1:1 mirror detection — re-fetch so P1's updates are visible
   const recentTxnsAfterP1 = await store.getRecentTransactions(90);
-  const p2Candidates = detectP2Mirror(recentTxnsAfterP1);
+  const p2Candidates = detectP2Mirror(recentTxnsAfterP1, await store.getRejectedPairs());
   const p2Result = await applyP2Mirror(p2Candidates, store);
 
   // P3: inter-account transfer detection — re-fetch so P2's updates are visible
   const recentTxnsAfterP2 = await store.getRecentTransactions(90);
-  const p3Candidates = detectP3InterAccount(recentTxnsAfterP2);
+  const p3Candidates = detectP3InterAccount(recentTxnsAfterP2, await store.getRejectedPairs());
   const p3Result = await applyP3InterAccount(p3Candidates, store);
 
   yield {

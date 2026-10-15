@@ -6,6 +6,7 @@ import type { ReconciliationStore } from "../store";
 function makeStore(overrides: Partial<ReconciliationStore> = {}): ReconciliationStore {
   return {
     getRecentTransactions: vi.fn().mockResolvedValue([]),
+    getRejectedPairs: vi.fn().mockResolvedValue(new Set<string>()),
     getCategoryIdByName: vi.fn().mockResolvedValue("cat-transfer"),
     applyAutoReconciliation: vi.fn().mockResolvedValue(undefined),
     queueReconciliation: vi.fn().mockResolvedValue(undefined),

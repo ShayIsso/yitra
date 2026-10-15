@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { db } from "@/db";
 import { transactions } from "@/db/schema";
 import { inArray, isNull, and } from "drizzle-orm";
+import { selectUnpairedNotRejected } from "./rejection-writes";
 
 /**
  * Routes transfer-guarded-but-unpaired transactions into the reconciliation
@@ -13,7 +14,10 @@ import { inArray, isNull, and } from "drizzle-orm";
  * transfer, it only hands over the ids.
  */
 export interface SuspectedTransferRouter {
-  /** Of the given ids, the ones with no reconciliation group yet (unpaired after P3). */
+  /**
+   * Of the given ids, the ones with no reconciliation group yet (unpaired after P3)
+   * and not previously rejected as a suspected transfer (a rejected pair).
+   */
   filterUnpaired(txnIds: string[]): Promise<string[]>;
   /** Queue a single row as a pending suspected-transfer inbox item. */
   queueSuspectedTransfer(txnId: string): Promise<void>;
@@ -26,12 +30,7 @@ const SUSPECTED_TRANSFER_CONFIDENCE = 0.5;
 
 export const drizzleSuspectedTransferRouter: SuspectedTransferRouter = {
   async filterUnpaired(txnIds: string[]): Promise<string[]> {
-    if (txnIds.length === 0) return [];
-    const rows = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(inArray(transactions.id, txnIds), isNull(transactions.reconciliationGroupId)));
-    return rows.map((r) => r.id);
+    return selectUnpairedNotRejected(db, txnIds);
   },
 
   async queueSuspectedTransfer(txnId: string): Promise<void> {

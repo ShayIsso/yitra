@@ -4,6 +4,7 @@ export { detectP2Mirror } from "./detect-p2";
 export { applyP2Mirror } from "./apply-p2";
 export { detectP3InterAccount } from "./detect-p3";
 export { applyP3InterAccount } from "./apply-p3";
+export type { RejectedPairs } from "./rejected-pairs";
 export { drizzleReconciliationStore } from "./store";
 export type { ReconciliationStore } from "./store";
 export { drizzleSuspectedTransferRouter } from "./suspected-transfer";

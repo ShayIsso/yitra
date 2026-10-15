@@ -156,14 +156,14 @@ describe("rejectGroup — suspected transfer (singleton)", () => {
     const result = await rejectGroup("group-sus", store);
 
     expect(result.error).toBeUndefined();
-    expect(store.clearGroup).toHaveBeenCalledWith(["group-sus"]);
+    expect(store.clearGroup).toHaveBeenCalledWith(["group-sus"], [["sus-1", "sus-1"]]);
     // No rule matches → the row goes back to uncategorized.
     expect(store.setCategory).toHaveBeenCalledWith("sus-1", null);
   });
 });
 
 describe("rejectGroup", () => {
-  it("clears all reconciliation columns on all group members", async () => {
+  it("clears the group and records the lump against each detail as rejected", async () => {
     const lump = makeTxn({ id: "lump-1", reconciliationRole: "settlement_lump" });
     const detail = makeDetail("detail-1");
 
@@ -174,7 +174,7 @@ describe("rejectGroup", () => {
     const result = await rejectGroup("group-1", store);
 
     expect(result.error).toBeUndefined();
-    expect(store.clearGroup).toHaveBeenCalledWith(["group-1"]);
+    expect(store.clearGroup).toHaveBeenCalledWith(["group-1"], [["lump-1", "detail-1"]]);
   });
 
   it("re-runs rule engine and sets new categories on all members", async () => {
@@ -231,7 +231,13 @@ describe("undoTransaction", () => {
     const result = await undoTransaction("lump-1", allMembers, store);
 
     expect(result.error).toBeUndefined();
-    expect(store.clearRows).toHaveBeenCalledWith(["lump-1"]);
+    expect(store.clearRows).toHaveBeenCalledWith(
+      ["lump-1"],
+      [
+        ["lump-1", "detail-1"],
+        ["lump-1", "detail-2"],
+      ],
+    );
     // lump matches rule
     expect(store.setCategory).toHaveBeenCalledWith("lump-1", "cat-settle");
   });

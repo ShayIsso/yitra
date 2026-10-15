@@ -1,6 +1,7 @@
 import { datesWithin, matchesTransferDescriptor } from "@/lib/transaction-matching";
 import { bankKindOf } from "@/lib/bank-registry";
 import { scoreP1Confidence } from "./confidence";
+import { NO_REJECTIONS, isRejected, type RejectedPairs } from "./rejected-pairs";
 import type { ReconciliationCandidate, ReconciliationTransaction } from "./types";
 
 const CYCLE_WINDOW_DAYS = 35;
@@ -20,6 +21,7 @@ function parseDate(dateStr: string): Date {
 /** A row from a prepaid institution or one of unknown kind lands on neither side. */
 export function detectP1Settlement(
   transactions: ReconciliationTransaction[],
+  rejected: RejectedPairs = NO_REJECTIONS,
 ): ReconciliationCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
@@ -32,8 +34,12 @@ export function detectP1Settlement(
 
   for (const lump of bankLumps) {
     const lumpDate = parseDate(lump.date);
-    const cycleCardTxns = cardTxns.filter((card) =>
-      datesWithin(lumpDate, parseDate(card.date), CYCLE_WINDOW_DAYS),
+    // Rejection is per lump x detail pair: the lump is scored on the card rows it
+    // has not been rejected against, so a rejected set is never re-proposed.
+    const cycleCardTxns = cardTxns.filter(
+      (card) =>
+        datesWithin(lumpDate, parseDate(card.date), CYCLE_WINDOW_DAYS) &&
+        !isRejected(rejected, lump.id, card.id),
     );
 
     if (cycleCardTxns.length === 0) continue;

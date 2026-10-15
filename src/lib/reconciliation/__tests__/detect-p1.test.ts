@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { detectP1Settlement } from "../detect-p1";
+import { toRejectedPairs } from "../rejected-pairs";
 import type { ReconciliationTransaction } from "../types";
 
 // NOTE: v1 tests single card per provider only.
@@ -202,5 +203,17 @@ describe("detectP1Settlement", () => {
 
     // Both lumps match the same card cycle → confidence degraded on both
     expect(result.every((c) => c.confidence < 1.0)).toBe(true);
+  });
+
+  it("scores a lump only on card rows it was not rejected against", () => {
+    const lump = tx({ id: "lump", description: "חיוב ויזה", chargedAmount: -300 });
+    const cards = [-100, -100, -100].map((chargedAmount, i) =>
+      tx({ id: `card-${i}`, bankType: "max", description: "קפה", chargedAmount }),
+    );
+
+    expect(detectP1Settlement([lump, ...cards])).toHaveLength(1);
+
+    const rejectedAll = toRejectedPairs(cards.map((c): [string, string] => ["lump", c.id]));
+    expect(detectP1Settlement([lump, ...cards], rejectedAll)).toEqual([]);
   });
 });

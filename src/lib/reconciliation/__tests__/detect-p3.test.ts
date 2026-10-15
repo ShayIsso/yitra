@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { detectP3InterAccount } from "../detect-p3";
+import { toRejectedPairs } from "../rejected-pairs";
 import type { ReconciliationTransaction } from "../types";
 
 let idCounter = 0;
@@ -339,6 +340,18 @@ describe("detectP3InterAccount", () => {
     const result = detectP3InterAccount([outgoing, incoming]);
 
     expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe(0.9);
+  });
+
+  it("skips a rejected pair but still pairs a row with another counterpart", () => {
+    const out = tx({ id: "out", description: "ביט", chargedAmount: -250 });
+    const inA = tx({ id: "in-a", description: "ביט", chargedAmount: 250 });
+    const inB = tx({ id: "in-b", description: "ביט", chargedAmount: 250 });
+
+    const result = detectP3InterAccount([out, inA, inB], toRejectedPairs([["in-a", "out"]]));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].incomingSide.id).toBe("in-b");
     expect(result[0].confidence).toBe(0.9);
   });
 });

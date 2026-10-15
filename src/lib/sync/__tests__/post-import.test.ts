@@ -12,6 +12,9 @@ function emptyReconciliationStore(): ReconciliationStore {
     async getRecentTransactions() {
       return [];
     },
+    async getRejectedPairs() {
+      return new Set<string>();
+    },
     async getCategoryIdByName() {
       return null;
     },

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { detectP2Mirror } from "../detect-p2";
+import { toRejectedPairs } from "../rejected-pairs";
 import type { ReconciliationTransaction } from "../types";
 
 let idCounter = 0;
@@ -146,7 +147,34 @@ describe("detectP2Mirror", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("drops pair when amount is off by more than 2%", () => {
+  it("never pairs unequal amounts when one side carries a Bit marker", () => {
+    const cafe = tx({ id: "cafe", description: "קפה", chargedAmount: -30.5 });
+    const bit = tx({ id: "bit", description: "ביט", chargedAmount: -30.0 });
+
+    expect(detectP2Mirror([cafe, bit])).toEqual([]);
+  });
+
+  it("still pairs equal amounts when one side carries a Bit marker", () => {
+    const cafe = tx({ id: "cafe", description: "קפה", chargedAmount: -30.5 });
+    const bit = tx({ id: "bit", description: "ביט", chargedAmount: -30.5 });
+
+    expect(detectP2Mirror([cafe, bit])).toHaveLength(1);
+  });
+
+  it("skips a rejected pair but still pairs a row with another counterpart", () => {
+    const bit = tx({ id: "bit", description: "ביט", chargedAmount: -60 });
+    const a = tx({ id: "a", description: "ביט", chargedAmount: -60 });
+    const b = tx({ id: "b", description: "ביט", chargedAmount: -60 });
+
+    const result = detectP2Mirror([bit, a, b], toRejectedPairs([["a", "bit"]]));
+
+    const pairs = result.map((c) => [c.bankSide.id, c.cardSide.id].sort().join("|"));
+    expect(pairs).toContain("b|bit");
+    expect(pairs).toContain("a|b");
+    expect(pairs).not.toContain("a|bit");
+  });
+
+  it("drops pair when amounts differ by a large margin", () => {
     const bankSide = tx({
       id: "bank-6",
       bankAccountId: "ba-discount",
