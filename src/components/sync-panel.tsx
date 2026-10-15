@@ -131,7 +131,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button onClick={() => void start()} disabled={syncing}>
+        <Button onClick={() => void start()} disabled={syncing || state.starting}>
           {syncing ? (
             <>
               <Loader2 className="animate-spin" />

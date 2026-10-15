@@ -130,6 +130,21 @@ describe("a refused or broken start", () => {
     expect(state.connectionError).toBe(true);
   });
 
+  it("settles every institution still in flight when the stream dies, keeping finished outcomes", () => {
+    const THIRD = "synthetic-third";
+    const state = run([
+      accepted,
+      event({ type: "bank_complete", bank: BANK }),
+      event({ type: "bank_error", bank: OTHER, error: "שגיאה", hasScreenshot: false }),
+      event({ type: "otp_required", bank: THIRD }),
+      { type: "stream_failed" },
+    ]);
+    expect(state.bankStates[BANK].status).toBe("complete");
+    expect(state.bankStates[OTHER].status).toBe("error");
+    expect(state.bankStates[THIRD].status).toBe("interrupted");
+    expect(state.otp[THIRD].running).toBe(false);
+  });
+
   it("reports a start the server answered with an error as a connection error", () => {
     const state = run([{ type: "start_requested" }, { type: "start_failed" }]);
     expect(state.connectionError).toBe(true);

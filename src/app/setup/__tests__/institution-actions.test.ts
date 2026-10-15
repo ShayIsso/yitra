@@ -7,11 +7,11 @@ vi.mock("@/lib/auth", async (importOriginal) => {
   return { ...actual, requireSession: vi.fn() };
 });
 
-vi.mock("@/lib/credentials", () => ({ addCredential: vi.fn() }));
+vi.mock("@/lib/credentials", () => ({ addCredential: vi.fn(), removeCredential: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
-import { addCredential } from "@/lib/credentials";
+import { addCredential, removeCredential } from "@/lib/credentials";
 import {
   enabledBankEntries,
   excludedInstitutions,
@@ -19,7 +19,10 @@ import {
   type BankRegistryEntry,
   type CredentialFieldKind,
 } from "@/lib/bank-registry";
-import { addInstitutionCredentialAction } from "../institution-actions";
+import {
+  addInstitutionCredentialAction,
+  removeInstitutionCredentialAction,
+} from "../institution-actions";
 
 const FAKE_SECRET = "fake-secret-for-tests-only";
 
@@ -152,5 +155,54 @@ describe("addInstitutionCredentialAction", () => {
 
     expect(result.fieldErrors?.bankType).toBe("מוסד לא נתמך");
     expect(addCredential).not.toHaveBeenCalled();
+  });
+});
+
+describe("removeInstitutionCredentialAction", () => {
+  const CREDENTIAL_ID = "3f8a2b1c-4d5e-4f6a-8b7c-9d0e1f2a3b4c";
+
+  it("removes nothing without a session", async () => {
+    const signInRedirect = new Error("NEXT_REDIRECT");
+    vi.mocked(requireSession).mockRejectedValue(signInRedirect);
+
+    await expect(removeInstitutionCredentialAction({ id: CREDENTIAL_ID })).rejects.toBe(
+      signInRedirect,
+    );
+    expect(requireSession).toHaveBeenCalledWith("/setup");
+    expect(removeCredential).not.toHaveBeenCalled();
+  });
+
+  it("removes the credential through the credentials module and refreshes its pages", async () => {
+    const result = await removeInstitutionCredentialAction({ id: CREDENTIAL_ID });
+
+    expect(result).toEqual({ removed: true });
+    expect(removeCredential).toHaveBeenCalledWith(CREDENTIAL_ID);
+    for (const page of ["/settings", "/sync", "/", "/transactions"]) {
+      expect(revalidatePath).toHaveBeenCalledWith(page);
+    }
+  });
+
+  it.each([
+    ["a malformed id", { id: "not-a-uuid" }],
+    ["a missing id", {}],
+    ["non-object input", "not an object"],
+  ])("refuses %s without touching the module", async (_case, input) => {
+    const result = await removeInstitutionCredentialAction(input);
+
+    expect(result.error).toMatch(/[֐-׿]/);
+    expect(result.removed).toBeUndefined();
+    expect(removeCredential).not.toHaveBeenCalled();
+  });
+
+  it("answers a failed removal with a fixed Hebrew message and refreshes nothing", async () => {
+    vi.mocked(removeCredential).mockRejectedValue(
+      new Error(`Failed query: delete from "bank_credentials" params: ${CREDENTIAL_ID}`),
+    );
+
+    const result = await removeInstitutionCredentialAction({ id: CREDENTIAL_ID });
+
+    expect(Object.keys(result)).toEqual(["error"]);
+    expect(result.error).not.toContain("Failed query");
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

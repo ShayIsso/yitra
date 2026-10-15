@@ -285,6 +285,7 @@ describe("Server Actions reachable from auth-exempt routes", () => {
         "app/setup/actions.ts#completeOnboardingAction",
         "app/setup/categories-actions.ts#loadDefaultCategoriesAction",
         "app/setup/institution-actions.ts#addInstitutionCredentialAction",
+        "app/setup/institution-actions.ts#removeInstitutionCredentialAction",
         "app/setup/provider-actions.ts#getProviderSettingsAction",
         "app/setup/provider-actions.ts#saveProviderSettingsAction",
         "app/setup/provider-actions.ts#clearProviderKeyAction",

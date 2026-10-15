@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FirstSyncBody } from "@/components/onboarding/steps/first-sync-step";
 import type { StepNavigation } from "@/components/onboarding/step-navigation";
+import { enabledBankEntries } from "@/lib/bank-registry";
 import {
   deriveFirstSyncView,
   firstSyncFooter,
@@ -188,13 +189,18 @@ describe("the first-sync step as rendered", () => {
     pending: false,
   };
 
-  function render(load: ConnectedLoad, state: SyncStreamState): string {
+  function render(
+    load: ConnectedLoad,
+    state: SyncStreamState,
+    observed?: ReadonlySet<string>,
+  ): string {
     return renderToStaticMarkup(
       createElement(FirstSyncBody, {
         navigation,
         load,
         stream: state,
         view: deriveFirstSyncView(load, state),
+        observed,
         onStart: () => undefined,
         onOtpChange: () => undefined,
         onOtpSubmit: () => undefined,
@@ -260,5 +266,48 @@ describe("the first-sync step as rendered", () => {
       ),
     );
     expect(html).toContain("5 עסקאות סווגו אוטומטית");
+  });
+
+  it("tells the user how to fix a rejected credential and links the failure screenshot", () => {
+    const html = render(
+      connected,
+      stream(
+        accepted,
+        event({
+          type: "bank_error",
+          bank: BANK,
+          error: "שגיאה",
+          hasScreenshot: true,
+          screenshotFilename: "synthetic_failure.png",
+        }),
+        completed({}),
+      ),
+    );
+    expect(html).toContain("הסירו את החשבון וחברו אותו מחדש");
+    expect(html).toContain('href="/api/screenshots/synthetic_failure.png"');
+  });
+
+  it("stops the spinner on an institution the dead stream left mid-run", () => {
+    const html = render(
+      connected,
+      stream(accepted, event({ type: "progress", bank: BANK, status: "logging_in" }), {
+        type: "stream_failed",
+      }),
+    );
+    expect(html).toContain("הופסק");
+    expect(html).not.toContain("מתחבר...");
+  });
+
+  it("drops the experimental caveat for an institution this install has already synced", () => {
+    const experimental = enabledBankEntries().find((entry) => entry.tier === "experimental");
+    if (!experimental) return;
+    const load: ConnectedLoad = {
+      status: "ready",
+      connected: [{ id: "cred-1", bankType: experimental.id, displayName: "Synthetic" }],
+    };
+    expect(render(load, idle)).toContain('data-trust="experimental"');
+    expect(render(load, idle, new Set([experimental.id]))).not.toContain(
+      'data-trust="experimental"',
+    );
   });
 });

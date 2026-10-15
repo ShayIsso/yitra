@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, AlertTriangle, CircleSlash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BankSyncState } from "@/components/sync-stream";
@@ -17,6 +17,7 @@ export const STATUS_TEXT: Record<string, string> = {
   error: "שגיאה",
   otp_required: "נדרש קוד אימות",
   otp_timeout: "פג תוקף הקוד",
+  interrupted: "הופסק",
 };
 
 const SPINNING_STATUSES = new Set(["initializing", "logging_in", "scraping", "importing"]);
@@ -60,6 +61,12 @@ export function LiveBankStatus({ state }: { state: BankSyncState }) {
         <span className="text-destructive flex items-center gap-1.5">
           <AlertTriangle className="h-4 w-4" />
           {STATUS_TEXT.otp_timeout}
+        </span>
+      )}
+      {state.status === "interrupted" && (
+        <span className="text-muted-foreground flex items-center gap-1.5">
+          <CircleSlash className="h-4 w-4" />
+          {STATUS_TEXT.interrupted}
         </span>
       )}
       {state.status === "error" && (

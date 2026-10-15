@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Link2Off } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BankBadge } from "@/components/bank-badge";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
+import { observedFromResponse } from "@/components/institution-picker";
 import { LiveBankStatus, OtpEntry } from "@/components/sync-bank-status";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
@@ -36,8 +37,27 @@ const INSTITUTION_STEP_HREF = "/setup?step=institution";
 
 const LEAVE_WARNING = "הסנכרון עדיין פועל, ויציאה מהדף תעצור אותו. לצאת בכל זאת?";
 
-/** Nothing on a first sync has been observed yet, so trust is the registry's tier alone. */
 const NOTHING_OBSERVED: ReadonlySet<string> = new Set();
+
+/**
+ * The install's own sync evidence, so a resumed wizard does not caveat an
+ * institution that already synced here (ADR-0013 §3). Until it answers, or if
+ * it fails, every experimental institution keeps its caveat.
+ */
+function useObservedInstitutions(): {
+  observed: ReadonlySet<string>;
+  refresh: () => void;
+} {
+  const [observed, setObserved] = useState<ReadonlySet<string>>(NOTHING_OBSERVED);
+  const refresh = useCallback(() => {
+    fetch("/api/sync-runs/evidence")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: unknown) => setObserved(observedFromResponse(body)))
+      .catch(() => undefined);
+  }, []);
+  useEffect(refresh, [refresh]);
+  return { observed, refresh };
+}
 
 /**
  * Leaving the step unmounts the stream, and the route then aborts the scrape
@@ -85,7 +105,8 @@ function useLeaveGuard(active: boolean) {
  */
 export function FirstSyncStep({ navigation }: SetupStepProps) {
   const [load, setLoad] = useState<ConnectedLoad>({ status: "loading" });
-  const sync = useSyncStream();
+  const evidence = useObservedInstitutions();
+  const sync = useSyncStream({ onComplete: evidence.refresh });
 
   useEffect(() => {
     let active = true;
@@ -106,6 +127,7 @@ export function FirstSyncStep({ navigation }: SetupStepProps) {
       load={load}
       stream={sync.state}
       view={view}
+      observed={evidence.observed}
       onStart={() => void sync.start()}
       onOtpChange={sync.setOtpDraft}
       onOtpSubmit={(bank) => void sync.submitOtp(bank)}
@@ -118,6 +140,8 @@ export type FirstSyncBodyProps = {
   readonly load: ConnectedLoad;
   readonly stream: SyncStreamState;
   readonly view: FirstSyncView;
+  /** Institution ids this install has synced successfully; omitted means no evidence. */
+  readonly observed?: ReadonlySet<string>;
   readonly onStart: () => void;
   readonly onOtpChange: (bank: string, code: string) => void;
   readonly onOtpSubmit: (bank: string) => void;
@@ -128,6 +152,7 @@ export function FirstSyncBody({
   load,
   stream,
   view,
+  observed = NOTHING_OBSERVED,
   onStart,
   onOtpChange,
   onOtpSubmit,
@@ -164,6 +189,7 @@ export function FirstSyncBody({
           <InstitutionList
             connected={load.connected}
             stream={stream}
+            observed={observed}
             onOtpChange={onOtpChange}
             onOtpSubmit={onOtpSubmit}
           />
@@ -219,11 +245,13 @@ function PhaseNote({ view }: { view: FirstSyncView }) {
 function InstitutionList({
   connected,
   stream,
+  observed,
   onOtpChange,
   onOtpSubmit,
 }: {
   connected: readonly ConnectedInstitution[];
   stream: SyncStreamState;
+  observed: ReadonlySet<string>;
   onOtpChange: (bank: string, code: string) => void;
   onOtpSubmit: (bank: string) => void;
 }) {
@@ -233,7 +261,7 @@ function InstitutionList({
       <ul className="divide-border flex flex-col divide-y">
         {connected.map((institution) => {
           const live = stream.bankStates[institution.bankType];
-          const trust = bankTrustOf(institution.bankType, NOTHING_OBSERVED);
+          const trust = bankTrustOf(institution.bankType, observed);
           const failureNote =
             live?.status === "error" ? unverifiedFailureNote(institution.bankType, trust) : null;
           return (
@@ -253,6 +281,16 @@ function InstitutionList({
                 </div>
               </div>
               {failureNote && <p className="text-muted-foreground text-sm">{failureNote}</p>}
+              {live?.screenshotFilename && (
+                <a
+                  href={`/api/screenshots/${live.screenshotFilename}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary self-start text-xs hover:underline"
+                >
+                  צפה בצילום מסך
+                </a>
+              )}
               {live?.status === "otp_required" && (
                 <OtpEntry
                   code={stream.otpDrafts[institution.bankType] ?? ""}
@@ -315,7 +353,8 @@ function Outcome({
         <div className="flex flex-col gap-3">
           {view.failedInstitution && (
             <p className="text-muted-foreground text-sm">
-              אם פרטי ההתחברות שגויים, אפשר לחזור לשלב החשבון, או לעדכן אותם מאוחר יותר בהגדרות.
+              אם פרטי ההתחברות שגויים, חזרו לשלב החשבון, הסירו את החשבון וחברו אותו מחדש עם הפרטים
+              הנכונים.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
