@@ -156,7 +156,6 @@ describe("rejectGroup — suspected transfer (singleton)", () => {
     const result = await rejectGroup("group-sus", store);
 
     expect(result.error).toBeUndefined();
-    // A singleton has no counterpart: its rejection is the pair (id, id).
     expect(store.clearGroup).toHaveBeenCalledWith(["group-sus"], [["sus-1", "sus-1"]]);
     // No rule matches → the row goes back to uncategorized.
     expect(store.setCategory).toHaveBeenCalledWith("sus-1", null);
@@ -232,7 +231,13 @@ describe("undoTransaction", () => {
     const result = await undoTransaction("lump-1", allMembers, store);
 
     expect(result.error).toBeUndefined();
-    expect(store.clearRows).toHaveBeenCalledWith(["lump-1"]);
+    expect(store.clearRows).toHaveBeenCalledWith(
+      ["lump-1"],
+      [
+        ["lump-1", "detail-1"],
+        ["lump-1", "detail-2"],
+      ],
+    );
     // lump matches rule
     expect(store.setCategory).toHaveBeenCalledWith("lump-1", "cat-settle");
   });

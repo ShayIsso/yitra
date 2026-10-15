@@ -6,7 +6,7 @@
 
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
 import { bankKindOf } from "@/lib/bank-registry";
-import { pairsToRecordOnReject, type RejectedPair } from "./rejected-pairs";
+import { pairsToRecordOnReject, pairsToRecordOnUndo, type RejectedPair } from "./rejected-pairs";
 
 export type InboxTransaction = {
   id: string;
@@ -34,7 +34,8 @@ export type InboxStore = {
   confirmGroup(groupId: string, now: Date, transferCategoryId: string | null): Promise<void>;
   /** Clears the groups and persists `rejections` in the same transaction. */
   clearGroup(groupIds: string[], rejections?: RejectedPair[]): Promise<void>;
-  clearRows(txnIds: string[]): Promise<void>;
+  /** Clears the rows and persists `rejections` in the same transaction. */
+  clearRows(txnIds: string[], rejections?: RejectedPair[]): Promise<void>;
   setCategory(txnId: string, categoryId: string | null): Promise<void>;
   getCategoryIdByName(name: string): Promise<string | null>;
   getRulesOrderedByPriority(): Promise<CategoryRule[]>;
@@ -159,7 +160,13 @@ export async function undoTransaction(
 
   const rules = await store.getRulesOrderedByPriority();
 
-  await store.clearRows([txnId]);
+  await store.clearRows(
+    [txnId],
+    pairsToRecordOnUndo(
+      txnId,
+      allGroupMembers.filter((m) => m.reconciliationGroupId === txn.reconciliationGroupId),
+    ),
+  );
   const newCategoryId = categorize(txn.description, rules);
   await store.setCategory(txnId, newCategoryId);
 

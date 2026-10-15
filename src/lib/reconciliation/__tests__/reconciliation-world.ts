@@ -20,7 +20,7 @@ export type WorldRow = Pick<
  * An in-memory database shared by the reconciliation and inbox stores, so a
  * test can drive the real sequence: detect, reject in the inbox, detect again.
  */
-export function createWorld(seed: WorldRow[]) {
+export function createWorld(seed: WorldRow[], options: { transferCategory?: boolean } = {}) {
   const rows: Row[] = seed.map((r) => ({
     ...r,
     categoryId: null,
@@ -42,6 +42,10 @@ export function createWorld(seed: WorldRow[]) {
     }
   }
 
+  function confirm(groupId: string) {
+    for (const r of rows) if (r.reconciliationGroupId === groupId) r.confirmedAt = new Date();
+  }
+
   const reconciliation: ReconciliationStore = {
     async getRecentTransactions() {
       return rows.map((r) => ({
@@ -59,10 +63,10 @@ export function createWorld(seed: WorldRow[]) {
       return toRejectedPairs(rejections);
     },
     async getCategoryIdByName() {
-      return null;
+      return options.transferCategory ? "cat-transfer" : null;
     },
     async applyAutoReconciliation() {
-      throw new Error("auto-apply not expected in this world: no transfer category");
+      throw new Error("auto-apply of settlements is not modelled in this world");
     },
     async queueReconciliation(a) {
       assign(
@@ -72,14 +76,17 @@ export function createWorld(seed: WorldRow[]) {
         a.confidence,
       );
     },
-    async applyAutoMirror() {
-      throw new Error("auto-apply not expected in this world: no transfer category");
+    async applyAutoMirror(a) {
+      assign(a.groupId, [a.bankSideId, a.cardSideId], () => "transfer_pair", a.confidence);
+      byId(a.bankSideId).categoryId = a.transferCategoryId;
+      confirm(a.groupId);
     },
     async queueMirror(a) {
       assign(a.groupId, [a.bankSideId, a.cardSideId], () => "transfer_pair", a.confidence);
     },
-    async applyAutoInterAccount() {
-      throw new Error("auto-apply not expected in this world: no transfer category");
+    async applyAutoInterAccount(a) {
+      assign(a.groupId, [a.outgoingSideId, a.incomingSideId], () => "transfer_pair", a.confidence);
+      confirm(a.groupId);
     },
     async queueInterAccount(a) {
       assign(a.groupId, [a.outgoingSideId, a.incomingSideId], () => "transfer_pair", a.confidence);
@@ -108,7 +115,9 @@ export function createWorld(seed: WorldRow[]) {
     async getGroupMembersByIds() {
       return new Map();
     },
-    async confirmGroup() {},
+    async confirmGroup(groupId) {
+      confirm(groupId);
+    },
     async clearGroup(groupIds, recordRejections = []) {
       rejections.push(...recordRejections);
       for (const r of rows) {
@@ -120,7 +129,17 @@ export function createWorld(seed: WorldRow[]) {
         }
       }
     },
-    async clearRows() {},
+    async clearRows(txnIds, recordRejections = []) {
+      rejections.push(...recordRejections);
+      for (const r of rows) {
+        if (txnIds.includes(r.id)) {
+          r.reconciliationGroupId = null;
+          r.role = null;
+          r.confidence = null;
+          r.confirmedAt = null;
+        }
+      }
+    },
     async setCategory() {},
     async getCategoryIdByName() {
       return null;
@@ -141,8 +160,17 @@ export function createWorld(seed: WorldRow[]) {
         confirmedAt: null,
       });
     },
+    queueSuspected(id: string) {
+      assign(`suspect-${id}`, [id], () => "transfer_pair", 0.5);
+    },
     reconciliation,
     inbox,
+    rejectedPairs(): RejectedPair[] {
+      return [...rejections];
+    },
+    confirmedGroups(): string[] {
+      return [...new Set(rows.filter((r) => r.confirmedAt).map((r) => r.reconciliationGroupId!))];
+    },
     pendingGroups(): string[] {
       return [...new Set(rows.map((r) => r.reconciliationGroupId).filter((g): g is string => !!g))];
     },
