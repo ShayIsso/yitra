@@ -10,18 +10,18 @@ describe("bankKindOf", () => {
     expect([bankKindOf("max"), bankKindOf("visaCal")]).toEqual(["card", "card"]);
   });
 
+  it("reports a stored-value card as prepaid and a benefits card as a card", () => {
+    expect([bankKindOf("beyahadBishvilha"), bankKindOf("behatsdaa")]).toEqual(["prepaid", "card"]);
+  });
+
   it("reports no kind for an unregistered id, so a kind comparison excludes it", () => {
     expect(bankKindOf("institution-that-was-removed")).toBeUndefined();
   });
 });
 
 describe("bankIssuesOtp", () => {
-  it("flags the institution that challenges login with a one-time code", () => {
-    expect(bankIssuesOtp("discount")).toBe(true);
-  });
-
-  it("does not flag institutions that log in with credentials alone", () => {
-    expect([bankIssuesOtp("max"), bankIssuesOtp("visaCal")]).toEqual([false, false]);
+  it("does not flag the verified institutions, none of whose scrapers asks for a one-time code", () => {
+    expect(["discount", "max", "visaCal"].map(bankIssuesOtp)).toEqual([false, false, false]);
   });
 
   it("does not flag an unregistered id", () => {

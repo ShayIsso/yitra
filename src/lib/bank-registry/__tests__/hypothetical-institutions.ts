@@ -22,6 +22,7 @@ import type { BankKind, BankType } from "../index";
  */
 export const HYPOTHETICAL_CARD = "hypothetical-card-issuer" as string as BankType;
 export const HYPOTHETICAL_BANK = "hypothetical-account-bank" as string as BankType;
+export const HYPOTHETICAL_PREPAID = "hypothetical-stored-value-card" as string as BankType;
 export const UNREGISTERED = "institution-with-no-entry" as string as BankType;
 
 export function withHypotheticalInstitutions(
@@ -30,6 +31,7 @@ export function withHypotheticalInstitutions(
   return (id) => {
     if (id === HYPOTHETICAL_CARD) return "card";
     if (id === HYPOTHETICAL_BANK) return "bank";
+    if (id === HYPOTHETICAL_PREPAID) return "prepaid";
     return realKindOf(id);
   };
 }

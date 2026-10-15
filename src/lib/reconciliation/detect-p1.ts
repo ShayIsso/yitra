@@ -17,7 +17,7 @@ function parseDate(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00Z`);
 }
 
-/** A row from an institution of unknown kind lands on neither side. */
+/** A row from a prepaid institution or one of unknown kind lands on neither side. */
 export function detectP1Settlement(
   transactions: ReconciliationTransaction[],
 ): ReconciliationCandidate[] {

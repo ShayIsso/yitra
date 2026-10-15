@@ -523,10 +523,12 @@ export type ReportedAccountBalance = Omit<AccountBalance, "nextDebitDate">;
 
 /**
  * Card issuers' scrapers don't reliably report account balance, so a card-kind
- * account displays the next-debit estimate instead. An institution of unknown
- * kind keeps its reported balance. The one selector both the upcoming-charges
- * fetch and the projection read, so the two cannot disagree on which accounts
- * are estimated.
+ * account displays the next-debit estimate instead. A bank, a prepaid
+ * stored-value account (whose reported balance is its real remaining value) and
+ * an institution of unknown kind keep their reported balance. Match `card`
+ * exactly: widening this to `!== "bank"` would estimate prepaid accounts.
+ * The one selector both the upcoming-charges fetch and the projection read, so
+ * the two cannot disagree on which accounts are estimated.
  */
 function nextDebitAccountIds(accounts: readonly ReportedAccountBalance[]): ReadonlySet<string> {
   return new Set(accounts.filter((a) => bankKindOf(a.bankType) === "card").map((a) => a.id));
