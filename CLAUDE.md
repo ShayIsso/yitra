@@ -27,7 +27,7 @@ When building new features, follow the deep module pattern:
 ### Scraper Execution
 
 - **On-demand only.** No background scheduler (Phase 2 backlog item).
-- **Sequential:** Discount → Max → Cal, one at a time.
+- **Sequential:** one bank at a time, in credential-creation order (ADR-0003 clarification 2026-10-15).
 - **SSE** for real-time progress to the frontend.
 - **OTP:** `otpCodeRetriever` bridged via promise. Frontend POSTs OTP to `/api/sync/otp`. 3-minute timeout.
 - **Per-bank failure isolation.** One bank failing does not block the rest.

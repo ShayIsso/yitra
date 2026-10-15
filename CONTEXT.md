@@ -8,7 +8,7 @@ This file starts lean. New terms get added by `/grill-with-docs` as planning ses
 
 ## What this project is
 
-A private, self-hosted personal finance dashboard for a single user. Fetches and categorizes transactions from three Israeli banks (Bank Discount, Max, Cal). Local/Docker only for hosting and all bank data. Hebrew RTL interface.
+A private, self-hosted personal finance dashboard for a single user. Fetches and categorizes transactions from Israeli banks and credit cards (Bank Discount, Max and Cal verified; others experimental, per the `bank registry`). Local/Docker only for hosting and all bank data. Hebrew RTL interface.
 
 Hard constraints: single-user, self-hosted, zero-leak logging. The only permitted external egress is redaction-gated AI categorization per [ADR-0008](./docs/adr/0008-redaction-gated-external-categorization.md) — anything else that sends data off the host is wrong by construction.
 
