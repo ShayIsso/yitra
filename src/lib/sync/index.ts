@@ -61,6 +61,11 @@ const globalForSyncClaim = globalThis as typeof globalThis & {
 };
 const syncClaim = (globalForSyncClaim[GLOBAL_CLAIM_KEY] ??= createSyncClaim());
 
+/** Whether the sync claim is held — by a sync or by the categorization backfill, which shares it. */
+export function isSyncClaimHeld(): boolean {
+  return syncClaim.isHeld();
+}
+
 export type SyncOptions = {
   /** Which surface triggered this sync — recorded in sync_runs.triggered_by. Defaults to "manual". */
   triggeredBy?: "manual" | "scheduled";

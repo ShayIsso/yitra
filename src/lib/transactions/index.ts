@@ -17,6 +17,8 @@ import {
   type PendingSuggestionRow,
 } from "@/lib/ai-categorization";
 
+export { pendingWithCompletedTwin } from "./sweep";
+
 /** `getSyncStartDate` builds local-midnight dates, so format with local getters. */
 function toLocalIsoDate(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");

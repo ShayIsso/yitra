@@ -8,7 +8,14 @@ const CYCLE_WINDOW_DAYS = 35;
 const OVERLAP_PENALTY = 0.25;
 const MIN_CONFIDENCE = 0.7;
 
-function isBankLumpCandidate(tx: ReconciliationTransaction): boolean {
+/**
+ * The one definition of a settlement charge's shape (CONTEXT.md "The Paradox"):
+ * a bank-kind row whose description is card_settlement-shaped. P1 pairs it
+ * with card evidence; the month outlook keeps an unreconciled one out of spend.
+ */
+export function isBankLumpCandidate(
+  tx: Pick<ReconciliationTransaction, "bankType" | "description">,
+): boolean {
   if (bankKindOf(tx.bankType) !== "bank") return false;
   return matchesTransferDescriptor(tx.description, ["card_settlement"]);
 }

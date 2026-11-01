@@ -31,6 +31,8 @@ import {
   type SavingsTargetVerdict,
   type YearMonth,
 } from "./pace";
+import type { MonthOutlook } from "./outlook";
+import { drizzleMonthOutlookStore, getMonthOutlookWithStore } from "./outlook-store";
 
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
 export type { StoredBudget, BudgetWriteData, BudgetChanges, BudgetStore } from "./store";
@@ -53,6 +55,29 @@ export {
   type SavingsTargetVerdict,
   type YearMonth,
 } from "./pace";
+
+export {
+  monthOutlook,
+  STALE_SYNC_AFTER_MS,
+  THIN_HISTORY_MIN_FULL_MONTHS,
+  USUAL_MONTH_SPAN,
+  HISTORY_WEIGHT_DECAY_DAYS,
+  SUGGESTED_TARGET_STEPS,
+  type MonthOutlook,
+  type MonthOutlookInput,
+  type OutlookRow,
+  type OutlookRecurringCharge,
+  type PriorMonthExpenses,
+  type SyncProgress,
+  type DueRecurringCharge,
+  type Projection,
+  type ProjectionBasis,
+} from "./outlook";
+export {
+  getMonthOutlookWithStore,
+  type MonthOutlookStore,
+  type OutlookClock,
+} from "./outlook-store";
 
 export type BudgetStatus = {
   budget: StoredBudget;
@@ -99,6 +124,20 @@ export async function getBudgetForCategory(categoryId: string): Promise<StoredBu
 }
 
 const isoToday = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * The month outlook for `month`, as of the last successful sync (#312). Same
+ * calendar-day convention as every other budgets read; the caller must not ask
+ * for a month that hasn't started (`monthOutlook` throws a RangeError).
+ */
+export async function getMonthOutlook(year: number, month: number): Promise<MonthOutlook> {
+  const now = new Date();
+  return getMonthOutlookWithStore(
+    { year, month },
+    { today: now.toISOString().slice(0, 10), now },
+    drizzleMonthOutlookStore,
+  );
+}
 
 /**
  * Pace verdict for every budget in `month`. Each budget evaluates independently
