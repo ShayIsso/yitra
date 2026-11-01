@@ -10,6 +10,17 @@ import {
 import { bankKindOf } from "@/lib/bank-registry";
 
 export { monthDateRange } from "./month-window";
+export * from "./insights";
+import {
+  monthPosition,
+  type InsightMonth,
+  type InsightFacts,
+  type BudgetFact,
+  type RecurringChargeFact,
+  type CardDebitFact,
+  type CategoryChangeFact,
+  type RecapFact,
+} from "./insights";
 
 export type AnalyticsTransaction = {
   chargedAmount: number;
@@ -468,6 +479,266 @@ export function toTransactionWithCategory(row: {
 }
 
 // ---------------------------------------------------------------------------
+// Insights aggregate (pure): read results → InsightFacts
+// ---------------------------------------------------------------------------
+
+/** One month row as the insights aggregate reads it ({@link getMonthTransactionDetails}). */
+export type InsightTransactionRow = {
+  id: string;
+  /** YYYY-MM-DD. */
+  date: string;
+  description: string;
+  customDescription: string | null;
+  chargedAmount: number;
+  categoryId: string | null;
+  categoryType: AnalyticsTransaction["categoryType"];
+  /** The institution the row's account belongs to (bank registry id). */
+  bankType: string;
+};
+
+export type InsightSources = {
+  month: InsightMonth;
+  /** YYYY-MM-DD. */
+  today: string;
+  /** Rows of `month`, of the month before it, and of the month before that. */
+  rows: {
+    month: InsightTransactionRow[];
+    previous: InsightTransactionRow[];
+    beforePrevious: InsightTransactionRow[];
+  };
+  categories: RollupCategory[];
+  balances: AccountBalance[];
+  attention: InsightFacts["attention"];
+  budgets: Omit<BudgetFact, "categoryName">[];
+  upcoming: (RecurringChargeFact & { cadence: "monthly" | "quarterly" | "annual" })[];
+  expenseTarget: number | null;
+};
+
+function cardDebitsFrom(balances: readonly AccountBalance[]): CardDebitFact[] {
+  return balances.flatMap((a) =>
+    a.nextDebitDate && a.balance !== null && a.balance < 0
+      ? [{ accountId: a.id, displayName: a.displayName, amount: -a.balance, date: a.nextDebitDate }]
+      : [],
+  );
+}
+
+/**
+ * The monthly card-settlement lump (CONTEXT.md "settlement charge"): a row on a
+ * bank-kind account with the `card_settlement` descriptor shape — the same
+ * predicate reconciliation's P1 uses for a bank lump candidate. Reconciliation
+ * normally re-types it `transfer`; insights exclude it by shape as well, so an
+ * unreconciled lump never surfaces as category spend or the biggest expense.
+ * The upcoming debit is shown from the card side instead (next-debit estimate).
+ */
+function isSettlementLump(row: InsightTransactionRow): boolean {
+  return (
+    bankKindOf(row.bankType) === "bank" &&
+    matchesTransferDescriptor(row.description, ["card_settlement"])
+  );
+}
+
+function dayOfMonth(isoDate: string): number {
+  return Number(isoDate.slice(8, 10));
+}
+
+/** Top-level (group or root-leaf) spend under the spend floor, group-first like the Dashboard. */
+function topLevelSpend(
+  rows: readonly InsightTransactionRow[],
+  categories: readonly RollupCategory[],
+): CategorySpendingNode[] {
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const leaves = Array.from(computeCategoryNetSpend(rows)).flatMap(([categoryId, amount]) => {
+    const c = categoryById.get(categoryId);
+    return c ? [{ categoryId, categoryName: c.name, amount, color: c.color, icon: c.icon }] : [];
+  });
+  return rollUpSpendingByGroup(leaves, [...categories]);
+}
+
+function compareTopLevel(
+  current: CategorySpendingNode[],
+  previous: CategorySpendingNode[],
+): CategoryChangeFact[] {
+  const changes = new Map<string, CategoryChangeFact>();
+  const entry = (n: CategorySpendingNode): CategoryChangeFact =>
+    changes.get(n.categoryId) ?? {
+      categoryId: n.categoryId,
+      name: n.categoryName,
+      color: n.color,
+      icon: n.icon,
+      amount: 0,
+      previous: 0,
+    };
+  for (const n of current) changes.set(n.categoryId, { ...entry(n), amount: n.amount });
+  for (const n of previous) changes.set(n.categoryId, { ...entry(n), previous: n.amount });
+  return [...changes.values()].sort((a, b) => b.amount - a.amount || b.previous - a.previous);
+}
+
+/** The single expense charge with the largest outflow, or null when none spent. */
+function largestExpenseRow(rows: readonly InsightTransactionRow[]): InsightTransactionRow | null {
+  let largest: InsightTransactionRow | null = null;
+  for (const r of rows) {
+    if (r.categoryType !== "expense" || outflowContribution(r.chargedAmount) <= 0) continue;
+    if (
+      !largest ||
+      outflowContribution(r.chargedAmount) > outflowContribution(largest.chargedAmount)
+    )
+      largest = r;
+  }
+  return largest;
+}
+
+function biggestChangeOf(
+  current: CategorySpendingNode[],
+  previous: CategorySpendingNode[],
+): RecapFact["biggestChange"] {
+  if (previous.length === 0) return null;
+  let biggest: CategoryChangeFact | null = null;
+  for (const c of compareTopLevel(current, previous)) {
+    const delta = Math.abs(c.amount - c.previous);
+    if (delta > 0 && (!biggest || delta > Math.abs(biggest.amount - biggest.previous))) biggest = c;
+  }
+  return (
+    biggest && {
+      categoryId: biggest.categoryId,
+      name: biggest.name,
+      amount: biggest.amount,
+      previous: biggest.previous,
+    }
+  );
+}
+
+function mostExpensiveDayOf(rows: readonly InsightTransactionRow[]): RecapFact["mostExpensiveDay"] {
+  const byDay = netOutflowsByKey(rows, (r) => (r.categoryType === "expense" ? r.date : null));
+  let peak: [string, number] | null = null;
+  for (const [date, amount] of byDay) if (!peak || amount > peak[1]) peak = [date, amount];
+  if (!peak) return null;
+  const [date, amount] = peak;
+  const top = largestExpenseRow(rows.filter((r) => r.date === date));
+  return { date, amount, topDescription: top ? (top.customDescription ?? top.description) : null };
+}
+
+/**
+ * The recap of one whole month against the month before it. Absent when the
+ * month has no income or expense to tell a story about.
+ */
+function recapFact(
+  month: InsightMonth,
+  rows: readonly InsightTransactionRow[],
+  comparisonRows: readonly InsightTransactionRow[],
+  sources: InsightSources,
+): RecapFact | null {
+  if (!rows.some((r) => r.categoryType === "income" || r.categoryType === "expense")) return null;
+  const summary = computeMonthlySummary([...rows]);
+  const nodes = topLevelSpend(rows, sources.categories);
+  const byCategoryTotal = nodes.reduce((sum, n) => sum + n.amount, 0);
+  const top = nodes[0];
+  const monthly = sources.upcoming.filter((c) => c.cadence === "monthly");
+  const target = sources.expenseTarget;
+  return {
+    month,
+    income: summary.income,
+    expenses: summary.expenses,
+    netSavings: summary.netSavings,
+    savingsRate: summary.income > 0 ? summary.savingsRate : null,
+    topCategory: top
+      ? {
+          categoryId: top.categoryId,
+          name: top.categoryName,
+          color: top.color,
+          amount: top.amount,
+          share: top.amount / byCategoryTotal,
+        }
+      : null,
+    biggestChange: biggestChangeOf(nodes, topLevelSpend(comparisonRows, sources.categories)),
+    mostExpensiveDay: mostExpensiveDayOf(rows),
+    recurring: {
+      count: monthly.length,
+      monthlyTotal: toAgorot(monthly.reduce((sum, c) => sum + c.amount, 0)),
+    },
+    verdict:
+      target === null
+        ? null
+        : {
+            target,
+            over: summary.expenses > target,
+            by: toAgorot(Math.abs(summary.expenses - target)),
+          },
+  };
+}
+
+function previousMonthOf({ year, month }: InsightMonth): InsightMonth {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
+}
+
+/**
+ * Reduces the insights aggregate's reads to the compact {@link InsightFacts}
+ * that {@link selectInsights} chooses from. For the current month every
+ * comparison is month-to-date — this month through today against last month
+ * through the same day — and rows dated after today are not spent yet.
+ */
+export function buildInsightFacts(sources: InsightSources): InsightFacts {
+  const { month, today, categories } = sources;
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const position = monthPosition(month, today);
+  const started = position.phase !== "not-started";
+  const throughDay = position.phase === "current" ? position.day : 31;
+  const withoutLump = (rows: readonly InsightTransactionRow[]) =>
+    started ? rows.filter((r) => !isSettlementLump(r)) : [];
+  const toDate = (rows: readonly InsightTransactionRow[]) =>
+    withoutLump(rows).filter((r) => dayOfMonth(r.date) <= throughDay);
+  const monthRows = toDate(sources.rows.month);
+  const previousRows = toDate(sources.rows.previous);
+  const biggest = largestExpenseRow(monthRows);
+
+  // A month still running has no story yet, so the recap tells last month's.
+  const recap = !started
+    ? null
+    : position.phase === "current"
+      ? recapFact(
+          previousMonthOf(month),
+          withoutLump(sources.rows.previous),
+          withoutLump(sources.rows.beforePrevious),
+          sources,
+        )
+      : recapFact(
+          month,
+          withoutLump(sources.rows.month),
+          withoutLump(sources.rows.previous),
+          sources,
+        );
+
+  return {
+    month: sources.month,
+    today: sources.today,
+    cardDebits: cardDebitsFrom(sources.balances),
+    attention: sources.attention,
+    budgets: sources.budgets.map((b) => ({
+      ...b,
+      categoryName: categoryById.get(b.categoryId)?.name ?? "",
+    })),
+    upcomingRecurring: sources.upcoming.map(({ id, name, amount, date }) => ({
+      id,
+      name,
+      amount,
+      date,
+    })),
+    categoryChanges: compareTopLevel(
+      topLevelSpend(monthRows, categories),
+      topLevelSpend(previousRows, categories),
+    ),
+    biggestExpense: biggest && {
+      transactionId: biggest.id,
+      description: biggest.customDescription ?? biggest.description,
+      amount: outflowContribution(biggest.chargedAmount),
+      date: biggest.date,
+      categoryId: biggest.categoryId,
+      categoryName: (biggest.categoryId && categoryById.get(biggest.categoryId)?.name) ?? null,
+    },
+    recap,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // DB-backed wrapper functions
 // ---------------------------------------------------------------------------
 
@@ -550,6 +821,42 @@ export async function getMonthMerchantTransactions(
 
   return rows.map((r) => ({
     description: r.description,
+    chargedAmount: Number(r.chargedAmount),
+    categoryType: r.categoryType ?? null,
+  }));
+}
+
+/**
+ * Row-level month read for the insights aggregate: the same calendar-month
+ * window as {@link getMonthTransactions}, plus the identity, date, description
+ * and institution a row-level insight (biggest expense, most expensive day,
+ * settlement-lump exclusion) needs.
+ */
+export async function getMonthTransactionDetails(
+  year: number,
+  month: number,
+): Promise<InsightTransactionRow[]> {
+  const { from, to } = monthDateRange(year, month);
+
+  const rows = await db
+    .select({
+      id: transactions.id,
+      date: transactions.date,
+      description: transactions.description,
+      customDescription: transactions.customDescription,
+      chargedAmount: transactions.chargedAmount,
+      categoryId: transactions.categoryId,
+      categoryType: categories.type,
+      bankType: bankCredentials.bankType,
+    })
+    .from(transactions)
+    .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
+    .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
+
+  return rows.map((r) => ({
+    ...r,
     chargedAmount: Number(r.chargedAmount),
     categoryType: r.categoryType ?? null,
   }));
