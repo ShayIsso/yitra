@@ -3,15 +3,13 @@
 import * as React from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Pencil, Trash2, Landmark } from "lucide-react";
+import { BankIcon, CreditCardIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/empty-state";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -35,16 +33,29 @@ import {
   type CredentialValues,
 } from "@/lib/credentials/form";
 import {
+  bankKindOf,
+  bankLabel,
   enabledBankEntries,
   findBankEntry,
   isBankType,
   nonSecretCredentialValues,
   type BankType,
 } from "@/lib/bank-registry";
-import { BankBadge } from "@/components/bank-badge";
 import { CredentialFields } from "@/components/credential-fields";
 import { InstitutionPicker, useInstitutionPicker } from "@/components/institution-picker";
 import { InstitutionTrustBadge } from "@/components/institution-trust";
+import {
+  AddButton,
+  RowAction,
+  RowTile,
+  SHEET_CONTROLS,
+  SectionBody,
+  SectionEmpty,
+  SectionError,
+  SectionHeader,
+  SettingsList,
+  SettingsRow,
+} from "@/components/settings/parts";
 import {
   addCredentialAction,
   updateCredentialAction,
@@ -85,9 +96,10 @@ function emptyForm(): CredentialFormValues {
   return { bankType: first.id, displayName: "", credentials: emptyCredentialValues(first) };
 }
 
-export function CredentialsSection() {
-  const [credentials, setCredentials] = React.useState<Credential[]>([]);
-  const [loading, setLoading] = React.useState(true);
+export function CredentialsSection({ initialCredentials }: { initialCredentials: Credential[] }) {
+  const [credentials, setCredentials] = React.useState<Credential[]>(initialCredentials);
+  const [prevInitial, setPrevInitial] = React.useState(initialCredentials);
+  const [listError, setListError] = React.useState(false);
   const [formOpen, setFormOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Credential | null>(null);
@@ -95,6 +107,14 @@ export function CredentialsSection() {
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
   const [isDeletePending, startDeleteTransition] = React.useTransition();
+  const [isListPending, startListTransition] = React.useTransition();
+
+  // A revalidated page hands back a fresh list; adopt it (adjusting state during
+  // render, the pattern React recommends over a syncing effect).
+  if (initialCredentials !== prevInitial) {
+    setPrevInitial(initialCredentials);
+    setCredentials(initialCredentials);
+  }
 
   // The resolver reads the current dialog mode (add vs edit) through a ref so
   // one stable RHF instance can validate with the add schema (password
@@ -125,18 +145,22 @@ export function CredentialsSection() {
   const picker = useInstitutionPicker();
   const selectedEntry = findBankEntry(form.watch("bankType"));
 
+  // The list arrives server-rendered; it is re-read from the GET route only
+  // after a mutation, and on retry when that re-read failed.
   async function fetchCredentials() {
-    const res = await fetch("/api/credentials");
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/credentials");
+      if (!res.ok) throw new Error("credentials list unavailable");
       setCredentials(await res.json());
+      setListError(false);
+    } catch {
+      setListError(true);
     }
-    setLoading(false);
   }
 
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the list stays client-fetched: #118 scoped Server Actions to mutations only, the GET routes remain
-    fetchCredentials();
-  }, []);
+  function retryList() {
+    startListTransition(fetchCredentials);
+  }
 
   function setDialogOpen(open: boolean) {
     if (!open) prefillRequestRef.current++;
@@ -250,77 +274,78 @@ export function CredentialsSection() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">חשבונות בנק</h3>
-        <Button onClick={openAdd} size="sm">
-          <Plus />
-          הוסף חשבון
-        </Button>
-      </div>
+    <SectionBody labelledBy="accounts">
+      <SectionHeader
+        section="accounts"
+        description="הבנקים וחברות האשראי שמהם Yitra מסנכרנת תנועות. פרטי ההתחברות נשמרים מוצפנים, והסיסמה לא מוצגת לעולם."
+        action={credentials.length > 0 && <AddButton label="הוספת חשבון" onClick={openAdd} />}
+      />
 
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Card key={`skeleton-${i}`} size="sm">
-              <CardContent className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-                <div className="flex items-center gap-1">
-                  <Skeleton className="h-7 w-7 rounded-md" />
-                  <Skeleton className="h-7 w-7 rounded-md" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : credentials.length === 0 ? (
-        <EmptyState
-          icon={Landmark}
-          heading="לא הוגדרו חשבונות בנק"
-          explainer="הוסף את הבנק הראשון שלך כדי להתחיל לסנכרן עסקאות."
-          cta={{ label: "הוסף חשבון", onClick: openAdd }}
+      {listError && (
+        <SectionError
+          message={isListPending ? "טוען מחדש..." : "לא הצלחנו לרענן את רשימת החשבונות."}
+          onRetry={retryList}
+        />
+      )}
+
+      {credentials.length === 0 ? (
+        <SectionEmpty
+          icon={<BankIcon />}
+          title="עדיין לא חוברו חשבונות"
+          description="חברו בנק או כרטיס אשראי כדי ש-Yitra תוכל לסנכרן את התנועות שלכם."
+          action={<AddButton label="חיבור חשבון" onClick={openAdd} />}
         />
       ) : (
-        <div className="space-y-2 transition-opacity duration-150">
-          {credentials.map((cred) => (
-            <Card key={cred.id} size="sm">
-              <CardContent className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-3">
-                  <BankBadge bankType={cred.bankType} />
-                  <span className="text-sm font-medium">{cred.displayName}</span>
-                  <InstitutionTrustBadge trust={picker.trustOf(cred.bankType)} />
-                </div>
-                <div className="flex items-center gap-1">
-                  {isEditable(cred) && (
-                    <Button variant="ghost" size="icon-sm" onClick={() => openEdit(cred)}>
-                      <Pencil />
-                      <span className="sr-only">ערוך</span>
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon-sm" onClick={() => openDelete(cred)}>
-                    <Trash2 className="text-destructive" />
-                    <span className="sr-only">מחק</span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <SettingsList>
+          {credentials.map((cred) => {
+            const editable = isEditable(cred);
+            return (
+              <SettingsRow
+                key={cred.id}
+                onOpen={editable ? () => openEdit(cred) : undefined}
+                openLabel={editable ? `עריכת ${cred.displayName}` : undefined}
+                leading={
+                  <RowTile>
+                    {bankKindOf(cred.bankType) === "bank" ? <BankIcon /> : <CreditCardIcon />}
+                  </RowTile>
+                }
+                title={cred.displayName}
+                subtitle={
+                  <>
+                    {bankLabel(cred.bankType)}
+                    <InstitutionTrustBadge trust={picker.trustOf(cred.bankType)} />
+                  </>
+                }
+                trailing={
+                  <RowAction
+                    label={`מחיקת ${cred.displayName}`}
+                    onClick={() => openDelete(cred)}
+                    destructive
+                  >
+                    <TrashIcon />
+                  </RowAction>
+                }
+              />
+            );
+          })}
+        </SettingsList>
       )}
 
       {/* Add / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="md:max-w-md">
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
-            <DialogTitle>{editing ? "ערוך חשבון בנק" : "הוסף חשבון בנק"}</DialogTitle>
+            <DialogTitle>{editing ? "עריכת חשבון" : "חיבור חשבון"}</DialogTitle>
+            <DialogDescription>
+              {editing
+                ? "הסיסמה השמורה לא מוצגת. השאירו את שדות הסיסמה ריקים כדי להשאיר אותה, או הזינו חדשה כדי להחליף."
+                : "פרטי ההתחברות לאתר הבנק או חברת האשראי. הם נשמרים מוצפנים ומשמשים רק לסנכרון."}
+            </DialogDescription>
           </DialogHeader>
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} noValidate>
-              <div className="space-y-4 pt-2">
+              <div className="space-y-4 pb-4">
                 {!editing && (
                   <FormField
                     control={form.control}
@@ -387,14 +412,19 @@ export function CredentialsSection() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
-            <DialogTitle>מחיקת חשבון בנק</DialogTitle>
+            <DialogTitle>מחיקת חשבון</DialogTitle>
+            <DialogDescription>
+              למחוק את &ldquo;{deleteTarget?.displayName}&rdquo;? יימחקו גם החשבונות והתנועות שיובאו
+              ממנו. פעולה זו אינה הפיכה.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground text-sm">
-            האם למחוק את &ldquo;{deleteTarget?.displayName}&rdquo;? פעולה זו אינה הפיכה.
-          </p>
-          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
+          {deleteError && (
+            <p role="alert" className="text-destructive text-body">
+              {deleteError}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -409,6 +439,6 @@ export function CredentialsSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SectionBody>
   );
 }
