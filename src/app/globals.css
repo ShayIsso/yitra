@@ -2,51 +2,61 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* `dark:` follows the app's theme (data-theme stamped on <html> pre-paint by
+   the root layout), not the OS preference Tailwind defaults to. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
+
 /**
- * Design token conventions (Phase 2 F3):
+ * Design tokens: the "Pocket Pro" design system (ADR-0015). Components use the
+ * semantic utilities (bg-background, text-muted-foreground, text-pos, ...);
+ * the raw palette below is never referenced from a component.
  *
- * Palette:
- *   Neutral base  — zinc/stone family (achromatic oklch, chroma=0)
- *   Primary accent — emerald-600 (oklch ~0.596 0.145 163)
- *                    POSITIVE values / balances ONLY. Never decorative.
- *   Destructive   — muted red (oklch ~0.577 0.245 27)
- *   Success       — maps to --emerald (same as accent)
- *   Warning       — amber (oklch ~0.769 0.188 70) — pending states only
+ * Palette: deep teal ink on warm paper. Light and dark are both first-class:
+ *   [data-theme="dark"] (with the .dark alias) swaps values under the same
+ *   names, stamped pre-paint by the root layout's inline script.
+ *   Coral (--attention) means ATTENTION ONLY: badges, stale or failed sync,
+ *   at-risk and over-target states. Never decoration, never "good".
+ *   Money: --pos / --neg are a dedicated AA pair for positive/negative money,
+ *   consumed through <Amount> (or a sign-driven text-pos/text-neg ternary).
+ *   Colour is never the only signal for good/bad: a sign, word or icon
+ *   always carries it too.
+ *   Category colours appear as small dots only.
+ *   Every text pair is checked for WCAG AA (4.5:1) in both themes by
+ *   src/app/__tests__/palette-contrast.test.ts, so palette values stay hex.
  *
- * Card convention:
- *   rounded-xl + unified --card-edge (border + box-shadow bundle, mode-aware).
- *   Light: hairline border + soft shadow. Dark: hairline border, no shadow.
- *   See src/components/ui/card.tsx — Card component enforces this; no card
- *   may layer its own ring/border/shadow on top.
+ * Typography: Rubik (Hebrew + Latin, next/font, size-adjusted fallback so the
+ *   swap does not shift layout). Six steps: caption, body, lead, title,
+ *   headline, display. text-display is reserved for the single hero figure
+ *   on a surface. Digits are tabular wherever amounts align (<Amount>, table
+ *   cells, .tabular-nums).
  *
- * Lucide icon convention:
- *   Default stroke width: 1.5px (Lucide library default — do not override).
- *   Duo-tone treatment: section headers only, nowhere else.
- *   See src/components/ui/amount.tsx for the canonical reference comment.
+ * Shape: three radii only. --radius-small (controls: inputs, buttons, chips,
+ *   rows), --radius-large (cards, sheets, dialogs, the hero), and
+ *   --radius-full (pills, avatars, dots; rounded-full). rounded..lg map to
+ *   small (shadcn's control radius is rounded-lg) and rounded-xl..4xl to
+ *   large (Card and Dialog use rounded-xl); never use an arbitrary radius.
  *
- * Motion convention (Phase 3 A5, #202):
- *   .fade-in     — 150ms opacity-only enter (legacy, still valid for small bits).
- *   .enter       — 220ms fade + 8px rise, cubic-bezier(0.16, 1, 0.3, 1). Sections/cards.
- *   .stagger     — container utility: staggers direct children's .enter by ~55ms/position.
- *   .view-wash   — whole-view opacity fade on load, applied once at the outermost container.
- *   .hover-tint  — 130ms background/edge tint on hover.
- *   .press       — 100ms scale(.98) on press (:active).
- *   All animations run once per DOM node creation — a re-render that doesn't
- *   remount the element (e.g. the dashboard month-strip refetch) never replays
- *   them. Don't key an animated container by data that changes on refetch.
- *   prefers-reduced-motion drops translate/scale and keeps opacity only.
- *   No scroll-triggered animations (Phase 3 backlog).
+ * Card convention: rounded-xl + the --card-shadow / --card-border bundle,
+ *   applied by src/components/ui/card.tsx only.
  *
- * Numeric displays:
- *   Use .tabular-nums utility or the <Amount> component for all currency/
- *   numeric columns so digits align vertically in tables.
+ * Icons: Phosphor through @/components/icons (regular inactive, fill for
+ *   active navigation and status, duotone for insight and category marks).
+ *   Lucide remains in older components until the redesign's cleanup.
+ *
+ * Motion: JS animation goes through @/components/motion (LazyMotion `m.*`,
+ *   reduced motion handled by its provider). The CSS utilities below share
+ *   its curve (--ease-enter) and timings. Transform and opacity only;
+ *   entrances run once per DOM node (a refetch that doesn't remount never
+ *   replays them, so don't key an animated container by refetched data);
+ *   no count-up on money; no infinite animation except the skeleton pulse;
+ *   prefers-reduced-motion keeps opacity only.
  */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-rubik), system-ui, sans-serif;
+  --font-heading: var(--font-rubik), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -84,172 +94,195 @@
   --color-bar-strong: var(--bar-strong);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-attention: var(--attention);
+  --color-attention-foreground: var(--attention-foreground);
+  --color-attention-subtle: var(--attention-subtle);
+  --color-attention-text: var(--attention-text);
+  --color-hero: var(--hero);
+  --color-hero-foreground: var(--hero-foreground);
+  --color-hero-muted: var(--hero-muted);
+
+  /* Three radii (ADR-0015 "Shape"); every Tailwind radius step maps onto one. */
+  --radius: var(--radius-small);
+  --radius-xs: var(--radius-small);
+  --radius-sm: var(--radius-small);
+  --radius-md: var(--radius-small);
+  --radius-lg: var(--radius-small);
+  --radius-xl: var(--radius-large);
+  --radius-2xl: var(--radius-large);
+  --radius-3xl: var(--radius-large);
+  --radius-4xl: var(--radius-large);
+
+  /* Type scale (ADR-0015 "Typography"). */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-lead: 1rem;
+  --text-lead--line-height: 1.5rem;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.75rem;
+  --text-headline: 1.75rem;
+  --text-headline--line-height: 2.125rem;
+  --text-display: clamp(3.5rem, 2.5rem + 4vw, 4.5rem);
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.035em;
+  --text-display--font-weight: 800;
 }
 
-/*
- * #109 direction F, "Original, elevated" — true-neutral zinc in BOTH modes.
- * Both light and dark adopt the #109 palette: :root holds the light F values
- * (a few shift vs the old baseline — foreground 0.145→0.16, muted-foreground
- * 0.556→0.505, accent 0.97→0.965, border/input 0.922→0.918, sidebar→pure
- * white, warning recolored to 0.72 0.15 65), and [data-theme="dark"] (with the
- * .dark alias) is a scoped token swap over that same set. Only values change,
- * so every color utility (bg-background, text-muted-foreground, border-border,
- * ...) re-skins by cascade — sidebar and main as one. The active theme is
- * stamped on <html> pre-paint by the inline script in the root layout
- * (SSR-safe, no white flash). Achromatic zinc, chroma = 0 unless noted. The
- * --radius calc scale (kept at the 0.625rem baseline per #195) and the
- * Assistant font family are unchanged.
- */
 :root {
-  /* ── Neutral base (zinc — achromatic, chroma = 0) ── */
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.16 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.505 0 0);
-  /* Neutral-bar fill — progress/gauge/category-breakdown bars (A4 #201).
-     Not a semantic color: emerald stays reserved for positive values only. */
-  --bar: oklch(0.87 0 0); /* ≈ gray-300, standard fill */
-  --bar-strong: oklch(0.72 0 0); /* ≈ gray-400, stronger fill */
-  --accent: oklch(0.965 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --border: oklch(0.918 0 0);
-  --input: oklch(0.918 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
+  /* ── Surfaces: warm paper ── */
+  --background: #f7f3ec;
+  --foreground: #0f1e1f;
+  --card: #fffdf9;
+  --card-foreground: #0f1e1f;
+  --popover: #fffdf9;
+  --popover-foreground: #0f1e1f;
+  --muted: #efe8dd;
+  --muted-foreground: #55625f;
+  --secondary: #efe8dd;
+  --secondary-foreground: #0f1e1f;
+  --accent: #efe8dd;
+  --accent-foreground: #0f1e1f;
 
-  /* Card edge (#109) — hairline border + soft shadow bundle, mode-dependent.
-     Consumed by the base Card component only; no card overrides these. */
-  --card-shadow: 0 1px 2px oklch(0.145 0 0 / 0.04), 0 2px 8px oklch(0.145 0 0 / 0.06);
-  --card-border: oklch(0.145 0 0 / 0.09);
+  /* ── Deep teal ink ── */
+  --primary: #0c4547;
+  --primary-foreground: #f7f3ec;
+  --ring: #0e6965;
+  --border: rgb(15 30 31 / 0.1);
+  --input: rgb(15 30 31 / 0.18);
 
-  /* ── Semantic colors ── */
+  /* ── Shape and motion (theme-independent) ── */
+  --radius-small: 0.625rem;
+  --radius-large: 1.375rem;
+  --radius-full: 9999px;
+  --radius: var(--radius-small);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Destructive — muted red (used for negative values, error states) */
-  --destructive: oklch(0.577 0.245 27.325);
+  /* Neutral bar fill for progress/gauge/breakdown bars; --bar-strong is the
+     teal emphasis. Not a money colour. */
+  --bar: #e2d7c8;
+  --bar-strong: #0e6965;
 
-  /* Emerald accent — POSITIVE values and balances ONLY, never decorative */
-  --emerald: oklch(0.596 0.145 163.225); /* emerald-600 */
-  --emerald-foreground: oklch(1 0 0);
+  /* Card edge: soft warm shadow, near-invisible hairline. */
+  --card-shadow: 0 1px 2px rgb(15 30 31 / 0.05), 0 3px 10px -4px rgb(15 30 31 / 0.08);
+  --card-border: rgb(15 30 31 / 0.06);
 
-  /* Identity violet — the Yitra mark only; deliberately collides with no data color
-     (green/red/amber carry money and warning meaning). See brand/brand.md. */
+  /* ── Money pair (AA on every surface) ── */
+  --pos: #0a6349;
+  --neg: #9e1f36;
+  --destructive: var(--neg);
+
+  /* ── Coral: attention only ── text on a coral fill is always ink (white on
+     coral fails AA); coral-coloured text uses --attention-text. */
+  --attention: #ff6847;
+  --attention-foreground: #0f1e1f;
+  --attention-subtle: #ffe2d6;
+  --attention-text: #a3381b;
+
+  /* Aliases of other tokens. A var() inside a custom property resolves where
+     it is declared, so the dark block redeclares each alias for its own scope.
+     --warning is the coral pair under its older name; use it only for the
+     attention states of ADR-0015 (badges, stale/failed sync, at-risk/over). */
+  --warning: var(--attention);
+  --warning-foreground: var(--attention-foreground);
+
+  /* Retired "emerald = positive" tokens, kept as aliases of the money pair
+     until the redesign's cleanup removes their last uses. */
+  --emerald: var(--pos);
+  --emerald-foreground: #ffffff;
+
+  /* ── Hero surface: dark teal in both themes ── */
+  --hero: #0c4143;
+  --hero-foreground: #f4f8f6;
+  --hero-muted: #a9c7c1;
+
+  /* Identity violet: the Yitra mark only (brand/brand.md). */
   --brand: #4b22e0;
 
-  /* Money-color source of truth (#109 sheet): --pos = positive money (emerald),
-     --neg = negative money (red). <Amount> is the primary consumer via text-pos/
-     text-neg; a sign-driven ternary (v >= 0 ? "text-pos" : "text-neg") is the
-     sanctioned secondary form where <Amount> itself doesn't fit. */
-  --pos: oklch(0.596 0.145 163);
-  --neg: oklch(0.577 0.245 27);
+  /* ── Chart palette (series identity, not money meaning) ── */
+  --chart-1: #0e6965;
+  --chart-2: #8a9a97;
+  --chart-3: #d99a2b;
+  --chart-4: #3d78ad;
+  --chart-5: #a05470;
 
-  /* Warning — amber tone, for pending/in-progress/stale states only. Never a
-     "success" or "on track" signal; emerald stays positive-money-only.
-     Reach for it as a FILL (bg-warning + text-warning-foreground): amber at
-     this lightness fails small-text contrast against --card in light mode
-     (raised in the #108 design review), so text-warning is legible only at
-     larger sizes or on a neutral fill. */
-  --warning: oklch(0.72 0.15 65);
-  --warning-foreground: oklch(0.145 0 0);
-
-  /* ── Chart palette ── */
-  --chart-1: oklch(0.596 0.145 163.225); /* emerald */
-  --chart-2: oklch(0.488 0.243 264.376); /* blue */
-  --chart-3: oklch(0.769 0.188 70.08); /* amber */
-  --chart-4: oklch(0.627 0.265 303.9); /* violet */
-  --chart-5: oklch(0.645 0.246 16.439); /* red */
-
-  /* ── Sidebar ── (--sidebar and --sidebar-border are the #109-F sheet values;
-     the rest stay at baseline — the sheet does not respec them) */
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* ── Sidebar ── */
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--card-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
-/* Dark theme — same token names, dark values. muted-foreground and destructive
- * are lifted/brightened for legibility on the dark surface. */
 [data-theme="dark"],
 .dark {
-  --background: oklch(0.165 0 0);
-  --foreground: oklch(0.955 0 0);
-  --card: oklch(0.215 0 0);
-  --card-foreground: oklch(0.955 0 0);
-  --popover: oklch(0.215 0 0);
-  --popover-foreground: oklch(0.955 0 0);
-  --primary: oklch(0.92 0 0);
-  --primary-foreground: oklch(0.165 0 0);
-  --secondary: oklch(0.265 0 0);
-  --secondary-foreground: oklch(0.955 0 0);
-  --muted: oklch(0.265 0 0);
-  --muted-foreground: oklch(0.71 0 0); /* lifted — secondary text was near the noise floor */
-  /* Neutral-bar fill — a proper mid-tone so bars stay visible against the dark
-     --card (0.215) / --background (0.165) instead of washing out near-white. */
-  --bar: oklch(0.4 0 0);
-  --bar-strong: oklch(0.52 0 0);
-  --accent: oklch(0.285 0 0);
-  --accent-foreground: oklch(0.955 0 0);
-  --border: oklch(0.29 0 0);
-  --input: oklch(0.29 0 0);
-  --ring: oklch(0.55 0 0);
+  --background: #0b1314;
+  --foreground: #ecf2ef;
+  --card: #131d1e;
+  --card-foreground: #ecf2ef;
+  --popover: #131d1e;
+  --popover-foreground: #ecf2ef;
+  --muted: #1d292a;
+  --muted-foreground: #9aa8a5;
+  --secondary: #1d292a;
+  --secondary-foreground: #ecf2ef;
+  --accent: #1d292a;
+  --accent-foreground: #ecf2ef;
 
-  /* Card edge (#109) — dark cards drop the shadow entirely; hairline only.
-     Uses a transparent zero-shadow, NOT the `none` keyword: the base Card feeds
-     this into Tailwind's shared box-shadow chain (shadow-* and ring-* compose
-     into one declaration), and a literal `none` mid-list is invalid CSS that
-     voids the whole box-shadow — silently killing any ring a card stacks on top
-     (e.g. the highlighted bank card's amber ring). `0 0 #0000` renders nothing
-     while keeping the chain valid. */
+  --primary: #7fd3c9;
+  --primary-foreground: #062627;
+  --ring: #45bdb2;
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.16);
+
+  --bar: #2a3a3b;
+  --bar-strong: #45bdb2;
+
+  /* Dark cards drop the shadow; hairline only. A transparent zero shadow, not
+     `none`: the Card feeds this into Tailwind's composed box-shadow chain,
+     where a literal `none` mid-list voids the whole declaration (and any ring
+     stacked on the card). */
   --card-shadow: 0 0 #0000;
-  --card-border: oklch(1 0 0 / 0.1);
+  --card-border: rgb(255 255 255 / 0.08);
 
-  --destructive: oklch(0.71 0.17 22); /* brighter rose — muddy at 0.577 on dark */
-  --emerald: oklch(0.72 0.15 163);
-  /* emerald is lifted in dark — dark text reads, white washes out */
-  --emerald-foreground: oklch(0.165 0 0);
+  --pos: #4fd1a5;
+  --neg: #ff8fa0;
+
+  --attention: #ff7a5c;
+  --attention-foreground: #0f1e1f;
+  --attention-subtle: #3a2219;
+  --attention-text: #ff9a80;
+
+  --emerald-foreground: #0b1314;
+
+  --destructive: var(--neg);
+  --warning: var(--attention);
+  --warning-foreground: var(--attention-foreground);
+  --emerald: var(--pos);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--card-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --hero: #0d3a3c;
+  --hero-foreground: #f4f8f6;
+  --hero-muted: #a9c7c1;
+
   --brand: #a78bfa;
 
-  /* Money colors lifted for the dark surface; dark red brightened so it isn't muddy. */
-  --pos: oklch(0.72 0.15 163);
-  --neg: oklch(0.71 0.17 22);
-  --warning: oklch(0.78 0.15 70);
-  /* warning stays amber (light) in both modes → dark foreground */
-  --warning-foreground: oklch(0.145 0 0);
-
-  /* ── Chart palette ── lightness lifted, hue preserved so each category keeps
-     its identity and stays legible on the dark surface (chart-1 tracks --emerald). */
-  --chart-1: oklch(0.72 0.15 163.225); /* emerald */
-  --chart-2: oklch(0.65 0.19 264.376); /* blue */
-  --chart-3: oklch(0.8 0.16 70.08); /* amber */
-  --chart-4: oklch(0.7 0.2 303.9); /* violet */
-  --chart-5: oklch(0.7 0.19 16.439); /* red */
-
-  --sidebar: oklch(0.185 0 0);
-  --sidebar-foreground: oklch(0.955 0 0);
-  --sidebar-primary: oklch(0.92 0 0);
-  --sidebar-primary-foreground: oklch(0.165 0 0);
-  --sidebar-accent: oklch(0.285 0 0);
-  --sidebar-accent-foreground: oklch(0.955 0 0);
-  --sidebar-border: oklch(0.29 0 0);
-  --sidebar-ring: oklch(0.55 0 0);
+  --chart-1: #45bdb2;
+  --chart-2: #7f8f8c;
+  --chart-3: #f0bd55;
+  --chart-4: #6ea6d8;
+  --chart-5: #d47f9d;
 }
 
 @layer base {
@@ -261,6 +294,10 @@
   }
   html {
     @apply font-sans;
+  }
+  td,
+  th {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -293,14 +330,15 @@
   }
 
   /**
-   * .enter — fade + 8px rise, 220ms, cubic-bezier(0.16, 1, 0.3, 1) (#202).
+   * .enter — fade + 8px rise, 220ms on --ease-enter (#202; same as the
+   * `enter` preset in @/components/motion).
    * Apply to a section/card wrapper that should enter gently on mount.
    * .stagger > * shares this same animation (see below) — kept as one
    * selector so the timing/easing only needs to change in one place.
    */
   .enter,
   .stagger > * {
-    animation: enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: enter 220ms var(--ease-enter) both;
   }
 
   @keyframes enter {
