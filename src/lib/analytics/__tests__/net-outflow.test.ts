@@ -3,6 +3,7 @@ import {
   computeMonthlySummary,
   computeSpendingByCategory,
   outflowContribution,
+  rollUpSpendingByGroup,
   type TransactionWithCategory,
 } from "../index";
 
@@ -23,6 +24,36 @@ const row = (
 const RENT_MONTH = [-1000, 1000, -1000, -1000, 1000].map((amount) =>
   row("rent", "expense", amount),
 );
+
+describe("flagged settlement lump (CONTEXT.md settlement charge)", () => {
+  const month: TransactionWithCategory[] = [
+    { ...row("cards", "expense", -2500), reconciliationRole: "settlement_lump" },
+    row("cards", "expense", -40),
+    { ...row("food", "expense", -300), reconciliationRole: "settlement_detail" },
+  ];
+
+  it("stays out of the per-category breakdown and its group roll-up", () => {
+    const spending = computeSpendingByCategory(month);
+    expect(spending.map((s) => [s.categoryId, s.amount])).toEqual([
+      ["food", 300],
+      ["cards", 40],
+    ]);
+    expect(
+      rollUpSpendingByGroup(spending, [
+        { id: "money", name: "כסף", color: "#111111", icon: "Bank", parentId: null },
+        { id: "cards", name: "כרטיסים", color: "#222222", icon: "Card", parentId: "money" },
+        { id: "food", name: "מזון", color: "#333333", icon: "Apple", parentId: null },
+      ]).map((n) => [n.categoryId, n.amount]),
+    ).toEqual([
+      ["food", 300],
+      ["money", 40],
+    ]);
+  });
+
+  it("still counts in the type-driven month total", () => {
+    expect(computeMonthlySummary(month).expenses).toBe(2840);
+  });
+});
 
 describe("outflowContribution", () => {
   it("counts an outflow as positive spend and an inflow as negative spend", () => {

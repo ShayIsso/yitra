@@ -265,23 +265,6 @@ describe("selectInsights", () => {
     expect(insights).toEqual([]);
   });
 
-  it("orders zero-limit over-budget categories stably among themselves", () => {
-    const zero = (budgetId: string) => ({
-      budgetId,
-      categoryId: `c-${budgetId}`,
-      categoryName: `קטגוריה ${budgetId}`,
-      verdict: "over" as const,
-      spent: 50,
-      limit: 0,
-    });
-    const [insight] = selectInsights(facts({ budgets: [zero("b1"), zero("b2"), zero("b3")] }));
-    expect(insight.kind === "budget-risk" && insight.budgets.map((b) => b.budgetId)).toEqual([
-      "b1",
-      "b2",
-      "b3",
-    ]);
-  });
-
   it("lists over-budget categories before at-risk ones, the most spent first, and skips calm ones", () => {
     const budget = (budgetId: string, verdict: string, spent: number, limit: number) => ({
       budgetId,

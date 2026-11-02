@@ -6,7 +6,6 @@ import {
   evaluateBudget,
   computeSubtreeSpend,
   computeCategorySpend,
-  computeBudgetSpend,
   classifySavingsTarget,
   monthNetSavings,
   evaluateExpenseTargetPace,
@@ -176,7 +175,7 @@ describe("computeCategorySpend", () => {
   });
 });
 
-describe("computeBudgetSpend", () => {
+describe("computeCategorySpend — flagged settlement lump", () => {
   const row = (
     categoryId: string,
     chargedAmount: number,
@@ -184,7 +183,7 @@ describe("computeBudgetSpend", () => {
   ) => ({ categoryId, categoryType: "expense" as const, chargedAmount, reconciliationRole });
 
   it("leaves a row reconciliation flagged as the settlement lump out of budget spend", () => {
-    const spend = computeBudgetSpend([
+    const spend = computeCategorySpend([
       row("cards", -2500, "settlement_lump"),
       row("cards", -40),
       row("grocery", -300, "settlement_detail"),

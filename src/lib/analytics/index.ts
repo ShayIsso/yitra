@@ -32,7 +32,32 @@ export * from "./insights";
 export type AnalyticsTransaction = {
   chargedAmount: number;
   categoryType: "income" | "expense" | "investment" | "transfer" | "ignore" | null;
+  /**
+   * Read per-category and per-merchant figures only (see
+   * {@link excludeSettlementLumps}); month totals ignore it. Every DB read
+   * carries it (`toTransactionWithCategory` requires it); absent means unflagged.
+   */
+  reconciliationRole?: ReconciliationRole | null;
 };
+
+export type ReconciliationRole = (typeof reconciliationRoleEnum.enumValues)[number];
+
+/**
+ * The card-settlement lump (CONTEXT.md "settlement charge") is excluded from
+ * every per-category and per-merchant figure — breakdowns, budget gauges,
+ * month-close verdicts, top merchants and insights — only when it is known to
+ * be one: typed `transfer` (already outside expense spend) or flagged
+ * `settlement_lump` by reconciliation (queued or confirmed) while it still
+ * carries an expense category. Never by description shape alone: P1's shape
+ * predicate is safe only paired with matching card totals; on its own it
+ * matches direct debits, card-brand words and any standalone 4-digit run, and
+ * would drop real expenses. Month totals stay type-driven.
+ */
+export function excludeSettlementLumps<
+  T extends { reconciliationRole?: ReconciliationRole | null },
+>(rows: readonly T[]): T[] {
+  return rows.filter((r) => r.reconciliationRole !== "settlement_lump");
+}
 
 export type TransactionWithCategory = AnalyticsTransaction & {
   categoryId: string | null;
@@ -171,12 +196,13 @@ function netOutflowsByKey<T extends { chargedAmount: number }, K>(
  * Per-category expense spend under the spend floor — the one leaf-grain read
  * the Dashboard breakdown, budget gauges and month-close all share, so they
  * cannot disagree on a category's figure. Uncategorized and non-expense rows
- * drop out; a category netting to ≤ 0 is absent.
+ * and flagged settlement lumps ({@link excludeSettlementLumps}) drop out; a
+ * category netting to ≤ 0 is absent.
  */
 export function computeCategoryNetSpend(
   transactions: readonly (AnalyticsTransaction & { categoryId: string | null })[],
 ): Map<string, number> {
-  return netOutflowsByKey(transactions, (t) =>
+  return netOutflowsByKey(excludeSettlementLumps(transactions), (t) =>
     t.categoryType === "expense" && t.categoryId ? t.categoryId : null,
   );
 }
@@ -242,6 +268,7 @@ export type MerchantTransaction = {
   description: string;
   chargedAmount: number;
   categoryType: AnalyticsTransaction["categoryType"];
+  reconciliationRole?: ReconciliationRole | null;
 };
 
 export type TopMerchant = {
@@ -292,12 +319,13 @@ function isCheckWithdrawalDescriptor(description: string): boolean {
  * `transfer` must still never masquerade as a top merchant. Same for a
  * check-withdrawal descriptor (`isCheckWithdrawalDescriptor`) — a bank
  * mechanism, not a merchant, but outside `matchesTransferDescriptor`'s kinds.
+ * A row flagged as the lump ({@link excludeSettlementLumps}) never ranks either.
  */
 export function computeTopMerchants(
   transactions: MerchantTransaction[],
   limit: number = DEFAULT_TOP_MERCHANTS_LIMIT,
 ): TopMerchant[] {
-  const totals = netOutflowsByKey(transactions, (t) => {
+  const totals = netOutflowsByKey(excludeSettlementLumps(transactions), (t) => {
     if (t.categoryType !== "expense") return null;
     if (matchesTransferDescriptor(t.description, ["card_settlement"])) return null;
     if (isCheckWithdrawalDescriptor(t.description)) return null;
@@ -474,6 +502,7 @@ export function toTransactionWithCategory(row: {
   categoryName: string | null;
   categoryColor: string | null;
   categoryIcon: string | null;
+  reconciliationRole: ReconciliationRole | null;
 }): TransactionWithCategory {
   return {
     chargedAmount: Number(row.chargedAmount),
@@ -482,6 +511,7 @@ export function toTransactionWithCategory(row: {
     categoryName: row.categoryName ?? "",
     categoryColor: row.categoryColor ?? "#888888",
     categoryIcon: row.categoryIcon ?? "MoreHorizontal",
+    reconciliationRole: row.reconciliationRole,
   };
 }
 
@@ -501,25 +531,6 @@ export type InsightTransactionRow = {
   categoryType: AnalyticsTransaction["categoryType"];
   reconciliationRole: ReconciliationRole | null;
 };
-
-export type ReconciliationRole = (typeof reconciliationRoleEnum.enumValues)[number];
-
-/**
- * Per-category spend without the card-settlement lump (CONTEXT.md "settlement
- * charge"). A lump is excluded only when it is known to be one: typed
- * `transfer` (already outside expense spend) or flagged `settlement_lump` by
- * reconciliation while it still carries an expense category. Never by
- * description shape alone — P1's shape predicate is safe only paired with
- * matching card totals; on its own it matches direct debits, card-brand words
- * and any standalone 4-digit run, and would drop real expenses. Month totals
- * stay type-driven so they agree with the Dashboard. Budgets and insights share
- * this one rule.
- */
-export function excludeSettlementLumps<T extends { reconciliationRole: ReconciliationRole | null }>(
-  rows: readonly T[],
-): T[] {
-  return rows.filter((r) => r.reconciliationRole !== "settlement_lump");
-}
 
 export type InsightSources = {
   month: InsightMonth;
@@ -729,12 +740,10 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
 // ---------------------------------------------------------------------------
 
 /**
- * The normalized month read every month-scoped analytics/report calculation
- * shares (issue #168): all transactions on `transactions.date` within the
- * calendar month, joined to category metadata and coalesced to the
- * `TransactionWithCategory` shape. Single owner of the select/join + null
- * coalescing — {@link getMonthlySummary}, {@link getSpendingByCategory}, and
- * the reports store all consume it, so their windows can never diverge.
+ * The month read in the `TransactionWithCategory` shape that totals and
+ * breakdowns use — {@link getMonthlySummary}, {@link getSpendingByCategory},
+ * budgets' target reads and the reports store's monthly report — projected
+ * from {@link getMonthTransactionDetails} through `toTransactionWithCategory`.
  */
 export async function getMonthTransactions(
   year: number,
@@ -768,11 +777,9 @@ export async function getSpendingByCategory(
 }
 
 /**
- * The month read {@link getTopMerchants} aggregates over: the raw `description`
- * alongside `chargedAmount`/category type, for the same calendar-month window
- * {@link getMonthTransactions} uses. Kept separate from that shared shape
- * because `description` is merchant-matching input, not part of the
- * type-driven totals reader's contract.
+ * The month read {@link getTopMerchants} aggregates over, projected from
+ * {@link getMonthTransactionDetails}: the raw `description` is merchant-matching
+ * input, so it is part of this shape and not of the totals shape.
  */
 export async function getMonthMerchantTransactions(
   year: number,
@@ -782,6 +789,7 @@ export async function getMonthMerchantTransactions(
     description: r.description,
     chargedAmount: r.chargedAmount,
     categoryType: r.categoryType,
+    reconciliationRole: r.reconciliationRole,
   }));
 }
 
@@ -793,12 +801,13 @@ export type MonthTransactionDetail = InsightTransactionRow & {
 };
 
 /**
- * The single owner of the month read (issue #168): every transaction on
- * `transactions.date` within the calendar month, with its category.
- * {@link getMonthTransactions} (totals and breakdowns),
- * {@link getMonthMerchantTransactions} (top merchants), every budgets read and
- * the insights aggregate all project from this one query, so their windows and
- * joins can never diverge.
+ * The single-month query (issue #168): every transaction on `transactions.date`
+ * within the calendar month, with its category. {@link getMonthTransactions}
+ * (totals and breakdowns), {@link getMonthMerchantTransactions} (top
+ * merchants), the budgets reads and the insights aggregate all project from it,
+ * so their window and join cannot diverge. The reports store's multi-month
+ * range read is a separate query kept in step with this one (same window
+ * bucketing, same join, same `toTransactionWithCategory` coalescing).
  */
 export async function getMonthTransactionDetails(
   year: number,

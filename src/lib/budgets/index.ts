@@ -20,7 +20,7 @@ import {
   type StoredBudget,
 } from "./store";
 import {
-  computeBudgetSpend,
+  computeCategorySpend,
   computeSubtreeSpend,
   evaluateBudget,
   monthElapsed,
@@ -41,7 +41,6 @@ export {
   evaluateBudget,
   computeSubtreeSpend,
   computeCategorySpend,
-  computeBudgetSpend,
   classifySavingsTarget,
   monthNetSavings,
   evaluateExpenseTargetPace,
@@ -121,7 +120,7 @@ export async function getBudgetStatuses(
     db.select({ id: categories.id, parentId: categories.parentId }).from(categories),
   ]);
 
-  const spend = computeBudgetSpend(txns);
+  const spend = computeCategorySpend(txns);
   const elapsed = monthElapsed(ym, today);
 
   return budgetRows.map((budget) => {

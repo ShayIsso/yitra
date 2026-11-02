@@ -106,6 +106,22 @@ describe("buildMonthCloseVerdicts — category budgets (subtree spend, closed-mo
     expect(result.budgets[0].verdict).toBe("over");
   });
 
+  it("leaves a lump reconciliation flagged as the settlement charge out of budget spend, like the live gauges", () => {
+    const lump: MonthCloseTransaction = {
+      ...expense("food", 2500),
+      reconciliationRole: "settlement_lump",
+    };
+    const result = buildMonthCloseVerdicts(
+      MAY,
+      TODAY_AFTER_MAY,
+      [lump, expense("food", 900)],
+      CATEGORY_TREE,
+      [budget({ monthlyLimit: 1000 })],
+      null,
+    );
+    expect(result.budgets[0]).toMatchObject({ spent: 900, verdict: "on-pace" });
+  });
+
   it("resolves `comfortably-under` well below the limit and `on-pace` just under it", () => {
     const under = buildMonthCloseVerdicts(
       MAY,

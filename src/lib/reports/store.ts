@@ -143,6 +143,7 @@ export const drizzleReportsStore: ReportsStore = {
         categoryName: categories.name,
         categoryColor: categories.color,
         categoryIcon: categories.icon,
+        reconciliationRole: transactions.reconciliationRole,
       })
       .from(transactions)
       .leftJoin(categories, eq(transactions.categoryId, categories.id))

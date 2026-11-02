@@ -135,6 +135,19 @@ describe("computeTopMerchants", () => {
     expect(result).toHaveLength(3);
   });
 
+  it("never ranks a row reconciliation flagged as the settlement lump", () => {
+    const txs: MerchantTransaction[] = [
+      {
+        description: "תשלום לדוגמה",
+        chargedAmount: -2500,
+        categoryType: "expense",
+        reconciliationRole: "settlement_lump",
+      },
+      { description: "מאפייה לדוגמה", chargedAmount: -60, categoryType: "expense" },
+    ];
+    expect(computeTopMerchants(txs)).toEqual([{ merchant: "מאפייה לדוגמה", amount: 60 }]);
+  });
+
   it("returns an empty list for an empty month", () => {
     expect(computeTopMerchants([])).toEqual([]);
   });
