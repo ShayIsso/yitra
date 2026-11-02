@@ -13,6 +13,7 @@ import { drizzleRecurringStore, projectUpcomingCharges } from "@/lib/recurring-d
 import { getUncategorizedTransactionCount } from "@/lib/transactions";
 import { createReviewStore } from "@/lib/ai-categorization";
 import { formatZodError } from "@/lib/api-utils";
+import { israelCalendarDay } from "@/lib/calendar";
 
 const querySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100),
@@ -32,8 +33,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const { year, month } = querySchema.parse(Object.fromEntries(searchParams));
     const now = new Date();
-    // UTC calendar date, the same "today" the budgets pace and next-debit reads use.
-    const today = toIsoDate(now);
+    // The home calendar day, the same "today" the month outlook uses; the
+    // budget pace read below takes it explicitly so both agree.
+    const today = israelCalendarDay(now);
     const previous = previousMonth({ year, month });
     const beforePrevious = previousMonth(previous);
 
@@ -63,7 +65,12 @@ export async function GET(request: Request) {
       createReviewStore().getPendingSuggestionCount(),
     ]);
 
-    const { upcoming } = projectUpcomingCharges(patterns, recentTxns, now);
+    // Liveness on the same day the facts are judged on, as the month outlook does.
+    const { upcoming } = projectUpcomingCharges(
+      patterns,
+      recentTxns,
+      new Date(`${today}T00:00:00.000Z`),
+    );
 
     const facts = buildInsightFacts({
       month: { year, month },

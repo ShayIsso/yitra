@@ -28,6 +28,19 @@ const OTP_TIMEOUT = { type: "otp_timeout", bank: "discount" } as const;
 const SYNC_COMPLETE = { type: "sync_complete" } as const;
 
 describe("createSyncClaim", () => {
+  it("knows since when it is held, and forgets it on release", () => {
+    const claim = createSyncClaim();
+    expect(claim.heldSince()).toBeNull();
+    const before = Date.now();
+    claim.acquire();
+    const since = claim.heldSince();
+    expect(since?.getTime()).toBeGreaterThanOrEqual(before);
+    expect(claim.acquire()).toBe(false);
+    expect(claim.heldSince()).toEqual(since);
+    claim.release();
+    expect(claim.heldSince()).toBeNull();
+  });
+
   it("refuses a second concurrent acquire while the first is held", () => {
     const claim = createSyncClaim();
     expect(claim.acquire()).toBe(true);

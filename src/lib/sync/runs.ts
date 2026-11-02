@@ -220,6 +220,33 @@ export async function buildInstitutionsWithRecordedSuccessQuery({
     .where(and(eq(syncRuns.status, "success"), isNotNull(syncRuns.finishedAt)));
 }
 
+/** Per institution, when its latest run that `isRecordedSuccess` accepts finished. */
+export async function getLastRecordedSuccessPerBank(): Promise<
+  { bank: string; finishedAt: Date }[]
+> {
+  const { db } = await import("@/db");
+  const { syncRuns } = await import("@/db/schema");
+  const { and, eq, isNotNull, max } = await import("drizzle-orm");
+  const rows = await db
+    .select({ bank: syncRuns.bank, finishedAt: max(syncRuns.finishedAt) })
+    .from(syncRuns)
+    .where(and(eq(syncRuns.status, "success"), isNotNull(syncRuns.finishedAt)))
+    .groupBy(syncRuns.bank);
+  return rows.flatMap((r) => (r.finishedAt ? [{ bank: r.bank, finishedAt: r.finishedAt }] : []));
+}
+
+/** When this install's first run that `isRecordedSuccess` accepts finished, or null. */
+export async function getFirstRecordedSuccessAt(): Promise<Date | null> {
+  const { db } = await import("@/db");
+  const { syncRuns } = await import("@/db/schema");
+  const { and, eq, isNotNull, min } = await import("drizzle-orm");
+  const [row] = await db
+    .select({ finishedAt: min(syncRuns.finishedAt) })
+    .from(syncRuns)
+    .where(and(eq(syncRuns.status, "success"), isNotNull(syncRuns.finishedAt)));
+  return row?.finishedAt ?? null;
+}
+
 /**
  * Institution ids this install has synced successfully at least once. Ids are
  * stored text, so one may name an institution no longer registered.

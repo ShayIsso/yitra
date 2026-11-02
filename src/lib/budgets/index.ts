@@ -31,6 +31,10 @@ import {
   type SavingsTargetVerdict,
   type YearMonth,
 } from "./pace";
+import { israelCalendarDay } from "@/lib/calendar";
+import type { MonthOutlook } from "./outlook";
+import { getMonthOutlookWithStore } from "./outlook-store";
+import { makeDrizzleMonthOutlookStore } from "./outlook-drizzle-store";
 
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
 export type { StoredBudget, BudgetWriteData, BudgetChanges, BudgetStore } from "./store";
@@ -53,6 +57,21 @@ export {
   type SavingsTargetVerdict,
   type YearMonth,
 } from "./pace";
+
+export {
+  monthOutlook,
+  hasOutlookMonthStarted,
+  STALE_SYNC_AFTER_MS,
+  THIN_HISTORY_MIN_FULL_MONTHS,
+  type MonthOutlook,
+  type MonthOutlookInput,
+  type OutlookRow,
+} from "./outlook";
+export {
+  getMonthOutlookWithStore,
+  type MonthOutlookStore,
+  type OutlookClock,
+} from "./outlook-store";
 
 export type BudgetStatus = {
   budget: StoredBudget;
@@ -98,7 +117,24 @@ export async function getBudgetForCategory(categoryId: string): Promise<StoredBu
   return drizzleBudgetStore.getByCategoryId(categoryId);
 }
 
+// Budget pace still takes the UTC day; the home screen's aggregates use the
+// Israel day (CONTEXT.md "home calendar day"). Callers that need the two to
+// agree pass `today` explicitly.
 const isoToday = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * The month outlook for `month`, as of the last successful sync (#312), on the
+ * home calendar day. The caller must not ask for a month that hasn't started
+ * there (`monthOutlook` throws a RangeError).
+ */
+export async function getMonthOutlook(year: number, month: number): Promise<MonthOutlook> {
+  const now = new Date();
+  return getMonthOutlookWithStore(
+    { year, month },
+    { today: israelCalendarDay(now), now },
+    makeDrizzleMonthOutlookStore(async () => (await getMonthlyTargets()).expenseTarget),
+  );
+}
 
 /**
  * Pace verdict for every budget in `month`. Each budget evaluates independently

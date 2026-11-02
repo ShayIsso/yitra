@@ -246,6 +246,14 @@ The דוחות monthly report's per-category-budget and savings-target results f
 
 **Judged against CURRENT values, not historical ones** — an acknowledged trend-reading simplification: neither a budget's `monthly_limit` nor the savings target is versioned, so re-opening a report for a month whose budget has since changed shows that month's actual spend against **today's** limit/target, not what was configured back then. The UI states this plainly next to the section.
 
+### `month outlook` and `usual month`
+
+The **month outlook** answers "what's left this month, as of the last sync": remaining = monthly expense target − spent − recurring charges still due (a late `projected charge` still counts), never clamped — an overspent month reports its overage. It is one closed set of states (`src/lib/budgets/outlook.ts`, #312) that the home screen renders and never recomputes. Spent is `net outflow` through today, minus future-dated rows and a row reconciliation flagged as the `settlement charge` lump — recognised by that flag only, never by description shape, which outside P1's pairing also matches ordinary debits. Pending rows count as stored; the `pending lifecycle` is the importer's job. A recurring charge has arrived only through a row that counts as spend; one that posted uncategorized is still due, awaiting a category, never late. The **usual month** is the mean expenses of up to three of the latest complete prior months with expense data — complete meaning every connected credential's data reaches back to the month's first day; with none, history is thin and the outlook shows no usual month, suggested target or projection. A suggested target derived from it is only ever suggested, never written.
+
+### `home calendar day`
+
+"Today" for the home screen's aggregates — the month outlook and the insights — is the calendar day in **Israel** (`israelCalendarDay`, `src/lib/calendar`), not the UTC day: for the first two or three hours of each local day the UTC date is still yesterday, which on the 1st would show the new month as not yet started. Budget pace's own default is still the UTC day; a home aggregate that reads it passes the Israel day explicitly.
+
 ---
 
 ## Recurring-charges vocabulary (Phase 3)

@@ -13,6 +13,8 @@ export type SyncClaim = {
   /** Releases the claim. Safe to call even when not held. */
   release(): void;
   isHeld(): boolean;
+  /** When the current holder acquired it; null while free. */
+  heldSince(): Date | null;
 };
 
 /**
@@ -21,18 +23,21 @@ export type SyncClaim = {
  * `src/lib/sync/index.ts` instantiates exactly one for the real process.
  */
 export function createSyncClaim(): SyncClaim {
-  let held = false;
+  let since: Date | null = null;
   return {
     acquire() {
-      if (held) return false;
-      held = true;
+      if (since) return false;
+      since = new Date();
       return true;
     },
     release() {
-      held = false;
+      since = null;
     },
     isHeld() {
-      return held;
+      return since !== null;
+    },
+    heldSince() {
+      return since;
     },
   };
 }
