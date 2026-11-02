@@ -14,8 +14,8 @@ import type { SyncRunSummary } from "@/lib/sync/runs";
 import { merchantKey, sameMerchant } from "@/lib/transaction-matching";
 import {
   monthOutlook,
-  spendRowIds,
   outlookMonthExpenses,
+  spendRowIds,
   type MonthOutlook,
   type OutlookRecurringCharge,
   type OutlookRow,

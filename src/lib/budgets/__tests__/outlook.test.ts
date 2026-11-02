@@ -41,9 +41,6 @@ function row(over: Partial<OutlookRow> & Pick<OutlookRow, "date" | "chargedAmoun
 const spend = (date: string, amount: number, over: Partial<OutlookRow> = {}) =>
   row({ date, chargedAmount: -amount, ...over });
 
-/** The stored row as the bank still reports it: pending. The outlook takes rows as stored. */
-const pending = (r: OutlookRow): OutlookRow => Object.assign({ status: "pending" }, r);
-
 describe("monthOutlook — connection states", () => {
   it("is no-connection when no bank is connected", () => {
     expect(monthOutlook(input({ credentialCount: 0 }))).toEqual({ state: "no-connection" });
@@ -166,22 +163,22 @@ describe("monthOutlook — what counts as spent", () => {
   });
 
   // The import lifecycle supersedes and sweeps pending rows (CONTEXT.md
-  // "pending lifecycle"); a pending row that survives it beside a same-looking
-  // posted one is a genuine repeat purchase, so the outlook counts every row.
-  it("counts a repeat purchase whose second charge is still pending", () => {
+  // "pending lifecycle"), so the outlook reads no status at all: a stored row
+  // beside a same-looking one — posted or still pending — is a repeat purchase.
+  it("counts a repeat purchase of the same amount and description twice", () => {
     const description = "Invented Coffee";
     const rows = [
       spend("2026-06-08", 120, { description }),
-      pending(spend("2026-06-10", 120, { description })),
+      spend("2026-06-10", 120, { description }),
     ];
     expect(spentOf(rows)).toBe(240);
   });
 
-  it("counts two pending purchases beside a same-looking posted one as three", () => {
+  it("counts three same-looking rows within a week as three purchases", () => {
     const description = "Invented Coffee";
     const rows = [
-      pending(spend("2026-06-08", 120, { description })),
-      pending(spend("2026-06-09", 120, { description })),
+      spend("2026-06-08", 120, { description }),
+      spend("2026-06-09", 120, { description }),
       spend("2026-06-10", 120, { description }),
     ];
     expect(spentOf(rows)).toBe(360);

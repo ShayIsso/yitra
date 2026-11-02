@@ -192,7 +192,7 @@ describe("getMonthOutlookWithStore", () => {
     expect(outlook).toMatchObject({ usualMonth: 900 });
   });
 
-  it("counts two pending look-alikes and their posted twin as three purchases", async () => {
+  it("counts three same-looking rows as three purchases: no read-time twin pairing", async () => {
     const description = "Invented Coffee";
     const outlook = await getMonthOutlookWithStore(
       JUNE,
@@ -201,8 +201,8 @@ describe("getMonthOutlookWithStore", () => {
         target: null,
         rows: [
           spend("2026-05-10", 1000),
-          Object.assign({ status: "pending" }, spend("2026-06-08", 120, { description })),
-          Object.assign({ status: "pending" }, spend("2026-06-09", 120, { description })),
+          spend("2026-06-08", 120, { description }),
+          spend("2026-06-09", 120, { description }),
           spend("2026-06-10", 120, { description }),
         ],
       }),
