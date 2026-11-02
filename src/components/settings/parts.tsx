@@ -139,12 +139,7 @@ export function SettingsRow({
       className={cn("flex min-h-16 items-center gap-1 pe-2", indent ? "ps-8" : "ps-0", className)}
     >
       {onOpen ? (
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-label={openLabel}
-          className="hover:bg-muted focus-visible:ring-ring flex min-h-16 min-w-0 flex-1 items-center gap-3 rounded-lg px-4 py-2.5 text-start transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset"
-        >
+        <button type="button" onClick={onOpen} aria-label={openLabel} className={ROW_BUTTON}>
           {main}
         </button>
       ) : (
@@ -155,6 +150,10 @@ export function SettingsRow({
   );
 }
 
+/** The tappable main area of a list row. */
+export const ROW_BUTTON =
+  "hover:bg-muted focus-visible:ring-ring flex min-h-16 min-w-0 flex-1 items-center gap-3 rounded-lg px-4 py-2.5 text-start transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset";
+
 /** A leading tile for a row: a glyph on sand. */
 export function RowTile({ children }: { children: React.ReactNode }) {
   return (
@@ -164,7 +163,7 @@ export function RowTile({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** A trailing icon action: 44px on a phone, 36px from md. Its label is for screen readers. */
+/** A trailing 44px icon action (touch screens come in every width). Its label is for screen readers. */
 export function RowAction({
   label,
   onClick,
@@ -186,7 +185,7 @@ export function RowAction({
       disabled={disabled}
       title={label}
       className={cn(
-        "size-11 md:size-9 [&_svg]:size-5",
+        "size-11 [&_svg]:size-5",
         destructive && "text-destructive hover:text-destructive",
       )}
     >

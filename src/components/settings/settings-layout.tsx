@@ -16,6 +16,7 @@ import {
   WalletIcon,
 } from "@/components/icons";
 import { Amount } from "@/components/ui/amount";
+import { Card } from "@/components/ui/card";
 import { useTheme } from "@/components/theme";
 import { cn } from "@/lib/utils";
 import {
@@ -123,21 +124,23 @@ export function SettingsLayout({
               >
                 {group.label}
               </p>
-              <ul
-                aria-labelledby={`settings-group-${index}`}
-                className="bg-card divide-border flex flex-col divide-y overflow-hidden rounded-xl border border-[color:var(--card-border)] shadow-[var(--card-shadow)] md:divide-y-0 md:border-0 md:bg-transparent md:shadow-none"
-              >
-                {group.sections.map((section) => (
-                  <li key={section}>
-                    <NavRow
-                      section={section}
-                      current={section === shown}
-                      summary={summaryFor(section)}
-                      onNavigate={(event) => navigate(event, section)}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <Card className="gap-0 py-0 md:overflow-visible md:rounded-none md:border-0 md:bg-transparent md:shadow-none">
+                <ul
+                  aria-labelledby={`settings-group-${index}`}
+                  className="divide-border flex flex-col divide-y md:divide-y-0"
+                >
+                  {group.sections.map((section) => (
+                    <li key={section}>
+                      <NavRow
+                        section={section}
+                        current={section === shown}
+                        summary={summaryFor(section)}
+                        onNavigate={(event) => navigate(event, section)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </Card>
             </div>
           ))}
         </nav>

@@ -432,7 +432,6 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
         </SettingsList>
       )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -618,7 +617,6 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={closeDeleteDialog}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>

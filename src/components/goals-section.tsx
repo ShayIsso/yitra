@@ -50,6 +50,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AddButton,
+  ROW_BUTTON,
   RowAction,
   SHEET_CONTROLS,
   SectionBody,
@@ -394,7 +395,7 @@ export function GoalsSection({
                   type="button"
                   onClick={() => openEdit(goal)}
                   aria-label={`עריכת היעד ${goal.name}`}
-                  className="hover:bg-muted focus-visible:ring-ring flex min-h-16 min-w-0 flex-1 basis-56 items-center gap-3 rounded-lg px-4 py-2.5 text-start transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset"
+                  className={cn(ROW_BUTTON, "basis-56")}
                 >
                   <span className="bg-muted text-body flex size-10 shrink-0 items-center justify-center rounded-full font-semibold tabular-nums">
                     {index + 1}
@@ -464,7 +465,7 @@ export function GoalsSection({
         </SettingsList>
       )}
 
-      {hasAnyGoal && <TrackingSinceEditor initial={initialTrackingSince} />}
+      <TrackingSinceEditor initial={initialTrackingSince} />
 
       {archivedGoals.length > 0 && (
         <Card className="gap-0 py-0">
@@ -498,7 +499,6 @@ export function GoalsSection({
         </Card>
       )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -690,7 +690,6 @@ export function GoalsSection({
         </DialogContent>
       </Dialog>
 
-      {/* Archive confirmation dialog */}
       <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -720,7 +719,6 @@ export function GoalsSection({
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>

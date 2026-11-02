@@ -35,6 +35,7 @@ import {
   TrashIcon,
 } from "@/components/icons";
 import { createRuleSchema } from "@/lib/categories/schemas";
+import { cn } from "@/lib/utils";
 // Value import from the pure hierarchy module (no DB dependency) — importing
 // this client component's other category bindings from "@/lib/categories"
 // itself would pull the Drizzle-backed index.ts (and postgres) into the
@@ -254,7 +255,7 @@ export function RulesSection({
       />
 
       {rules.length > SEARCH_THRESHOLD && (
-        <div className={`relative ${CONTROLS}`}>
+        <div className={cn("relative", CONTROLS)}>
           <MagnifyingGlassIcon className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
           <Input
             value={search}
@@ -328,7 +329,6 @@ export function RulesSection({
         </SettingsList>
       )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -459,7 +459,6 @@ export function RulesSection({
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -489,7 +488,6 @@ export function RulesSection({
         </DialogContent>
       </Dialog>
 
-      {/* Apply to existing dialog */}
       <Dialog
         open={applyOpen}
         onOpenChange={(open) => {

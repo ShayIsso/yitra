@@ -331,7 +331,6 @@ export function CredentialsSection({ initialCredentials }: { initialCredentials:
         </SettingsList>
       )}
 
-      {/* Add / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={setDialogOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -410,7 +409,6 @@ export function CredentialsSection({ initialCredentials }: { initialCredentials:
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>

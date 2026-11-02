@@ -95,7 +95,7 @@ export function SchedulerSection({ initialConfig }: Props) {
             </div>
           </div>
 
-          <div className="bg-muted/50 flex flex-wrap items-center gap-3 rounded-b-xl border-t px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 border-t px-4 py-3">
             <Button type="submit" disabled={saving} className="max-md:px-4">
               {saving ? "שומר..." : "שמור"}
             </Button>

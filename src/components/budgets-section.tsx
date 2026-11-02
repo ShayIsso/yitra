@@ -217,7 +217,6 @@ export function BudgetsSection({
         </SettingsList>
       )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
@@ -303,7 +302,6 @@ export function BudgetsSection({
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
