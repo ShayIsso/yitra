@@ -33,9 +33,10 @@ export type AnalyticsTransaction = {
   chargedAmount: number;
   categoryType: "income" | "expense" | "investment" | "transfer" | "ignore" | null;
   /**
-   * Read per-category and per-merchant figures only (see
-   * {@link excludeSettlementLumps}); month totals ignore it. Every DB read
-   * carries it (`toTransactionWithCategory` requires it); absent means unflagged.
+   * Only per-category and per-merchant figures read this (see
+   * {@link excludeSettlementLumps}); month totals ignore it. The reads that feed
+   * those figures must carry it (`toTransactionWithCategory` and the merchant
+   * read require it); absent means unflagged.
    */
   reconciliationRole?: ReconciliationRole | null;
 };
@@ -643,6 +644,8 @@ function recapFact(
   if (!allRows.some((r) => r.categoryType === "income" || r.categoryType === "expense"))
     return null;
   const summary = computeMonthlySummary([...allRows]);
+  // Category spend filters lumps itself; the row-level day and biggest-expense
+  // reads below need the rows filtered here.
   const rows = excludeSettlementLumps(allRows);
   const nodes = topLevelSpend(rows, sources.categories);
   const byCategoryTotal = nodes.reduce((sum, n) => sum + n.amount, 0);
@@ -664,10 +667,7 @@ function recapFact(
           share: top.amount / byCategoryTotal,
         }
       : null,
-    biggestChange: biggestChangeOf(
-      nodes,
-      topLevelSpend(excludeSettlementLumps(comparisonRows), sources.categories),
-    ),
+    biggestChange: biggestChangeOf(nodes, topLevelSpend(comparisonRows, sources.categories)),
     mostExpensiveDay: mostExpensiveDayOf(rows),
     recurring: {
       count: monthly.length,
@@ -696,6 +696,8 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
   const position = monthPosition(month, today);
   const started = position.phase !== "not-started";
   const throughDay = position.phase === "current" ? position.day : 31;
+  // Lumps are filtered here for the row-level biggest-expense read; category
+  // spend would drop them on its own.
   const spendToDate = (rows: readonly InsightTransactionRow[]) =>
     started ? excludeSettlementLumps(rows).filter((r) => dayOfMonth(r.date) <= throughDay) : [];
   const monthRows = spendToDate(sources.rows.month);
@@ -741,8 +743,8 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
 
 /**
  * The month read in the `TransactionWithCategory` shape that totals and
- * breakdowns use — {@link getMonthlySummary}, {@link getSpendingByCategory},
- * budgets' target reads and the reports store's monthly report — projected
+ * breakdowns use — {@link getMonthlySummary}, {@link getSpendingByCategory}
+ * and the reports store's monthly report — projected
  * from {@link getMonthTransactionDetails} through `toTransactionWithCategory`.
  */
 export async function getMonthTransactions(
@@ -784,7 +786,7 @@ export async function getSpendingByCategory(
 export async function getMonthMerchantTransactions(
   year: number,
   month: number,
-): Promise<MerchantTransaction[]> {
+): Promise<Required<MerchantTransaction>[]> {
   return (await getMonthTransactionDetails(year, month)).map((r) => ({
     description: r.description,
     chargedAmount: r.chargedAmount,

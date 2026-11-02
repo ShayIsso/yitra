@@ -198,7 +198,7 @@ function spentFraction(b: BudgetFact): number {
   return b.spent > 0 ? Infinity : 0;
 }
 
-/** Descending; total even with `Infinity` fractions (zero limits), where subtraction gives NaN. */
+/** Descending. Compares rather than subtracts, so it never returns NaN for two zero-limit (`Infinity`) budgets. */
 function bySpentFractionDesc(a: BudgetFact, b: BudgetFact): number {
   const fa = spentFraction(a);
   const fb = spentFraction(b);

@@ -125,11 +125,12 @@ export const drizzleReportsStore: ReportsStore = {
     return rows.map((r) => ({ year: Number(r.year), month: Number(r.month) }));
   },
 
-  // Single range query for the trends series. Same column set + join as
-  // analytics' getMonthTransactions (the shared month read), and the row→shape
-  // coalescing is the one owned by analytics (`toTransactionWithCategory`), so a
-  // range bucket for month M is byte-identical to that month's own read — the
-  // "reports windows can't diverge" invariant (#168), extended to trends (#170).
+  // Single range query for the trends series. Same window, category join and
+  // totals columns as analytics' month read (`getMonthTransactionDetails`), and
+  // the row→shape coalescing is the one owned by analytics
+  // (`toTransactionWithCategory`), so a range bucket for month M yields the same
+  // figures as that month's own read — the "reports windows can't diverge"
+  // invariant (#168), extended to trends (#170).
   // Bucketing by extract(year/month) matches monthDateRange's calendar month
   // exactly, so trends totals agree with the monthly report per month.
   async getRangeTransactions(from, to) {
