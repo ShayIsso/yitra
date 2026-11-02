@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createElement, type ReactElement } from "react";
+import { createElement, type ComponentProps, type ComponentType, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   ArrowsLeftRightIcon,
@@ -13,16 +13,18 @@ vi.mock("next/navigation", () => ({ usePathname: () => currentPath }));
 
 import { AppShell } from "@/components/shell";
 
+type NavGlyph = ComponentType<{ weight?: "regular" | "fill" }>;
+
 const markup = (el: ReactElement) => renderToStaticMarkup(el);
-const fill = (icon: typeof HouseIcon) => markup(createElement(icon, { weight: "fill" }));
-const regular = (icon: typeof HouseIcon) => markup(createElement(icon, { weight: "regular" }));
+const fill = (icon: NavGlyph) => markup(createElement(icon, { weight: "fill" }));
+const regular = (icon: NavGlyph) => markup(createElement(icon, { weight: "regular" }));
 
 /** Renders the shell at `pathname` and splits it into its two navigation landmarks. */
 function renderShell(pathname: string, pendingReconCount = 0) {
   currentPath = pathname;
-  const html = markup(
-    createElement(AppShell, { pendingReconCount }, createElement("p", null, "page body")),
-  );
+  // children arrive as createElement's third argument, which its typing can't see.
+  const props = { pendingReconCount } as ComponentProps<typeof AppShell>;
+  const html = markup(createElement(AppShell, props, createElement("p", null, "page body")));
   const navs = [...html.matchAll(/<nav[^>]*\saria-label="([^"]*)"[^>]*>(.*?)<\/nav>/g)];
   expect(navs).toHaveLength(2);
   const [rail, tabBar] = navs;
