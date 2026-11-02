@@ -1,12 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
+import { CheckIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { SETUP_STEPS, type SetupStep } from "@/lib/onboarding/steps";
+import { EntryBrand, EntryFrame, EntryHeading } from "./entry-frame";
 import { STEP_META } from "./step-meta";
 
 type StepStatus = "done" | "current" | "upcoming";
@@ -26,101 +26,120 @@ export type SetupFrameProps = {
 };
 
 /**
- * The wizard's frame, picked at the #258 prototype gate: a two-pane card with
- * a vertical step rail on desktop, collapsing on mobile to a step count and a
- * progress bar above the step body.
+ * The wizard's frame: the entry screens' hero pane carries the brand and a
+ * vertical step rail on desktop, and collapses on a phone to a band with a
+ * segmented progress bar above the step body.
  */
 export function SetupFrame({ step, passwordDone, exitHref, children }: SetupFrameProps) {
   const meta = STEP_META[step];
   const position = SETUP_STEPS.indexOf(step) + 1;
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const previousStep = useRef(step);
+
+  // A step change is a client navigation that unmounts the button that caused
+  // it, which would drop focus to the document; the new step's title takes it.
+  // Compared against the previous step rather than a mounted flag: StrictMode
+  // runs the effect twice on mount, and a flag would then steal the first
+  // load's autofocus from the password field.
+  useEffect(() => {
+    if (previousStep.current !== step) titleRef.current?.focus();
+    previousStep.current = step;
+  }, [step]);
+
+  const hero = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <EntryBrand />
+        <div className="flex items-center md:hidden">
+          <FrameTools exitHref={exitHref} compact />
+        </div>
+      </div>
+
+      <div aria-hidden="true" className="flex gap-1.5 md:hidden">
+        {SETUP_STEPS.map((s, i) => (
+          <span
+            key={s}
+            className={cn(
+              "h-1.5 flex-1 rounded-full",
+              i < position ? "bg-hero-foreground" : "bg-hero-foreground/25",
+            )}
+          />
+        ))}
+      </div>
+
+      <ol className="hidden flex-col gap-1 md:flex" aria-label="שלבי ההגדרה">
+        {SETUP_STEPS.map((s, i) => {
+          const status = statusOf(s, step, passwordDone);
+          return (
+            <li
+              key={s}
+              aria-current={status === "current" ? "step" : undefined}
+              className={cn(
+                "flex min-h-11 items-center gap-3 rounded-lg px-2",
+                status === "current" && "bg-hero-foreground/10",
+              )}
+            >
+              <StepMarker index={i} status={status} />
+              <span
+                className={cn(
+                  "text-body",
+                  status === "current" ? "text-hero-foreground font-medium" : "text-hero-muted",
+                )}
+              >
+                {STEP_META[s].label}
+                {status === "done" && <span className="sr-only"> (הושלם)</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="mt-auto hidden md:block">
+        <FrameTools exitHref={exitHref} />
+      </div>
+    </>
+  );
 
   return (
-    <div className="flex min-h-full flex-1 items-start justify-center px-4 py-6 md:items-center md:py-10">
-      <Card className="w-full max-w-4xl min-w-0 gap-0 py-0 md:flex-row">
-        <aside className="bg-muted/50 border-border flex flex-col gap-6 border-b p-5 md:w-64 md:border-e md:border-b-0 md:p-6">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-base font-semibold">
-              <BrandMark className="h-5 w-auto" />
-              Yitra
-            </span>
-            <span
-              aria-hidden="true"
-              className="text-muted-foreground text-xs font-medium tabular-nums md:hidden"
-            >
-              {position}/{SETUP_STEPS.length}
-            </span>
-          </div>
-
-          <div aria-hidden="true" className="bg-border h-1 overflow-hidden rounded-full md:hidden">
-            <div
-              className="bg-foreground/70 h-full rounded-full"
-              style={{ width: `${(position / SETUP_STEPS.length) * 100}%` }}
-            />
-          </div>
-
-          <ol className="hidden flex-col gap-1 md:flex" aria-label="שלבי ההגדרה">
-            {SETUP_STEPS.map((s, i) => {
-              const status = statusOf(s, step, passwordDone);
-              return (
-                <li
-                  key={s}
-                  aria-current={status === "current" ? "step" : undefined}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-2 py-2",
-                    status === "current" && "bg-card",
-                  )}
-                >
-                  <StepMarker index={i} status={status} />
-                  <span
-                    className={cn(
-                      "text-sm",
-                      status === "current"
-                        ? "text-foreground font-medium"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {STEP_META[s].label}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-
-          <div className="mt-auto hidden md:block">
-            <FrameTools exitHref={exitHref} stacked />
-          </div>
-        </aside>
-
-        <section className="flex min-w-0 flex-1 flex-col gap-6 p-5 md:p-8">
-          <div className="flex flex-col gap-1.5">
-            <p className="text-muted-foreground text-xs font-medium">
-              שלב {position} מתוך {SETUP_STEPS.length}
-            </p>
-            <h1 className="text-xl font-semibold">{meta.title}</h1>
-            <p className="text-muted-foreground text-sm leading-relaxed">{meta.description}</p>
-          </div>
-          {children}
-          <div className="border-border border-t pt-3 md:hidden">
-            <FrameTools exitHref={exitHref} />
-          </div>
-        </section>
-      </Card>
-    </div>
+    <EntryFrame hero={hero}>
+      <section key={step} className="enter flex flex-1 flex-col gap-6">
+        <EntryHeading
+          eyebrow={`שלב ${position} מתוך ${SETUP_STEPS.length}`}
+          title={meta.title}
+          description={meta.description}
+          titleRef={titleRef}
+        />
+        <div className="flex flex-1 flex-col *:flex-1">{children}</div>
+      </section>
+    </EntryFrame>
   );
 }
 
-function FrameTools({ exitHref, stacked = false }: { exitHref: string | null; stacked?: boolean }) {
+const HERO_CONTROL =
+  "text-hero-muted hover:bg-hero-foreground/10 hover:text-hero-foreground focus-visible:ring-hero-foreground/60 min-h-11 rounded-lg outline-none focus-visible:ring-2";
+
+function FrameTools({ exitHref, compact = false }: { exitHref: string | null; compact?: boolean }) {
   return (
-    <div className={cn("flex gap-1", stacked ? "flex-col items-stretch" : "items-center")}>
-      <ThemeToggle className="px-2 whitespace-nowrap" />
+    <div className={cn("flex gap-1", compact ? "items-center" : "flex-col")}>
       {exitHref && (
         <Link
           href={exitHref}
-          className="text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors"
+          className={cn(
+            HERO_CONTROL,
+            "text-body flex items-center px-3 font-medium whitespace-nowrap",
+            compact && "px-2",
+          )}
         >
           להמשיך מאוחר יותר
         </Link>
       )}
+      <ThemeToggle
+        className={cn(
+          HERO_CONTROL,
+          "whitespace-nowrap",
+          compact && "w-11 justify-center px-0 [&>span]:sr-only",
+        )}
+      />
     </div>
   );
 }
@@ -129,13 +148,13 @@ function StepMarker({ index, status }: { index: number; status: StepStatus }) {
   return (
     <span
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums",
-        status === "done" && "bg-primary text-primary-foreground border-transparent",
-        status === "current" && "border-foreground text-foreground",
-        status === "upcoming" && "border-border text-muted-foreground",
+        "text-caption flex size-7 shrink-0 items-center justify-center rounded-full font-semibold tabular-nums",
+        status === "done" && "bg-hero-foreground text-hero",
+        status === "current" && "border-hero-foreground text-hero-foreground border-2",
+        status === "upcoming" && "border-hero-muted/50 text-hero-muted border",
       )}
     >
-      {status === "done" ? <Check className="size-3.5" /> : index + 1}
+      {status === "done" ? <CheckIcon className="size-3.5" /> : index + 1}
     </span>
   );
 }

@@ -26,23 +26,25 @@ type Load = { status: "loading" } | { status: "ready"; view: TaxonomyView } | { 
 
 function Entry({ entry }: { entry: TaxonomyEntry }) {
   return (
-    <li className="flex items-center gap-2 text-sm">
+    <li className="text-body flex min-h-9 items-center gap-2.5">
       <span
         aria-hidden
         className="size-2.5 shrink-0 rounded-full"
         style={{ backgroundColor: entry.color }}
       />
-      <span>{entry.name}</span>
-      <span className="text-muted-foreground ms-auto text-xs">{TYPE_LABELS[entry.type]}</span>
+      <span className="min-w-0 truncate">{entry.name}</span>
+      <span className="text-muted-foreground text-caption ms-auto shrink-0">
+        {TYPE_LABELS[entry.type]}
+      </span>
     </li>
   );
 }
 
 function Section({ title, entries }: { title: string; entries: TaxonomyEntry[] }) {
   return (
-    <section className="border-border rounded-lg border">
-      <h3 className="bg-muted/50 px-4 py-2 text-sm font-semibold">{title}</h3>
-      <ul className="flex flex-col gap-2 px-4 py-3">
+    <section className="border-border mb-3 break-inside-avoid rounded-xl border px-4 pt-3 pb-2">
+      <h2 className="text-body font-semibold">{title}</h2>
+      <ul className="divide-border flex flex-col divide-y">
         {entries.map((entry) => (
           <Entry key={entry.name} entry={entry} />
         ))}
@@ -53,7 +55,7 @@ function Section({ title, entries }: { title: string; entries: TaxonomyEntry[] }
 
 function Taxonomy({ view }: { view: TaxonomyView }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="md:columns-2 md:gap-3">
       {view.groups.map((group) => (
         <Section key={group.name} title={group.name} entries={group.children} />
       ))}
@@ -80,10 +82,15 @@ export function CategoriesStep({ navigation }: SetupStepProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      {load.status === "loading" && <Skeleton className="h-64 w-full" />}
+      {load.status === "loading" && (
+        <div aria-busy="true" className="flex flex-col gap-3 md:flex-row">
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl max-md:hidden" />
+        </div>
+      )}
       {load.status === "ready" && <Taxonomy view={load.view} />}
       {load.status === "error" && (
-        <p role="alert" className="text-muted-foreground text-sm">
+        <p role="alert" className="text-muted-foreground text-body">
           לא הצלחנו להציג את הקטגוריות כרגע. הן יתווספו בסיום ההגדרה, ואפשר לראות אותן בהגדרות.
         </p>
       )}

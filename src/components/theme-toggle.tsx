@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { MoonIcon, SunIcon } from "@/components/icons";
 import { useTheme } from "@/components/theme";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         className,
       )}
     >
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {isDark ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
       <span className="flex-1 text-start">{isDark ? "מצב בהיר" : "מצב כהה"}</span>
     </button>
   );

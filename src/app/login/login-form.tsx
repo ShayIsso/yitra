@@ -1,70 +1,89 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BrandMark } from "@/components/brand-mark";
+import { WarningCircleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+const WRONG_PASSWORD = "סיסמה שגויה. נסו שוב.";
+const UNREACHABLE = "לא הצלחנו להתחבר לשרת. נסו שוב.";
+const FAILED = "הכניסה נכשלה. נסו שוב.";
 
 export function LoginForm({ destination }: { destination: "/" | "/setup" }) {
   const router = useRouter();
+  const inputId = useId();
+  const errorId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // The input is disabled while the request runs, so focus returns to it once
+  // the error is rendered, and the field's `aria-describedby` reads the error
+  // out. No alert role on top: it would announce the same text twice.
+  useEffect(() => {
+    if (error) inputRef.current?.focus();
+  }, [error]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError(false);
+    setError(null);
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+    } catch {
+      setError(UNREACHABLE);
+      setLoading(false);
+      return;
+    }
 
     if (res.ok) {
       router.push(destination);
-    } else {
-      setError(true);
+      return;
+    }
+    if (res.status === 401) {
       setPassword("");
+      setError(WRONG_PASSWORD);
+    } else {
+      setError(FAILED);
     }
     setLoading(false);
   }
 
   return (
-    <LoginCard>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={inputId}>סיסמה</Label>
         <Input
+          ref={inputRef}
+          id={inputId}
           type="password"
-          placeholder="סיסמה"
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoFocus
           disabled={loading}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
         />
-        {error && <p className="text-destructive text-center text-sm">סיסמה שגויה</p>}
-        <Button type="submit" disabled={loading || !password}>
-          {loading ? "..." : "כניסה"}
-        </Button>
-      </form>
-    </LoginCard>
-  );
-}
-
-export function LoginCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-background flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-center gap-2 text-xl">
-            <BrandMark className="h-5 w-auto" />
-            Yitra
-          </CardTitle>
-        </CardHeader>
-        <CardContent>{children}</CardContent>
-      </Card>
-    </div>
+        {error && (
+          <p id={errorId} className="text-destructive text-body flex items-center gap-1.5">
+            <WarningCircleIcon className="size-4 shrink-0" />
+            {error}
+          </p>
+        )}
+      </div>
+      <Button type="submit" size="lg" className="text-lead w-full" disabled={loading || !password}>
+        {loading ? "נכנסים..." : "כניסה"}
+      </Button>
+    </form>
   );
 }

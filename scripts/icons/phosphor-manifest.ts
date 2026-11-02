@@ -34,6 +34,16 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   CaretRight: ["regular"],
   CaretDown: ["regular"],
   Sparkle: ["regular", "duotone"],
+  Check: ["regular"],
+  Trash: ["regular"],
+  ShieldCheck: ["regular"],
+  Key: ["regular"],
+  Flask: ["regular"],
+
+  // Categorization provider choices (off, local, external)
+  Prohibit: ["regular"],
+  HardDrives: ["regular"],
+  Cloud: ["regular"],
 
   // Status
   WarningCircle: ["fill"],

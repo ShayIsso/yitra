@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState, useTransition, type ReactNode } from "react";
-import { CircleOff, Cloud, Info, KeyRound, Server, type LucideIcon } from "lucide-react";
+import { useId, useState, useTransition, type ComponentType, type ReactNode } from "react";
+import { CloudIcon, HardDrivesIcon, InfoIcon, KeyIcon, ProhibitIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import {
 } from "@/app/setup/provider-actions";
 
 type Option = {
-  readonly icon: LucideIcon;
+  readonly icon: ComponentType<{ className?: string }>;
   readonly label: string;
   readonly description: string;
 };
@@ -22,18 +22,18 @@ type Option = {
 /** The three choices ADR-0008 allows. */
 const OPTIONS: Record<AiProviderKind, Option> = {
   off: {
-    icon: CircleOff,
+    icon: ProhibitIcon,
     label: "כבוי",
     description: "ללא סיווג אוטומטי. שום מידע לא יוצא מהמחשב.",
   },
   ollama: {
-    icon: Server,
+    icon: HardDrivesIcon,
     label: "מקומי (Ollama)",
     description:
       "מודל שרץ אצלכם, במחשב או ברשת הביתית. שום מידע לא יוצא החוצה, ואין צורך במפתח. דורש שרת Ollama פעיל.",
   },
   gemini: {
-    icon: Cloud,
+    icon: CloudIcon,
     label: "חיצוני (Google Gemini)",
     description:
       "תיאורי בתי העסק נשלחים ל-Google לסיווג, אחרי הסרת מספרים ופרטים מזהים. פרטי התחברות ומספרי חשבון לעולם לא נשלחים. דורש מפתח API.",
@@ -169,20 +169,20 @@ export function ProviderForm({
       )}
 
       <div className="flex flex-col gap-1.5">
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-body">
           בשימוש כעת:{" "}
           <span className="text-foreground font-medium">{OPTIONS[settings.effective].label}</span>
         </p>
         {!pinned && settings.hasStoredKey && selected !== "gemini" && (
-          <p className="text-muted-foreground text-sm">השמירה תמחק את מפתח ה-API השמור.</p>
+          <p className="text-muted-foreground text-body">השמירה תמחק את מפתח ה-API השמור.</p>
         )}
         {error && (
-          <p role="alert" className="text-destructive text-sm">
+          <p role="alert" className="text-destructive text-body">
             {error}
           </p>
         )}
         {announceSaved && saved && !error && (
-          <p role="status" className="text-muted-foreground text-sm">
+          <p role="status" className="text-muted-foreground text-body">
             ההגדרה נשמרה ותחול מהסנכרון הבא.
           </p>
         )}
@@ -211,8 +211,8 @@ function ProviderOption({
   return (
     <div
       className={cn(
-        "rounded-lg border transition-colors",
-        checked ? "border-foreground/40 bg-muted/40" : "border-border",
+        "rounded-xl border transition-colors",
+        checked ? "border-primary bg-muted" : "border-border hover:bg-muted",
       )}
     >
       <label htmlFor={id} className="flex cursor-pointer items-start gap-3 p-4">
@@ -223,12 +223,17 @@ function ProviderOption({
           value={kind}
           checked={checked}
           onChange={onSelect}
-          className="accent-foreground mt-1 size-4 shrink-0"
+          className="accent-primary mt-1 size-4 shrink-0"
         />
-        <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
+        <Icon
+          className={cn(
+            "mt-0.5 size-5 shrink-0",
+            checked ? "text-foreground" : "text-muted-foreground",
+          )}
+        />
         <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-sm font-medium">{option.label}</span>
-          <span className="text-muted-foreground text-xs leading-relaxed">
+          <span className="text-body font-medium">{option.label}</span>
+          <span className="text-muted-foreground text-caption leading-relaxed">
             {option.description}
           </span>
         </span>
@@ -262,8 +267,8 @@ function KeyField({
   if (settings.environmentHasKey) {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-muted-foreground flex items-start gap-2 text-sm">
-          <KeyRound className="mt-0.5 size-4 shrink-0" />
+        <p className="text-muted-foreground text-body flex items-start gap-2">
+          <KeyIcon className="mt-0.5 size-4 shrink-0" />
           <span>
             המפתח נלקח ממשתנה הסביבה{" "}
             <code dir="ltr" className="font-mono text-xs">
@@ -308,7 +313,7 @@ function KeyField({
         aria-invalid={error ? true : undefined}
         placeholder="הדביקו כאן את המפתח"
       />
-      <p className={error ? "text-destructive text-xs" : "text-muted-foreground text-xs"}>
+      <p className={error ? "text-destructive text-caption" : "text-muted-foreground text-caption"}>
         {error ?? "המפתח נשמר מוצפן במסד הנתונים שלכם ולא יוצג שוב."}
       </p>
     </div>
@@ -317,8 +322,8 @@ function KeyField({
 
 function EnvironmentPinned() {
   return (
-    <div className="bg-muted flex items-start gap-3 rounded-lg px-4 py-4 text-sm">
-      <Info className="text-muted-foreground mt-0.5 size-5 shrink-0" />
+    <div className="bg-muted text-body flex items-start gap-3 rounded-lg px-4 py-4">
+      <InfoIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
       <p className="leading-relaxed">
         הספק נקבע במשתנה הסביבה{" "}
         <code dir="ltr" className="font-mono text-xs">
@@ -345,8 +350,8 @@ function StoredKeyActions({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="flex items-start gap-2 text-sm">
-        <KeyRound className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+      <p className="text-body flex items-start gap-2">
+        <KeyIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         {note}
       </p>
       <div className="flex flex-wrap gap-2">
@@ -359,7 +364,7 @@ function StoredKeyActions({
           מחיקת המפתח
         </Button>
       </div>
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground text-caption">
         מחיקת המפתח מחזירה גם את הבחירה השמורה למצב כבוי.
       </p>
     </div>

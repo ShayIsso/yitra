@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Check, FlaskConical, type LucideIcon } from "lucide-react";
+import { CheckIcon, FlaskIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { bankLabel, type BankTrust } from "@/lib/bank-registry";
@@ -12,13 +12,13 @@ import { bankLabel, type BankTrust } from "@/lib/bank-registry";
  */
 const TRUST_BADGE: Record<
   Exclude<BankTrust, "verified">,
-  { text: string; title: string; icon: LucideIcon }
+  { text: string; title: string; icon: typeof CheckIcon }
 > = {
-  experimental: { text: "ניסיוני", title: "מוסד שעדיין לא נבדק על ידינו", icon: FlaskConical },
+  experimental: { text: "ניסיוני", title: "מוסד שעדיין לא נבדק על ידינו", icon: FlaskIcon },
   observed: {
     text: "סונכרן כאן",
     title: "מוסד ניסיוני שכבר סונכרן בהצלחה בהתקנה זו",
-    icon: Check,
+    icon: CheckIcon,
   },
 };
 
