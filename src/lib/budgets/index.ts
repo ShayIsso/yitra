@@ -9,7 +9,11 @@
 import { db } from "@/db";
 import { transactions, categories, monthlyTargets } from "@/db/schema";
 import { and, gte, lte, eq } from "drizzle-orm";
-import { computeMonthlySummary, type AnalyticsTransaction } from "@/lib/analytics";
+import {
+  computeMonthlySummary,
+  getMonthTransactionDetails,
+  type AnalyticsTransaction,
+} from "@/lib/analytics";
 import {
   createBudgetWithStore,
   updateBudgetWithStore,
@@ -20,7 +24,7 @@ import {
   type StoredBudget,
 } from "./store";
 import {
-  computeCategorySpend,
+  computeBudgetSpend,
   computeSubtreeSpend,
   evaluateBudget,
   monthElapsed,
@@ -41,6 +45,7 @@ export {
   evaluateBudget,
   computeSubtreeSpend,
   computeCategorySpend,
+  computeBudgetSpend,
   classifySavingsTarget,
   monthNetSavings,
   evaluateExpenseTargetPace,
@@ -146,11 +151,11 @@ export async function getBudgetStatuses(
 
   const ym: YearMonth = { year, month };
   const [txns, categoryRows] = await Promise.all([
-    loadMonthTransactions(ym),
+    getMonthTransactionDetails(year, month),
     db.select({ id: categories.id, parentId: categories.parentId }).from(categories),
   ]);
 
-  const spend = computeCategorySpend(txns);
+  const spend = computeBudgetSpend(txns);
   const elapsed = monthElapsed(ym, today);
 
   return budgetRows.map((budget) => {

@@ -84,6 +84,7 @@ export async function GET(request: Request) {
         name: charge.displayName ?? charge.merchant,
         amount: charge.expectedAmount,
         date: toIsoDate(charge.projectedDate),
+        lastChargeDate: toIsoDate(charge.lastObservedChargeDate),
         cadence: charge.cadence,
       })),
       expenseTarget,

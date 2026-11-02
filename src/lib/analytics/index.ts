@@ -8,7 +8,6 @@ import {
   matchesTransferDescriptor,
 } from "@/lib/transaction-matching";
 import { bankKindOf } from "@/lib/bank-registry";
-import type { Cadence } from "@/lib/recurring-detection";
 import {
   monthPosition,
   previousMonth,
@@ -494,9 +493,27 @@ export type InsightTransactionRow = {
   chargedAmount: number;
   categoryId: string | null;
   categoryType: AnalyticsTransaction["categoryType"];
-  /** The institution the row's account belongs to (bank registry id). */
-  bankType: string;
+  reconciliationRole: ReconciliationRole | null;
 };
+
+export type ReconciliationRole = "settlement_lump" | "settlement_detail" | "transfer_pair";
+
+/**
+ * Per-category spend without the card-settlement lump (CONTEXT.md "settlement
+ * charge"). A lump is excluded only when it is known to be one: typed
+ * `transfer` (already outside expense spend) or flagged `settlement_lump` by
+ * reconciliation while it still carries an expense category. Never by
+ * description shape alone — P1's shape predicate is safe only paired with
+ * matching card totals; on its own it matches direct debits, card-brand words
+ * and any standalone 4-digit run, and would drop real expenses. Month totals
+ * stay type-driven so they agree with the Dashboard. Budgets and insights share
+ * this one rule.
+ */
+export function excludeSettlementLumps<T extends { reconciliationRole: ReconciliationRole | null }>(
+  rows: readonly T[],
+): T[] {
+  return rows.filter((r) => r.reconciliationRole !== "settlement_lump");
+}
 
 export type InsightSources = {
   month: InsightMonth;
@@ -512,7 +529,7 @@ export type InsightSources = {
   balances: AccountBalance[];
   attention: InsightFacts["attention"];
   budgets: Omit<BudgetFact, "categoryName">[];
-  upcoming: (RecurringChargeFact & { cadence: Cadence })[];
+  upcoming: RecurringChargeFact[];
   expenseTarget: number | null;
 };
 
@@ -522,26 +539,6 @@ function cardDebitsFrom(balances: readonly AccountBalance[]): CardDebitFact[] {
       ? [{ accountId: a.id, displayName: a.displayName, amount: -a.balance, date: a.nextDebitDate }]
       : [],
   );
-}
-
-/**
- * The monthly card-settlement lump (CONTEXT.md "settlement charge"): a row on a
- * bank-kind account with the `card_settlement` descriptor shape — the same
- * predicate as reconciliation's P1 `isBankLumpCandidate`; keep the two in step.
- * Reconciliation normally re-types it `transfer`; insights also exclude it by
- * shape, so an unreconciled lump never surfaces as category spend, a spending
- * day or the biggest expense. Month totals stay type-driven so they agree with
- * the Dashboard. The upcoming debit is shown from the card side instead.
- */
-function isSettlementLump(row: InsightTransactionRow): boolean {
-  return (
-    bankKindOf(row.bankType) === "bank" &&
-    matchesTransferDescriptor(row.description, ["card_settlement"])
-  );
-}
-
-function withoutSettlementLump(rows: readonly InsightTransactionRow[]): InsightTransactionRow[] {
-  return rows.filter((r) => !isSettlementLump(r));
 }
 
 function dayOfMonth(isoDate: string): number {
@@ -629,7 +626,7 @@ function recapFact(
   if (!allRows.some((r) => r.categoryType === "income" || r.categoryType === "expense"))
     return null;
   const summary = computeMonthlySummary([...allRows]);
-  const rows = withoutSettlementLump(allRows);
+  const rows = excludeSettlementLumps(allRows);
   const nodes = topLevelSpend(rows, sources.categories);
   const byCategoryTotal = nodes.reduce((sum, n) => sum + n.amount, 0);
   const top = nodes[0];
@@ -652,7 +649,7 @@ function recapFact(
       : null,
     biggestChange: biggestChangeOf(
       nodes,
-      topLevelSpend(withoutSettlementLump(comparisonRows), sources.categories),
+      topLevelSpend(excludeSettlementLumps(comparisonRows), sources.categories),
     ),
     mostExpensiveDay: mostExpensiveDayOf(rows),
     recurring: {
@@ -683,7 +680,7 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
   const started = position.phase !== "not-started";
   const throughDay = position.phase === "current" ? position.day : 31;
   const spendToDate = (rows: readonly InsightTransactionRow[]) =>
-    started ? withoutSettlementLump(rows).filter((r) => dayOfMonth(r.date) <= throughDay) : [];
+    started ? excludeSettlementLumps(rows).filter((r) => dayOfMonth(r.date) <= throughDay) : [];
   const monthRows = spendToDate(sources.rows.month);
   const previousRows = spendToDate(sources.rows.previous);
   const biggest = largestExpenseRow(monthRows);
@@ -704,12 +701,7 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
       ...b,
       categoryName: categoryById.get(b.categoryId)?.name ?? "",
     })),
-    upcomingRecurring: sources.upcoming.map(({ id, name, amount, date }) => ({
-      id,
-      name,
-      amount: toAgorot(amount),
-      date,
-    })),
+    upcomingRecurring: sources.upcoming.map((c) => ({ ...c, amount: toAgorot(c.amount) })),
     categoryChanges: compareTopLevel(
       topLevelSpend(monthRows, categories),
       topLevelSpend(previousRows, categories),
@@ -742,22 +734,7 @@ export async function getMonthTransactions(
   year: number,
   month: number,
 ): Promise<TransactionWithCategory[]> {
-  const { from, to } = monthDateRange(year, month);
-
-  const rows = await db
-    .select({
-      chargedAmount: transactions.chargedAmount,
-      categoryType: categories.type,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categoryColor: categories.color,
-      categoryIcon: categories.icon,
-    })
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-  return rows.map(toTransactionWithCategory);
+  return (await getMonthTransactionDetails(year, month)).map(toTransactionWithCategory);
 }
 
 /** The category roll-up structure (ADR-0011 shape) — single owner for group-first breakdowns. */
@@ -795,35 +772,32 @@ export async function getMonthMerchantTransactions(
   year: number,
   month: number,
 ): Promise<MerchantTransaction[]> {
-  const { from, to } = monthDateRange(year, month);
-
-  const rows = await db
-    .select({
-      description: transactions.description,
-      chargedAmount: transactions.chargedAmount,
-      categoryType: categories.type,
-    })
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-  return rows.map((r) => ({
+  return (await getMonthTransactionDetails(year, month)).map((r) => ({
     description: r.description,
-    chargedAmount: Number(r.chargedAmount),
-    categoryType: r.categoryType ?? null,
+    chargedAmount: r.chargedAmount,
+    categoryType: r.categoryType,
   }));
 }
 
+/** A month row with everything any month-scoped reader projects from it. */
+export type MonthTransactionDetail = InsightTransactionRow & {
+  categoryName: string | null;
+  categoryColor: string | null;
+  categoryIcon: string | null;
+};
+
 /**
- * Row-level month read for the insights aggregate: the same calendar-month
- * window as {@link getMonthTransactions}, plus the identity, date, description
- * and institution a row-level insight (biggest expense, most expensive day,
- * settlement-lump exclusion) needs.
+ * The single owner of the month read (issue #168): every transaction on
+ * `transactions.date` within the calendar month, with its category.
+ * {@link getMonthTransactions} (totals and breakdowns),
+ * {@link getMonthMerchantTransactions} (top merchants), budget gauges and the
+ * insights aggregate all project from this one query, so their windows and
+ * joins can never diverge.
  */
 export async function getMonthTransactionDetails(
   year: number,
   month: number,
-): Promise<InsightTransactionRow[]> {
+): Promise<MonthTransactionDetail[]> {
   const { from, to } = monthDateRange(year, month);
 
   const rows = await db
@@ -833,13 +807,14 @@ export async function getMonthTransactionDetails(
       description: transactions.description,
       customDescription: transactions.customDescription,
       chargedAmount: transactions.chargedAmount,
-      categoryId: transactions.categoryId,
+      categoryId: categories.id,
       categoryType: categories.type,
-      bankType: bankCredentials.bankType,
+      categoryName: categories.name,
+      categoryColor: categories.color,
+      categoryIcon: categories.icon,
+      reconciliationRole: transactions.reconciliationRole,
     })
     .from(transactions)
-    .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
-    .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(gte(transactions.date, from), lte(transactions.date, to)));
 

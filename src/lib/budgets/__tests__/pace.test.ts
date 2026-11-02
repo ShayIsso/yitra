@@ -6,6 +6,7 @@ import {
   evaluateBudget,
   computeSubtreeSpend,
   computeCategorySpend,
+  computeBudgetSpend,
   classifySavingsTarget,
   monthNetSavings,
   evaluateExpenseTargetPace,
@@ -172,6 +173,26 @@ describe("computeCategorySpend", () => {
     ];
 
     expect(computeSubtreeSpend("shopping", tree, spend)).toBe(400);
+  });
+});
+
+describe("computeBudgetSpend", () => {
+  const row = (
+    categoryId: string,
+    chargedAmount: number,
+    reconciliationRole: "settlement_lump" | "settlement_detail" | null = null,
+  ) => ({ categoryId, categoryType: "expense" as const, chargedAmount, reconciliationRole });
+
+  it("leaves a row reconciliation flagged as the settlement lump out of budget spend", () => {
+    const spend = computeBudgetSpend([
+      row("cards", -2500, "settlement_lump"),
+      row("cards", -40),
+      row("grocery", -300, "settlement_detail"),
+    ]);
+    expect(spend).toEqual([
+      { categoryId: "cards", amount: 40 },
+      { categoryId: "grocery", amount: 300 },
+    ]);
   });
 });
 

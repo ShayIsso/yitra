@@ -7,6 +7,7 @@
  * Client code must import values from `@/lib/analytics/insights`, never from
  * `@/lib/analytics`, whose index pulls the DB client into the bundle.
  */
+import type { Cadence } from "@/lib/recurring-detection";
 import { monthDateRange } from "./month-window";
 
 export type InsightMonth = { year: number; month: number };
@@ -44,8 +45,11 @@ export type RecurringChargeFact = {
   name: string;
   /** Positive expected charge. */
   amount: number;
-  /** YYYY-MM-DD; before `today` when the series is late but still live. */
+  /** Projected YYYY-MM-DD; before `today` when the series is late but still live. */
   date: string;
+  /** YYYY-MM-DD of the series' last observed charge. */
+  lastChargeDate: string;
+  cadence: Cadence;
 };
 
 /**
@@ -190,28 +194,40 @@ function spentFraction(b: BudgetFact): number {
   return b.spent > 0 ? Infinity : 0;
 }
 
+/** Descending; total even with `Infinity` fractions (zero limits), where subtraction gives NaN. */
+function bySpentFractionDesc(a: BudgetFact, b: BudgetFact): number {
+  const fa = spentFraction(a);
+  const fb = spentFraction(b);
+  return fa === fb ? 0 : fa > fb ? -1 : 1;
+}
+
 function budgetRiskInsight(budgets: BudgetFact[]): Insight | null {
   const atRisk = budgets
     .filter((b) => b.verdict === "over" || b.verdict === "at-risk")
     .sort(
       (a, b) =>
-        Number(b.verdict === "over") - Number(a.verdict === "over") ||
-        spentFraction(b) - spentFraction(a),
+        Number(b.verdict === "over") - Number(a.verdict === "over") || bySpentFractionDesc(a, b),
     );
   if (atRisk.length === 0) return null;
   return { kind: "budget-risk", budgets: atRisk };
 }
 
 /**
- * A live series' projection dated before today is late, not gone — it is still
- * owed, so it stays in the card alongside the rest of the month's charges.
+ * A series is still due this month when it has not charged in it yet and either
+ * its projection lands by month end — a late but live projection, dated before
+ * today, is still owed — or it is monthly. The projection is last charge + 30
+ * days, so it can land just past a short month (a charge on Jan 31 projects to
+ * Mar 2) although the bill is February's, and a charge on the 1st of a 31-day
+ * month projects onto the 31st although it is already paid.
  */
 function upcomingRecurringInsight(
   month: InsightMonth,
   charges: RecurringChargeFact[],
 ): Insight | null {
-  const { to } = monthDateRange(month.year, month.month);
-  const due = charges.filter((c) => c.date <= to).sort((a, b) => a.date.localeCompare(b.date));
+  const { from, to } = monthDateRange(month.year, month.month);
+  const due = charges
+    .filter((c) => c.lastChargeDate < from && (c.date <= to || c.cadence === "monthly"))
+    .sort((a, b) => a.date.localeCompare(b.date));
   if (due.length === 0) return null;
   return {
     kind: "upcoming-recurring",
@@ -242,10 +258,13 @@ function categoryJumpInsight(changes: CategoryChangeFact[]): Insight | null {
  * debit (the one dated, unavoidable outflow) always leads, items waiting on the
  * user follow, then risk, the rest of the month's commitments, anomalies, and
  * the month recap always last. Cards about the future (card debit, budget
- * risk, upcoming recurring) exist only while the month is current.
+ * risk, upcoming recurring) exist only while the month is current, and a month
+ * that has not started shows nothing.
  */
 export function selectInsights(facts: InsightFacts): Insight[] {
-  const current = monthPosition(facts.month, facts.today).phase === "current";
+  const phase = monthPosition(facts.month, facts.today).phase;
+  if (phase === "not-started") return [];
+  const current = phase === "current";
   const candidates: (Insight | null)[] = [
     current ? cardDebitInsight(facts.cardDebits) : null,
     countInsight("uncategorized", facts.attention.uncategorized),

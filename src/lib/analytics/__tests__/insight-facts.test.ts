@@ -39,7 +39,7 @@ function row(
     chargedAmount,
     categoryId,
     categoryType: categoryId ? typeOf[categoryId] : null,
-    bankType: "max",
+    reconciliationRole: null,
     ...extra,
   };
 }
@@ -179,16 +179,16 @@ describe("buildInsightFacts", () => {
       expect(facts.categoryChanges.map((c) => [c.categoryId, c.amount])).toEqual([["food", 300]]);
     });
 
-    it("never lets the card-settlement lump on a bank account inflate category spend", () => {
+    it("never lets a row reconciliation flagged as the settlement lump inflate category spend", () => {
       const facts = buildInsightFacts(
         sources({
           rows: {
             month: [
               row("2026-03-02", -3000, "car", {
                 description: "חיוב לכרטיס ויזה",
-                bankType: "discount",
+                reconciliationRole: "settlement_lump",
               }),
-              row("2026-03-03", -120, "car", { description: "מוסך לדוגמה", bankType: "discount" }),
+              row("2026-03-03", -120, "car", { description: "מוסך לדוגמה" }),
             ],
             previous: [],
             beforePrevious: [],
@@ -196,6 +196,23 @@ describe("buildInsightFacts", () => {
         }),
       );
       expect(facts.categoryChanges.map((c) => [c.categoryId, c.amount])).toEqual([["car", 120]]);
+    });
+
+    it("counts ordinary expenses whose description merely looks like a settlement", () => {
+      const facts = buildInsightFacts(
+        sources({
+          rows: {
+            month: [
+              row("2026-03-02", -45, "car", { description: "דמי ניהול חשבון 2026" }),
+              row("2026-03-03", -180, "car", { description: "חיוב ישיר ביטוח לדוגמה" }),
+            ],
+            previous: [],
+            beforePrevious: [],
+          },
+        }),
+      );
+      expect(facts.categoryChanges.map((c) => [c.categoryId, c.amount])).toEqual([["car", 225]]);
+      expect(facts.biggestExpense?.amount).toBe(180);
     });
   });
 
@@ -215,10 +232,7 @@ describe("buildInsightFacts", () => {
               row("2026-03-04", -5000, "moves"),
               row("2026-03-05", -2000, null),
               row("2026-03-25", -4000, "car"),
-              row("2026-03-06", -9000, "car", {
-                description: "חיוב לכרטיס מאסטרקארד",
-                bankType: "discount",
-              }),
+              row("2026-03-06", -9000, "car", { reconciliationRole: "settlement_lump" }),
             ],
             previous: [],
             beforePrevious: [],
@@ -253,14 +267,35 @@ describe("buildInsightFacts", () => {
       row("2026-02-12", -300, "super"),
       row("2026-02-12", -200, "cafe"),
       row("2026-02-20", -500, "car"),
-      row("2026-02-12", -3000, "car", { description: "חיוב ויזה", bankType: "discount" }),
+      row("2026-02-12", -3000, "car", { reconciliationRole: "settlement_lump" }),
       row("2026-02-10", -4000, "moves"),
     ];
     const january = [row("2026-01-04", -1000, "super"), row("2026-01-09", -900, "car")];
     const upcoming: InsightSources["upcoming"] = [
-      { id: "r1", name: "מנוי א", amount: 40, date: "2026-03-20", cadence: "monthly" },
-      { id: "r2", name: "מנוי ב", amount: 60, date: "2026-03-22", cadence: "monthly" },
-      { id: "r3", name: "ביטוח שנתי", amount: 500, date: "2026-03-25", cadence: "annual" },
+      {
+        id: "r1",
+        name: "מנוי א",
+        amount: 40,
+        date: "2026-03-20",
+        lastChargeDate: "2026-02-18",
+        cadence: "monthly",
+      },
+      {
+        id: "r2",
+        name: "מנוי ב",
+        amount: 60,
+        date: "2026-03-22",
+        lastChargeDate: "2026-02-20",
+        cadence: "monthly",
+      },
+      {
+        id: "r3",
+        name: "ביטוח שנתי",
+        amount: 500,
+        date: "2026-03-25",
+        lastChargeDate: "2025-03-25",
+        cadence: "annual",
+      },
     ];
 
     it("recaps last month while the month is current, keeping the lump out of category figures", () => {
@@ -376,22 +411,15 @@ describe("buildInsightFacts", () => {
     ]);
   });
 
-  it("passes the upcoming recurring charges through, rounded to agorot, without their cadence", () => {
-    const facts = buildInsightFacts(
-      sources({
-        upcoming: [
-          {
-            id: "r1",
-            name: "מנוי לדוגמה",
-            amount: 100 / 3,
-            date: "2026-03-20",
-            cadence: "monthly",
-          },
-        ],
-      }),
-    );
-    expect(facts.upcomingRecurring).toEqual([
-      { id: "r1", name: "מנוי לדוגמה", amount: 33.33, date: "2026-03-20" },
-    ]);
+  it("passes the upcoming recurring charges through, rounded to agorot", () => {
+    const charge = {
+      id: "r1",
+      name: "מנוי לדוגמה",
+      date: "2026-03-20",
+      lastChargeDate: "2026-02-18",
+      cadence: "monthly" as const,
+    };
+    const facts = buildInsightFacts(sources({ upcoming: [{ ...charge, amount: 100 / 3 }] }));
+    expect(facts.upcomingRecurring).toEqual([{ ...charge, amount: 33.33 }]);
   });
 });

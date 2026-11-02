@@ -22,6 +22,16 @@ const recap: InsightFacts["recap"] = {
 
 const groceries = { categoryId: "c1", name: "מזון", color: "#111111", icon: "Apple" };
 
+function charge(
+  id: string,
+  amount: number,
+  date: string,
+  lastChargeDate: string,
+  cadence: "monthly" | "quarterly" | "annual" = "monthly",
+) {
+  return { id, name: `מנוי ${id}`, amount, date, lastChargeDate, cadence };
+}
+
 function everything(): Partial<InsightFacts> {
   return {
     cardDebits: [{ accountId: "a1", displayName: "כרטיס א", amount: 1200, date: "2026-03-20" }],
@@ -36,7 +46,7 @@ function everything(): Partial<InsightFacts> {
         limit: 500,
       },
     ],
-    upcomingRecurring: [{ id: "r1", name: "מנוי לדוגמה", amount: 50, date: "2026-03-18" }],
+    upcomingRecurring: [charge("r1", 50, "2026-03-18", "2026-02-16")],
     categoryChanges: [{ ...groceries, amount: 900, previous: 400 }],
     biggestExpense: {
       transactionId: "t1",
@@ -181,38 +191,87 @@ describe("selectInsights", () => {
     });
   });
 
-  it("lists recurring charges still due this month, late ones included, earliest first", () => {
-    const insight = selectInsights(
-      facts({
-        upcomingRecurring: [
-          { id: "r3", name: "ביטוח לדוגמה", amount: 200, date: "2026-03-28" },
-          { id: "r4", name: "מנוי שנתי לדוגמה", amount: 300, date: "2026-04-02" },
-          { id: "r1", name: "מנוי לדוגמה", amount: 50, date: "2026-03-12" },
-          { id: "r2", name: "חדר כושר לדוגמה", amount: 150, date: "2026-03-15" },
-        ],
-      }),
-    );
-    expect(insight).toEqual([
-      {
-        kind: "upcoming-recurring",
-        total: 400,
-        charges: [
-          { id: "r1", name: "מנוי לדוגמה", amount: 50, date: "2026-03-12" },
-          { id: "r2", name: "חדר כושר לדוגמה", amount: 150, date: "2026-03-15" },
-          { id: "r3", name: "ביטוח לדוגמה", amount: 200, date: "2026-03-28" },
-        ],
-      },
-    ]);
+  describe("upcoming recurring", () => {
+    it("lists charges still due this month, late ones included, earliest first", () => {
+      const insight = selectInsights(
+        facts({
+          upcomingRecurring: [
+            charge("r3", 200, "2026-03-28", "2025-12-28", "quarterly"),
+            charge("r4", 300, "2026-04-02", "2025-04-02", "annual"),
+            charge("r1", 50, "2026-03-12", "2026-02-10"),
+            charge("r2", 150, "2026-03-15", "2026-02-13"),
+          ],
+        }),
+      );
+      expect(insight).toEqual([
+        {
+          kind: "upcoming-recurring",
+          total: 400,
+          charges: [
+            charge("r1", 50, "2026-03-12", "2026-02-10"),
+            charge("r2", 150, "2026-03-15", "2026-02-13"),
+            charge("r3", 200, "2026-03-28", "2025-12-28", "quarterly"),
+          ],
+        },
+      ]);
+    });
+
+    it("leaves out a series already charged this month, though its projection lands in it", () => {
+      const insights = selectInsights(
+        facts({ upcomingRecurring: [charge("r1", 50, "2026-03-31", "2026-03-01")] }),
+      );
+      expect(insights).toEqual([]);
+    });
+
+    it("counts a monthly series not yet charged this month even when its projection falls just after it", () => {
+      const insights = selectInsights(
+        facts({
+          month: { year: 2026, month: 2 },
+          today: "2026-02-10",
+          upcomingRecurring: [charge("r1", 50, "2026-03-02", "2026-01-31")],
+        }),
+      );
+      expect(insights).toEqual([
+        {
+          kind: "upcoming-recurring",
+          total: 50,
+          charges: [charge("r1", 50, "2026-03-02", "2026-01-31")],
+        },
+      ]);
+    });
+
+    it("leaves out a longer-cadence series projected after the month", () => {
+      const insights = selectInsights(
+        facts({
+          upcomingRecurring: [charge("r1", 300, "2026-04-02", "2026-01-02", "quarterly")],
+        }),
+      );
+      expect(insights).toEqual([]);
+    });
   });
 
-  it("shows no recurring card when every charge falls after the month", () => {
+  it("shows nothing at all for a month that has not started, attention included", () => {
     const insights = selectInsights(
-      facts({
-        today: "2026-03-30",
-        upcomingRecurring: [{ id: "r1", name: "מנוי לדוגמה", amount: 50, date: "2026-04-01" }],
-      }),
+      facts({ ...everything(), month: { year: 2026, month: 4 }, recap: null }),
     );
     expect(insights).toEqual([]);
+  });
+
+  it("orders zero-limit over-budget categories stably among themselves", () => {
+    const zero = (budgetId: string) => ({
+      budgetId,
+      categoryId: `c-${budgetId}`,
+      categoryName: `קטגוריה ${budgetId}`,
+      verdict: "over" as const,
+      spent: 50,
+      limit: 0,
+    });
+    const [insight] = selectInsights(facts({ budgets: [zero("b1"), zero("b2"), zero("b3")] }));
+    expect(insight.kind === "budget-risk" && insight.budgets.map((b) => b.budgetId)).toEqual([
+      "b1",
+      "b2",
+      "b3",
+    ]);
   });
 
   it("lists over-budget categories before at-risk ones, the most spent first, and skips calm ones", () => {
@@ -249,7 +308,7 @@ describe("selectInsights", () => {
       facts({
         today: "2026-04-03",
         cardDebits: [{ accountId: "a1", displayName: "כרטיס א", amount: 800, date: "2026-04-10" }],
-        upcomingRecurring: [{ id: "r1", name: "מנוי לדוגמה", amount: 50, date: "2026-04-05" }],
+        upcomingRecurring: [charge("r1", 50, "2026-04-05", "2026-03-06")],
         budgets: [
           {
             budgetId: "b1",

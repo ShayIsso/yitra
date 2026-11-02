@@ -13,7 +13,9 @@
 import {
   computeMonthlySummary,
   computeCategoryNetSpend,
+  excludeSettlementLumps,
   type AnalyticsTransaction,
+  type ReconciliationRole,
 } from "@/lib/analytics";
 
 /** A calendar month. Budgets reason per-month; the day lives in {@link MonthElapsed}. */
@@ -150,6 +152,22 @@ export function computeCategorySpend(
     categoryId,
     amount,
   }));
+}
+
+/**
+ * Per-category spend a budget gauge reads: {@link computeCategorySpend} without
+ * rows reconciliation flagged as the card-settlement lump (analytics'
+ * `excludeSettlementLumps`). A flagged lump still carrying an expense category
+ * would otherwise count the card's charges a second time and push its budget
+ * over.
+ */
+export function computeBudgetSpend(
+  transactions: (AnalyticsTransaction & {
+    categoryId: string | null;
+    reconciliationRole: ReconciliationRole | null;
+  })[],
+): CategorySpend[] {
+  return computeCategorySpend(excludeSettlementLumps(transactions));
 }
 
 export type SavingsTargetVerdict = "met" | "missed";
