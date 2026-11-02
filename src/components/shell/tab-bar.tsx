@@ -35,7 +35,8 @@ const SHEET_TILE = "grid size-9 shrink-0 place-items-center rounded-lg [&_svg]:s
 /**
  * Phone (< md) navigation: four tabs plus "more", which opens a bottom sheet
  * holding the remaining destinations and the theme toggle. While the sheet is
- * open, "more" is the one highlighted tab; aria-current stays on the real page.
+ * open, "more" is the one highlighted tab; aria-current stays where the page is
+ * (a tab, or "more" itself for pages behind it).
  */
 export function TabBar({
   pathname,

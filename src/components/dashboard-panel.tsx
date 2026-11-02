@@ -205,7 +205,7 @@ function formatDebitDateHint(isoDate: string): string {
 }
 
 const SAVINGS_RATE_LABEL = "אחוז חיסכון";
-/** The KPI band's tiles in render order; the loading skeleton reuses them. */
+/** The KPI band's tile labels, in order; the loading skeleton renders the same tiles. */
 const KPI_LABELS = ["הכנסות", "הוצאות", "חיסכון נטו", SAVINGS_RATE_LABEL] as const;
 
 function KpiTile({ label, children }: { label: string; children: React.ReactNode }) {
@@ -404,7 +404,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
           <PaceHero pace={budgetsSummary.expenseTargetPace} />
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiTile label="הכנסות">
+            <KpiTile label={KPI_LABELS[0]}>
               {summary ? (
                 <Amount amount={summary.income} fractionDigits={0} className="text-2xl font-bold" />
               ) : (
@@ -412,7 +412,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
               )}
             </KpiTile>
 
-            <KpiTile label="הוצאות">
+            <KpiTile label={KPI_LABELS[1]}>
               {summary ? (
                 // summary.expenses is net outflow, positive for money out (CONTEXT.md
                 // "net outflow"), so sign-driven colorize would read it as positive
@@ -429,7 +429,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
               )}
             </KpiTile>
 
-            <KpiTile label="חיסכון נטו">
+            <KpiTile label={KPI_LABELS[2]}>
               {summary ? (
                 <Amount
                   amount={summary.netSavings}

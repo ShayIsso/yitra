@@ -38,10 +38,15 @@ import { XIcon } from "@/components/icons";
  * - Footer: actions sit side by side (end-aligned) from `md`; in the sheet
  *   they stack full width, primary on top, each at least 44px tall. Only the
  *   footer's direct children are sized, so put the actions there directly.
- * - Close button: a 44px X in the top end corner unless `showCloseButton` is
- *   false; DialogHeader reserves end padding for it only when it is shown.
+ *   `<DialogFooter showCloseButton>` appends a plain "סגירה" action; it is
+ *   unrelated to DialogContent's X.
+ * - Close button: DialogContent draws a 44px X in the top end corner unless
+ *   its `showCloseButton` is false; DialogHeader reserves end padding for it
+ *   only when it is shown.
  * - Focus: Base UI traps focus while open, closes on Escape and on a backdrop
- *   press, and returns focus to the trigger.
+ *   press, and returns focus to the trigger. The popup's bottom scroll padding
+ *   covers the pinned footer, so a field reached by Tab is scrolled into view
+ *   above it rather than under it.
  * - Motion: the sheet slides up, the dialog zooms in; under reduced motion both
  *   only fade (ADR-0015 "Motion").
  */
@@ -96,8 +101,9 @@ function DialogContent({
         data-close-button={showCloseButton ? "" : undefined}
         className={cn(
           "bg-popover text-popover-foreground ring-foreground/10 fixed z-50 grid max-h-[calc(100dvh-2rem)] w-full gap-4 overflow-y-auto overscroll-contain p-4 text-sm ring-1 outline-none",
-          // Sheet (< md)
-          "inset-x-0 bottom-0 rounded-t-xl duration-200",
+          // Sheet (< md). Scroll padding ≈ the pinned footer's height (two
+          // stacked 44px actions in the sheet, one row from md).
+          "inset-x-0 bottom-0 scroll-pb-36 rounded-t-xl duration-200 md:scroll-pb-20",
           "data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom",
           // Centred dialog (md+)
           "md:inset-x-auto md:start-1/2 md:top-1/2 md:bottom-auto md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:duration-100 md:rtl:translate-x-1/2",

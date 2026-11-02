@@ -23,7 +23,7 @@ function renderShell(pathname: string, pendingReconCount = 0) {
   const html = markup(
     createElement(AppShell, { pendingReconCount }, createElement("p", null, "page body")),
   );
-  const navs = [...html.matchAll(/<nav aria-label="([^"]*)"[^>]*>(.*?)<\/nav>/g)];
+  const navs = [...html.matchAll(/<nav[^>]*\saria-label="([^"]*)"[^>]*>(.*?)<\/nav>/g)];
   expect(navs).toHaveLength(2);
   const [rail, tabBar] = navs;
   return { html, rail: rail[2], railLabel: rail[1], tabBar: tabBar[2], tabBarLabel: tabBar[1] };
@@ -43,7 +43,7 @@ const visibleLabels = (nav: string) =>
   [...nav.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map((m) =>
     m[1]
       .replace(/<span class="sr-only">.*?<\/span>/g, "")
-      .replace(/<span aria-hidden="true"[^>]*>.*?<\/span>/g, "")
+      .replace(/<span[^>]*\saria-hidden="true"[^>]*>.*?<\/span>/g, "")
       .replace(/<[^>]+>/g, ""),
   );
 
@@ -92,13 +92,13 @@ describe("the desktop rail", () => {
 
   it("announces the pending reconciliation count and shows it in a decorative badge", () => {
     const recon = item(renderShell("/", 7).rail, "התאמות");
-    expect(recon).toMatch(/<span aria-hidden="true"[^>]*>7<\/span>/);
+    expect(recon).toMatch(/<span[^>]*\saria-hidden="true"[^>]*>7<\/span>/);
     expect(recon).toMatch(/<span class="sr-only">, 7 ממתינות<\/span>/);
   });
 
   it("shows no badge when nothing is pending", () => {
     const recon = item(renderShell("/", 0).rail, "התאמות");
-    expect(recon).not.toContain('aria-hidden="true" class');
+    expect(recon).not.toMatch(/<span[^>]*\saria-hidden="true"/);
     expect(recon).not.toContain("ממתינות");
   });
 });

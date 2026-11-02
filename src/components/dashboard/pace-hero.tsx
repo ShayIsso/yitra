@@ -87,16 +87,6 @@ function clampLabelPosition(percent: number): number {
   return Math.min(94, Math.max(6, percent));
 }
 
-/**
- * A′ pace hero — the layout's emotional anchor ("am I on track this month?").
- * Both label rows anchor via `right` (not `insetInlineStart`): under the
- * app's mandatory `dir="rtl"`, an unfilled bar/gauge grows from the right
- * (CONTEXT.md convention — see the goal-ladder and savings-rate gauges), so
- * "percent along the bar" is measured from the right edge here too. The
- * elapsed-time tick and spend labels sit on separate rows (above/below the
- * bar) rather than sharing one, so a near-zero gap between them — the exact
- * case the label pair exists to surface — never renders as overlapping text.
- */
 function PaceHeroHeader() {
   return (
     <CardHeader className="pb-2">
@@ -112,6 +102,8 @@ function PaceHeroHeader() {
  * Loading state with the paced layout's exact row heights (amount line, label
  * rows, bar, sentence), so the swap to content does not move what follows
  * (CLS, ADR-0015 "Performance"). Keep it in step with the paced branch below.
+ * It matches the paced state only (a target is set, the sentence fits one
+ * line); the no-target empty state is a different height.
  */
 export function PaceHeroSkeleton() {
   return (
@@ -132,6 +124,16 @@ export function PaceHeroSkeleton() {
   );
 }
 
+/**
+ * A′ pace hero — the layout's emotional anchor ("am I on track this month?").
+ * Both label rows anchor via `right` (not `insetInlineStart`): under the
+ * app's mandatory `dir="rtl"`, an unfilled bar/gauge grows from the right
+ * (CONTEXT.md convention — see the goal-ladder and savings-rate gauges), so
+ * "percent along the bar" is measured from the right edge here too. The
+ * elapsed-time tick and spend labels sit on separate rows (above/below the
+ * bar) rather than sharing one, so a near-zero gap between them — the exact
+ * case the label pair exists to surface — never renders as overlapping text.
+ */
 export function PaceHero({ pace }: PaceHeroProps) {
   const vm = paceHeroViewModel(pace);
 
