@@ -4,16 +4,16 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowsClockwiseIcon,
-  BankIcon,
+  CalendarBlankIcon,
   CaretLeftIcon,
   CaretRightIcon,
+  ChartPieSliceIcon,
+  FunnelIcon,
+  KeyIcon,
   ListChecksIcon,
   MoonIcon,
-  PiggyBankIcon,
+  ShieldCheckIcon,
   SparkleIcon,
-  TagIcon,
-  TargetIcon,
-  WalletIcon,
 } from "@/components/icons";
 import { Amount } from "@/components/ui/amount";
 import { Card } from "@/components/ui/card";
@@ -37,13 +37,13 @@ export type SectionSummary =
   | { readonly kind: "amount"; readonly amount: number; readonly suffix: string };
 
 const SECTION_ICONS: Record<SettingsSection, React.ReactNode> = {
-  accounts: <BankIcon weight="regular" />,
-  categories: <TagIcon />,
+  accounts: <KeyIcon />,
+  categories: <ChartPieSliceIcon weight="regular" />,
   rules: <ListChecksIcon />,
   ai: <SparkleIcon weight="regular" />,
-  targets: <TargetIcon />,
-  budgets: <WalletIcon />,
-  goals: <PiggyBankIcon weight="regular" />,
+  targets: <CalendarBlankIcon />,
+  budgets: <FunnelIcon />,
+  goals: <ShieldCheckIcon />,
   scheduler: <ArrowsClockwiseIcon weight="regular" />,
   appearance: <MoonIcon />,
 };

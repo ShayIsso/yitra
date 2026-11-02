@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { TrashIcon, WalletIcon } from "@/components/icons";
+import { FunnelIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -171,7 +171,7 @@ export function BudgetsSection({
 
       {budgets.length === 0 ? (
         <SectionEmpty
-          icon={<WalletIcon />}
+          icon={<FunnelIcon />}
           title="עדיין לא הוגדרו תקציבים"
           description="תקציב שם תקרה חודשית לקטגוריה או לקבוצה, ומסך הבית מראה כמה ממנה כבר נוצל."
           action={<AddButton label="תקציב חדש" onClick={openAdd} />}
@@ -188,7 +188,7 @@ export function BudgetsSection({
                 openLabel={`עריכת התקציב של ${name}`}
                 leading={
                   <RowTile>
-                    <WalletIcon />
+                    <FunnelIcon />
                   </RowTile>
                 }
                 title={name}

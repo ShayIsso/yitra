@@ -8,9 +8,6 @@ import type { IconWeight } from "@phosphor-icons/react/dist/lib/types";
  *   npx tsx scripts/icons/generate-phosphor.ts
  *
  * and re-check the set against the icon budget (docs/perf-baseline.md).
- *
- * An icon's first weight is what it draws when no `weight` is passed, so a
- * weight added for a new use goes last.
  */
 export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   // Navigation (regular inactive, fill active)
@@ -59,13 +56,6 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   ArrowsDownUp: ["regular"],
   DownloadSimple: ["regular"],
 
-  // Settings sections and row actions (#325)
-  Tag: ["regular"],
-  Wallet: ["regular"],
-  Target: ["regular"],
-  Archive: ["regular"],
-  LinkBreak: ["regular"],
-
   // Status
   WarningCircle: ["fill"],
   CheckCircle: ["fill"],
@@ -81,10 +71,10 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   Storefront: ["duotone"],
   ArrowCircleDown: ["duotone"],
   ArrowCircleUp: ["duotone"],
-  PiggyBank: ["duotone", "regular"],
+  PiggyBank: ["duotone"],
   Percent: ["duotone"],
   ChartLineUp: ["duotone"],
-  Bank: ["duotone", "regular"],
+  Bank: ["duotone"],
 
   // Category marks (the categories.icon column stores Lucide names; the
   // redesign maps them onto these)

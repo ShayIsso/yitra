@@ -38,7 +38,7 @@ import {
   HandCoins,
   type LucideIcon,
 } from "lucide-react";
-import { LinkBreakIcon, TagIcon, TrashIcon } from "@/components/icons";
+import { ArrowUpIcon, ChartPieSliceIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -386,7 +386,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
                 onClick={() => handleDetach(cat)}
                 disabled={isDetachPending}
               >
-                <LinkBreakIcon />
+                <ArrowUpIcon />
               </RowAction>
             )}
             {!cat.isDefault && (
@@ -416,7 +416,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
 
       {tree.length === 0 ? (
         <SectionEmpty
-          icon={<TagIcon />}
+          icon={<ChartPieSliceIcon weight="regular" />}
           title="אין עדיין קטגוריות"
           description="קטגוריות מסדרות את התנועות להכנסות, הוצאות, השקעות והעברות, וכל הדוחות נשענים עליהן."
           action={<AddButton label="קטגוריה חדשה" onClick={openAdd} />}

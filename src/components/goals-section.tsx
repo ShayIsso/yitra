@@ -5,7 +5,6 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  ArchiveIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   CaretDownIcon,
@@ -13,6 +12,7 @@ import {
   InfoIcon,
   PiggyBankIcon,
   TrashIcon,
+  TrayIcon,
 } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -379,7 +379,7 @@ export function GoalsSection({
 
       {activeGoals.length === 0 ? (
         <SectionEmpty
-          icon={<PiggyBankIcon weight="regular" />}
+          icon={<PiggyBankIcon />}
           title={hasAnyGoal ? "אין יעדים פעילים" : "עדיין אין יעדי חיסכון"}
           description="יעד חיסכון הוא סכום שתרצו לצבור, למשל קרן חירום או חופשה. Yitra עוקבת אחרי ההתקדמות לפי החיסכון נטו בכל חודש."
           action={<AddButton label="יעד חדש" onClick={openAdd} />}
@@ -448,7 +448,7 @@ export function GoalsSection({
                       label={`העברת ${goal.name} לארכיון`}
                       onClick={() => openArchive(goal)}
                     >
-                      <ArchiveIcon />
+                      <TrayIcon weight="regular" />
                     </RowAction>
                   )}
                   <RowAction
@@ -475,7 +475,7 @@ export function GoalsSection({
             aria-expanded={showArchived}
             className="text-muted-foreground hover:text-foreground focus-visible:ring-ring text-body flex min-h-12 w-full items-center gap-2 px-4 text-start outline-none focus-visible:ring-3 focus-visible:ring-inset"
           >
-            <ArchiveIcon className="size-4" />
+            <TrayIcon weight="regular" className="size-4" />
             <span className="flex-1">יעדים בארכיון ({archivedGoals.length})</span>
             <CaretDownIcon
               className={cn("size-4 transition-transform", showArchived && "rotate-180")}
