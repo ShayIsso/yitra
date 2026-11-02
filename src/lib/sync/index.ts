@@ -61,9 +61,13 @@ const globalForSyncClaim = globalThis as typeof globalThis & {
 };
 const syncClaim = (globalForSyncClaim[GLOBAL_CLAIM_KEY] ??= createSyncClaim());
 
-/** Whether the sync claim is held — by a sync or by the categorization backfill, which shares it. */
-export function isSyncClaimHeld(): boolean {
-  return syncClaim.isHeld();
+/**
+ * When the sync claim was taken, or null while free. The categorization
+ * backfill holds the same claim, so this is "a run is in progress", not
+ * necessarily a bank sync.
+ */
+export function syncClaimHeldSince(): Date | null {
+  return syncClaim.heldSince();
 }
 
 export type SyncOptions = {

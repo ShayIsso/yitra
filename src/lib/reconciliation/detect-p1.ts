@@ -8,14 +8,7 @@ const CYCLE_WINDOW_DAYS = 35;
 const OVERLAP_PENALTY = 0.25;
 const MIN_CONFIDENCE = 0.7;
 
-/**
- * The one definition of a settlement charge's shape (CONTEXT.md "The Paradox"):
- * a bank-kind row whose description is card_settlement-shaped. P1 pairs it
- * with card evidence; the month outlook keeps an unreconciled one out of spend.
- */
-export function isSettlementChargeShape(
-  tx: Pick<ReconciliationTransaction, "bankType" | "description">,
-): boolean {
+function isBankLumpCandidate(tx: ReconciliationTransaction): boolean {
   if (bankKindOf(tx.bankType) !== "bank") return false;
   return matchesTransferDescriptor(tx.description, ["card_settlement"]);
 }
@@ -32,7 +25,7 @@ export function detectP1Settlement(
 ): ReconciliationCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
-  const bankLumps = unreconciled.filter(isSettlementChargeShape);
+  const bankLumps = unreconciled.filter(isBankLumpCandidate);
   const cardTxns = unreconciled.filter((tx) => bankKindOf(tx.bankType) === "card");
 
   if (bankLumps.length === 0 || cardTxns.length === 0) return [];

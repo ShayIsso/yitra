@@ -38,14 +38,12 @@ function carriesCategory(row: StoredTransaction): boolean {
   return row.categoryId !== null && row.categorySource != null && row.categorySource !== "ai";
 }
 
-type TwinCandidate = Pick<StoredTransaction, "id" | "date" | "description" | "chargedAmount">;
-
-function exactTwin<T extends TwinCandidate>(
-  pending: TwinCandidate,
-  completed: readonly T[],
+function exactTwin(
+  pending: StoredTransaction,
+  completed: StoredTransaction[],
   taken: ReadonlySet<string>,
-): T | null {
-  let best: T | null = null;
+): StoredTransaction | null {
+  let best: StoredTransaction | null = null;
   let bestGap = Infinity;
   for (const c of completed) {
     if (taken.has(c.id)) continue;
@@ -59,39 +57,8 @@ function exactTwin<T extends TwinCandidate>(
   return best;
 }
 
-function byDateThenId(a: TwinCandidate, b: TwinCandidate): number {
+function byDateThenId(a: StoredTransaction, b: StoredTransaction): number {
   return calendarDate(a.date).localeCompare(calendarDate(b.date)) || a.id.localeCompare(b.id);
-}
-
-/**
- * Pending rows that an exact completed twin on the same account already proves
- * posted: the rows twin healing removes on that account's next successful
- * import (CONTEXT.md "pending lifecycle"). A read that runs before then skips
- * these so the charge counts once. Each twin retires one pending row, paired
- * in the same order the sweep pairs them.
- */
-export function pendingWithCompletedTwin(
-  rows: readonly (TwinCandidate & Pick<StoredTransaction, "bankAccountId" | "status">)[],
-): Set<string> {
-  const sorted = [...rows].sort(byDateThenId);
-  const completedByAccount = new Map<string, TwinCandidate[]>();
-  for (const row of sorted) {
-    if (row.status !== "completed") continue;
-    const bucket = completedByAccount.get(row.bankAccountId);
-    if (bucket) bucket.push(row);
-    else completedByAccount.set(row.bankAccountId, [row]);
-  }
-
-  const superseded = new Set<string>();
-  const taken = new Set<string>();
-  for (const row of sorted) {
-    if (row.status !== "pending") continue;
-    const twin = exactTwin(row, completedByAccount.get(row.bankAccountId) ?? [], taken);
-    if (!twin) continue;
-    taken.add(twin.id);
-    superseded.add(row.id);
-  }
-  return superseded;
 }
 
 /**

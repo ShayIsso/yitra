@@ -7,19 +7,21 @@
  * Spent follows the app's financial rules rather than restating them: totals
  * come from analytics' `computeMonthlySummary` (CONTEXT.md "net outflow"), so a
  * refund offsets spend, transfer/ignore are invisible and investment is not an
- * expense. On top of that the outlook drops three kinds of row a month-to-date
+ * expense. On top of that the outlook drops two kinds of row a month-to-date
  * figure must not count: rows dated after `today` (scheduled and installment
- * rows the bank already lists), a settlement charge not yet reconciled to
- * `transfer` (reconciliation's lump shape), and a pending row whose exact
- * completed twin is already stored (CONTEXT.md "pending lifecycle").
+ * rows the bank already lists) and a row reconciliation flagged as a
+ * `settlement_lump` (CONTEXT.md "settlement charge"). A lump is recognised by
+ * that flag only, never by its description: outside P1's pairing with card
+ * totals the descriptor shape also matches ordinary direct debits, years and
+ * reference numbers. Pending rows count as stored: the import's pending
+ * lifecycle already supersedes and sweeps them, so a pending row beside a
+ * same-looking posted one is a repeat purchase.
  */
 import {
   computeMonthlySummary,
   outflowContribution,
   type AnalyticsTransaction,
 } from "@/lib/analytics";
-import { isSettlementChargeShape } from "@/lib/reconciliation";
-import { pendingWithCompletedTwin } from "@/lib/transactions";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 
 /**
@@ -59,15 +61,13 @@ export const SUGGESTED_TARGET_STEPS: readonly { below: number; step: number }[] 
 
 export type OutlookRow = {
   id: string;
-  bankAccountId: string;
-  /** Institution id; its registry kind decides whether the row can be a settlement charge. */
-  bankType: string;
   /** YYYY-MM-DD, `transactions.date`. */
   date: string;
   description: string;
   chargedAmount: number;
   status: "pending" | "completed";
   categoryType: AnalyticsTransaction["categoryType"];
+  reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair" | null;
 };
 
 /** One live recurring series' charge for the month (CONTEXT.md "projected charge"). */
@@ -95,8 +95,12 @@ export type MonthOutlookInput = {
   rows: OutlookRow[];
   recurring: OutlookRecurringCharge[];
   history: PriorMonthExpenses[];
-  /** YYYY-MM-DD of the earliest stored transaction: how far back history is complete. */
-  dataSince: string | null;
+  /**
+   * YYYY-MM-DD from which every current account's data is present: the latest
+   * of the accounts' earliest transactions. A prior month is complete only
+   * when this reaches back to its first day.
+   */
+  historyCompleteSince: string | null;
   lastSuccessfulSyncAt: Date | null;
   credentialCount: number;
   sync: { running: boolean; banksDone: number };
@@ -153,7 +157,10 @@ export type MonthOutlook =
       overBy: number | null;
       /** Null when history is thin. */
       projection: Projection | null;
-      /** YYYY-MM-DD of the first day the projection exceeds the target; null when it doesn't. */
+      /**
+       * YYYY-MM-DD of the first day the projection exceeds the target; null when
+       * it doesn't, and null whenever `overBy` is set.
+       */
       crossingDate: string | null;
       /** Which side of the blend dominates; null with no projection. */
       projectionBasis: ProjectionBasis | null;
@@ -168,6 +175,23 @@ export type MonthOutlook =
       target: number | null;
       overBy: number | null;
     };
+
+const israelDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Jerusalem",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * The outlook's "today": the calendar day in Israel, where the owner and the
+ * banks are. A UTC day would still be yesterday for the first two or three
+ * hours of each local day, and on the 1st would refuse the month that just
+ * began.
+ */
+export function outlookToday(now: Date): string {
+  return israelDay.format(now);
+}
 
 function toAgorot(amount: number): number {
   return Math.round(amount * 100) / 100 || 0;
@@ -185,19 +209,25 @@ function isoDay(month: YearMonth, day: number): string {
 
 /**
  * The month's rows that count, through `throughDate` inclusive: inside the
- * month, not future-dated, not an unreconciled settlement charge, and not a
- * pending row its stored completed twin supersedes.
+ * month, not future-dated, and not the flagged settlement lump.
  */
 function countedRows(rows: readonly OutlookRow[], month: YearMonth, throughDate: string) {
   const prefix = `${monthKey(month)}-`;
-  const superseded = pendingWithCompletedTwin(rows);
   return rows.filter(
     (r) =>
       r.date.startsWith(prefix) &&
       r.date <= throughDate &&
-      !superseded.has(r.id) &&
-      !(r.categoryType === "expense" && isSettlementChargeShape(r)),
+      r.reconciliationRole !== "settlement_lump",
   );
+}
+
+/**
+ * Whether a row adds to the month's spend under the outlook's rules: an
+ * expense-typed row that is not the flagged settlement lump. A recurring
+ * series has arrived only through such a row.
+ */
+export function countsAsSpend(row: Pick<OutlookRow, "categoryType" | "reconciliationRole">) {
+  return row.categoryType === "expense" && row.reconciliationRole !== "settlement_lump";
 }
 
 /** A whole month by the outlook's rules. */
@@ -214,8 +244,8 @@ export function outlookMonthExpenses(rows: readonly OutlookRow[], month: YearMon
   return wholeMonthSummary(rows, month).expenses;
 }
 
-function isComplete(month: YearMonth, dataSince: string | null): boolean {
-  return dataSince !== null && dataSince <= isoDay(month, 1);
+function isComplete(month: YearMonth, historyCompleteSince: string | null): boolean {
+  return historyCompleteSince !== null && historyCompleteSince <= isoDay(month, 1);
 }
 
 const ordinal = (month: YearMonth): number => month.year * 12 + month.month;
@@ -224,7 +254,7 @@ const ordinal = (month: YearMonth): number => month.year * 12 + month.month;
 function usualMonthOf(input: MonthOutlookInput): number | null {
   const full = input.history
     .filter((h) => ordinal(h.month) < ordinal(input.month))
-    .filter((h) => h.expenses > 0 && isComplete(h.month, input.dataSince))
+    .filter((h) => h.expenses > 0 && isComplete(h.month, input.historyCompleteSince))
     .sort((a, b) => ordinal(b.month) - ordinal(a.month));
   if (full.length < THIN_HISTORY_MIN_FULL_MONTHS) return null;
   const used = full.slice(0, USUAL_MONTH_SPAN);
@@ -252,10 +282,11 @@ function project(args: {
   usualMonth: number;
   recurring: readonly OutlookRecurringCharge[];
   dueCharges: readonly DueRecurringCharge[];
+  today: string;
   day: number;
   daysInMonth: number;
 }): { projection: Projection; basis: ProjectionBasis } {
-  const { counted, spent, usualMonth, recurring, dueCharges, day, daysInMonth } = args;
+  const { counted, spent, usualMonth, recurring, dueCharges, today, day, daysInMonth } = args;
 
   let cum = 0;
   const actual = dailyNetExpense(counted, day).map((amount) => toAgorot((cum += amount)));
@@ -269,11 +300,14 @@ function project(args: {
   const historyWeight = Math.max(0, 1 - day / HISTORY_WEIGHT_DECAY_DAYS);
   const rate = historyWeight * historyRate + (1 - historyWeight) * paceRate;
 
-  // A late charge (or one dated today or earlier) lands on the next day; on the
-  // month's last day there is no next day, so it lands today.
+  // A charge expected today or earlier — late, possibly since last month —
+  // lands on the next day; on the month's last day there is no next day, so it
+  // lands today. Due charges never fall after the month (`monthOutlook` filters
+  // them), so a later date is a day of this month.
   const landing = new Map<number, number>();
   for (const c of dueCharges) {
-    const landDay = Math.min(daysInMonth, Math.max(dayOf(c.expectedDate), day + 1));
+    const expected = c.expectedDate <= today ? day + 1 : dayOf(c.expectedDate);
+    const landDay = Math.min(daysInMonth, expected);
     landing.set(landDay, (landing.get(landDay) ?? 0) + c.amount);
   }
 
@@ -290,14 +324,19 @@ function project(args: {
   };
 }
 
+/**
+ * Null once the month is already committed over target (`overBy` is set):
+ * spent plus what's due exceeds it whatever the variable pace does, so a
+ * crossing date would only restate the overage.
+ */
 function crossingDateOf(
   projected: readonly number[],
-  spent: number,
+  remaining: number,
   target: number,
   month: YearMonth,
   day: number,
 ): string | null {
-  if (spent > target) return null;
+  if (remaining < 0) return null;
   const index = projected.findIndex((cum) => cum > target);
   return index === -1 ? null : isoDay(month, day + index);
 }
@@ -367,6 +406,7 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
           usualMonth,
           recurring: input.recurring.filter((c) => c.arrived || c.expectedDate <= monthEnd),
           dueCharges,
+          today,
           day: elapsed.dayOfMonth,
           daysInMonth: elapsed.daysInMonth,
         });
@@ -383,7 +423,7 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
     overBy: remaining < 0 ? toAgorot(-remaining) : null,
     projection: projected?.projection ?? null,
     crossingDate: projected
-      ? crossingDateOf(projected.projection.projected, spent, target, month, elapsed.dayOfMonth)
+      ? crossingDateOf(projected.projection.projected, remaining, target, month, elapsed.dayOfMonth)
       : null,
     projectionBasis: projected?.basis ?? null,
     asOf,

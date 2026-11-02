@@ -1,34 +1,20 @@
 /**
- * The month outlook's DB-backed wrapper: gathers `monthOutlook`'s inputs behind
- * a store (ADR-0007) and calls the pure core. Rows are read on
- * `transactions.date` through analytics' `monthDateRange`, the window every
- * Dashboard and budget figure uses, so the outlook's spend agrees with them.
+ * Gathers `monthOutlook`'s inputs behind a store (ADR-0007) and calls the pure
+ * core. Rows are read on `transactions.date` through analytics'
+ * `monthDateRange`, the window every Dashboard and budget figure uses, so the
+ * outlook's spend agrees with them. The Drizzle store lives in the budgets
+ * index beside the other DB-backed reads.
  */
-import { and, eq, gte, lte, min } from "drizzle-orm";
-import { db } from "@/db";
-import {
-  bankAccounts,
-  bankCredentials,
-  categories,
-  monthlyTargets,
-  transactions,
-} from "@/db/schema";
 import { monthDateRange } from "@/lib/analytics";
 import {
-  drizzleRecurringStore,
   projectSeries,
   type DetectionTransaction,
   type PersistedRecurringPattern,
 } from "@/lib/recurring-detection";
-import { runsOfCurrentInstitutions } from "@/lib/sync/current-runs";
+import type { SyncRunSummary } from "@/lib/sync/runs";
+import { merchantKey, sameMerchant } from "@/lib/transaction-matching";
 import {
-  drizzleSyncRunStore,
-  getLastRecordedSuccessPerBank,
-  getLastRunPerBank,
-  type SyncRunSummary,
-} from "@/lib/sync/runs";
-import { pendingWithCompletedTwin } from "@/lib/transactions";
-import {
+  countsAsSpend,
   monthOutlook,
   outlookMonthExpenses,
   type MonthOutlook,
@@ -44,8 +30,8 @@ const HISTORY_MONTHS = 12;
 export type MonthOutlookStore = {
   /** Every transaction dated in [from, to], inclusive YYYY-MM-DD. */
   loadRows(from: string, to: string): Promise<OutlookRow[]>;
-  /** YYYY-MM-DD of the earliest stored transaction, or null when there are none. */
-  earliestTransactionDate(): Promise<string | null>;
+  /** YYYY-MM-DD of each bank account's earliest stored transaction. */
+  accountHistoryStarts(): Promise<string[]>;
   expenseTarget(): Promise<number | null>;
   /** Non-canceled series and the money-out evidence that judges their liveness (ADR-0012). */
   recurring(): Promise<{
@@ -58,7 +44,8 @@ export type MonthOutlookStore = {
   lastRunPerBank(): Promise<SyncRunSummary[]>;
   /** Per institution, when its latest run that finished successfully finished. */
   lastRecordedSuccessPerBank(): Promise<{ bank: string; finishedAt: Date }[]>;
-  isSyncRunning(): Promise<boolean>;
+  /** When the in-progress sync run began, or null when none is running. */
+  syncRunningSince(): Promise<Date | null>;
 };
 
 export type OutlookClock = {
@@ -72,19 +59,26 @@ function addMonths(month: YearMonth, delta: number): YearMonth {
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };
 }
 
+const keyOf = (month: YearMonth): string =>
+  monthDateRange(month.year, month.month).from.slice(0, 7);
+
 /**
- * Each live, active series' charge for the month. One whose latest charge is
- * already in the month up to today has arrived; one listed later in the month
- * is still due on that date; any other is due on its projected date, which may
- * be in the past (late but live).
+ * Each live, active series' charge for the month. Its latest charge has
+ * arrived only when that row is in the month up to today AND counts as spend
+ * — an uncategorized posting adds nothing to spent, so it stays due rather
+ * than vanishing from both. A charge the bank lists later in the month is due
+ * on that date; any other is due on its projected date, which may be in the
+ * past (late but live).
  */
 function recurringCharges(
   patterns: PersistedRecurringPattern[],
   transactions: DetectionTransaction[],
+  monthRows: OutlookRow[],
   month: YearMonth,
   today: string,
 ): OutlookRecurringCharge[] {
   const { from, to } = monthDateRange(month.year, month.month);
+  const spendIds = new Set(monthRows.filter(countsAsSpend).map((r) => r.id));
   const projections = projectSeries(patterns, transactions, new Date(`${today}T00:00:00.000Z`));
   const charges: OutlookRecurringCharge[] = [];
 
@@ -94,11 +88,17 @@ function recurringCharges(
 
     const lastCharge = evidence.lastObservedChargeDate.toISOString().slice(0, 10);
     const inMonth = lastCharge >= from && lastCharge <= to;
+    const lastChargeIsSpend = transactions.some(
+      (t) =>
+        t.date === lastCharge &&
+        spendIds.has(t.id) &&
+        sameMerchant(merchantKey(t.description), pattern.merchant),
+    );
     charges.push({
       id: pattern.id,
       amount: evidence.observedAmount,
       expectedDate: inMonth ? lastCharge : evidence.projectedDate.toISOString().slice(0, 10),
-      arrived: inMonth && lastCharge <= today,
+      arrived: inMonth && lastCharge <= today && lastChargeIsSpend,
     });
   });
   return charges;
@@ -118,40 +118,54 @@ function lastSuccessfulSyncAt(
   return times.length === 0 ? null : new Date(Math.min(...times));
 }
 
+/**
+ * Connected credentials whose institution's run finished during the current
+ * sync — same unit as `banksTotal` (credentials). A run left over from an
+ * earlier attempt started before the current one and is not progress.
+ */
+function credentialsDone(
+  credentialBankTypes: string[],
+  lastRuns: SyncRunSummary[],
+  runningSince: Date | null,
+): number {
+  if (runningSince === null) return 0;
+  const finishedNow = new Set(
+    lastRuns
+      .filter((r) => r.finishedAt !== null && r.startedAt.getTime() >= runningSince.getTime())
+      .map((r) => r.bank),
+  );
+  return credentialBankTypes.filter((bank) => finishedNow.has(bank)).length;
+}
+
 export async function getMonthOutlookWithStore(
   month: YearMonth,
   clock: OutlookClock,
   store: MonthOutlookStore,
 ): Promise<MonthOutlook> {
   const historyStart = addMonths(month, -HISTORY_MONTHS);
-  const [rows, dataSince, target, recurring, bankTypes, lastRuns, successes, running] =
+  const [rows, accountStarts, target, recurring, bankTypes, lastRuns, successes, runningSince] =
     await Promise.all([
       store.loadRows(
         monthDateRange(historyStart.year, historyStart.month).from,
         monthDateRange(month.year, month.month).to,
       ),
-      store.earliestTransactionDate(),
+      store.accountHistoryStarts(),
       store.expenseTarget(),
       store.recurring(),
       store.credentialBankTypes(),
       store.lastRunPerBank(),
       store.lastRecordedSuccessPerBank(),
-      store.isSyncRunning(),
+      store.syncRunningSince(),
     ]);
 
-  // Twins pair across the whole read, not per month: a pending row on the 31st
-  // whose posted version is dated the 1st must not count in both months.
-  const superseded = pendingWithCompletedTwin(rows);
   const rowsByMonth = new Map<string, OutlookRow[]>();
   for (const row of rows) {
-    if (superseded.has(row.id)) continue;
     const key = row.date.slice(0, 7);
     const bucket = rowsByMonth.get(key);
     if (bucket) bucket.push(row);
     else rowsByMonth.set(key, [row]);
   }
-  const rowsOf = (m: YearMonth) =>
-    rowsByMonth.get(`${m.year}-${String(m.month).padStart(2, "0")}`) ?? [];
+  const rowsOf = (m: YearMonth) => rowsByMonth.get(keyOf(m)) ?? [];
 
   const history: PriorMonthExpenses[] = [];
   for (let back = 1; back <= HISTORY_MONTHS; back++) {
@@ -159,88 +173,27 @@ export async function getMonthOutlookWithStore(
     history.push({ month: prior, expenses: outlookMonthExpenses(rowsOf(prior), prior) });
   }
 
+  const monthRows = rowsOf(month);
   return monthOutlook({
     month,
     today: clock.today,
     now: clock.now,
     target,
-    rows: rowsOf(month),
-    recurring: recurringCharges(recurring.patterns, recurring.transactions, month, clock.today),
+    rows: monthRows,
+    recurring: recurringCharges(
+      recurring.patterns,
+      recurring.transactions,
+      monthRows,
+      month,
+      clock.today,
+    ),
     history,
-    dataSince,
+    historyCompleteSince: accountStarts.length === 0 ? null : [...accountStarts].sort().at(-1)!,
     lastSuccessfulSyncAt: lastSuccessfulSyncAt(successes, bankTypes),
     credentialCount: bankTypes.length,
     sync: {
-      running,
-      banksDone: runsOfCurrentInstitutions(lastRuns, bankTypes).filter((r) => r.finishedAt !== null)
-        .length,
+      running: runningSince !== null,
+      banksDone: credentialsDone(bankTypes, lastRuns, runningSince),
     },
   });
 }
-
-export const drizzleMonthOutlookStore: MonthOutlookStore = {
-  async loadRows(from, to) {
-    const rows = await db
-      .select({
-        id: transactions.id,
-        bankAccountId: transactions.bankAccountId,
-        bankType: bankCredentials.bankType,
-        date: transactions.date,
-        description: transactions.description,
-        chargedAmount: transactions.chargedAmount,
-        status: transactions.status,
-        categoryType: categories.type,
-      })
-      .from(transactions)
-      .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
-      .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
-      .leftJoin(categories, eq(transactions.categoryId, categories.id))
-      .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-    return rows.map((r) => ({
-      ...r,
-      chargedAmount: Number(r.chargedAmount),
-      categoryType: r.categoryType ?? null,
-    }));
-  },
-
-  async earliestTransactionDate() {
-    const [row] = await db.select({ earliest: min(transactions.date) }).from(transactions);
-    return row?.earliest ?? null;
-  },
-
-  async expenseTarget() {
-    const [row] = await db
-      .select({ expenseTarget: monthlyTargets.expenseTarget })
-      .from(monthlyTargets)
-      .where(eq(monthlyTargets.id, 1));
-    return row?.expenseTarget != null ? Number(row.expenseTarget) : null;
-  },
-
-  async recurring() {
-    const [patterns, txns] = await Promise.all([
-      drizzleRecurringStore.getPersistedPatterns(),
-      drizzleRecurringStore.getTransactionsForDetection(),
-    ]);
-    return { patterns, transactions: txns };
-  },
-
-  async credentialBankTypes() {
-    const rows = await db.select({ bankType: bankCredentials.bankType }).from(bankCredentials);
-    return rows.map((r) => r.bankType);
-  },
-
-  lastRunPerBank() {
-    return getLastRunPerBank(drizzleSyncRunStore);
-  },
-
-  lastRecordedSuccessPerBank() {
-    return getLastRecordedSuccessPerBank();
-  },
-
-  async isSyncRunning() {
-    // Lazy: the sync barrel pulls in the scraper, which no budgets read needs loaded.
-    const { isSyncClaimHeld } = await import("@/lib/sync");
-    return isSyncClaimHeld();
-  },
-};

@@ -14,17 +14,17 @@ const JUNE = { year: 2026, month: 6 };
 const SYNCED = new Date("2026-06-15T06:00:00Z");
 
 let nextId = 0;
-function spend(date: string, amount: number): OutlookRow {
+function spend(date: string, amount: number, over: Partial<OutlookRow> = {}): OutlookRow {
   nextId += 1;
   return {
     id: `row-${nextId}`,
-    bankAccountId: "acct-card",
-    bankType: "max",
     date,
     description: `Invented Shop ${nextId}`,
     chargedAmount: -amount,
     status: "completed",
     categoryType: "expense",
+    reconciliationRole: null,
+    ...over,
   };
 }
 
@@ -54,14 +54,25 @@ function charge(description: string, date: string, amount: number): DetectionTra
   return { id: `det-${nextId}`, description, date, chargedAmount: -amount };
 }
 
-function run(bank: string, finishedAt: Date | null): SyncRunSummary {
+/** A stored transaction seen both as detection evidence and as a month row. */
+function stored(
+  description: string,
+  date: string,
+  amount: number,
+  over: Partial<OutlookRow> = {},
+): { evidence: DetectionTransaction; row: OutlookRow } {
+  const evidence = charge(description, date, amount);
+  return { evidence, row: spend(date, amount, { id: evidence.id, description, ...over }) };
+}
+
+function run(bank: string, finishedAt: Date | null, startedAt?: Date): SyncRunSummary {
   nextId += 1;
   return {
     id: `run-${nextId}`,
     bank,
     status: "success",
     transactionsImported: 0,
-    startedAt: finishedAt ?? CLOCK.now,
+    startedAt: startedAt ?? finishedAt ?? CLOCK.now,
     finishedAt,
     errorMessage: null,
   };
@@ -71,19 +82,19 @@ function run(bank: string, finishedAt: Date | null): SyncRunSummary {
 function store(
   over: Partial<{
     rows: OutlookRow[];
-    dataSince: string | null;
+    accountStarts: string[];
     target: number | null;
     patterns: PersistedRecurringPattern[];
     detection: DetectionTransaction[];
     banks: string[];
     lastRuns: SyncRunSummary[];
     successes: { bank: string; finishedAt: Date }[];
-    running: boolean;
+    runningSince: Date | null;
   }> = {},
 ): MonthOutlookStore & { windows: [string, string][] } {
   const data = {
     rows: [],
-    dataSince: "2025-01-01",
+    accountStarts: ["2025-01-01", "2025-01-03"],
     target: 6000,
     patterns: [],
     detection: [],
@@ -93,7 +104,7 @@ function store(
       { bank: "discount", finishedAt: SYNCED },
       { bank: "max", finishedAt: SYNCED },
     ],
-    running: false,
+    runningSince: null,
     ...over,
   };
   const windows: [string, string][] = [];
@@ -103,8 +114,8 @@ function store(
       windows.push([from, to]);
       return data.rows.filter((r) => r.date >= from && r.date <= to);
     },
-    async earliestTransactionDate() {
-      return data.dataSince;
+    async accountHistoryStarts() {
+      return data.accountStarts;
     },
     async expenseTarget() {
       return data.target;
@@ -121,8 +132,8 @@ function store(
     async lastRecordedSuccessPerBank() {
       return data.successes;
     },
-    async isSyncRunning() {
-      return data.running;
+    async syncRunningSince() {
+      return data.runningSince;
     },
   };
 }
@@ -145,25 +156,60 @@ describe("getMonthOutlookWithStore", () => {
     expect(s.windows).toEqual([["2025-06-01", "2026-06-30"]]);
   });
 
-  it("counts a pending charge once when its posted version lands in the next month", async () => {
-    const pending = { ...spend("2026-05-31", 300), status: "pending" as const };
-    const posted = { ...spend("2026-06-01", 300), description: pending.description };
+  it("excludes the flagged settlement lump from history months too", async () => {
     const outlook = await getMonthOutlookWithStore(
       JUNE,
       CLOCK,
       store({
         target: null,
-        rows: [spend("2026-04-10", 1000), spend("2026-05-10", 1000), pending, posted],
+        rows: [
+          spend("2026-05-02", 3000, { reconciliationRole: "settlement_lump" }),
+          spend("2026-05-03", 900, { description: "חיוב ישיר ביטוח" }),
+        ],
       }),
     );
-    expect(outlook).toMatchObject({ spent: 300, usualMonth: 1000 });
+    expect(outlook).toMatchObject({ usualMonth: 900 });
   });
 
-  it("judges recurring charges by liveness evidence: arrived, late, paused and dead", async () => {
+  it("counts two pending look-alikes and their posted twin as three purchases", async () => {
+    const description = "Invented Coffee";
     const outlook = await getMonthOutlookWithStore(
       JUNE,
       CLOCK,
       store({
+        target: null,
+        rows: [
+          spend("2026-05-10", 1000),
+          spend("2026-06-08", 120, { status: "pending", description }),
+          spend("2026-06-09", 120, { status: "pending", description }),
+          spend("2026-06-10", 120, { description }),
+        ],
+      }),
+    );
+    expect(outlook).toMatchObject({ spent: 360 });
+  });
+
+  it("is thin history until every account's data reaches back to a prior month's first day", async () => {
+    // The bank goes back a year; the card only three weeks — prior months hold bank spend only.
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        target: null,
+        accountStarts: ["2025-06-01", "2026-05-20"],
+        rows: [spend("2026-04-10", 800), spend("2026-05-10", 900)],
+      }),
+    );
+    expect(outlook.state).toBe("thin-history");
+  });
+
+  it("judges recurring charges by liveness evidence: arrived, late, paused and dead", async () => {
+    const gym = stored("Invented Gym", "2026-06-02", 150);
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        rows: [gym.row],
         patterns: [
           series("Invented Gym"),
           series("Invented Stream"),
@@ -172,7 +218,7 @@ describe("getMonthOutlookWithStore", () => {
         ],
         detection: [
           charge("Invented Gym", "2026-05-02", 150),
-          charge("Invented Gym", "2026-06-02", 150),
+          gym.evidence,
           charge("Invented Stream", "2026-04-10", 40),
           charge("Invented Stream", "2026-05-10", 40),
           charge("Invented Paper", "2026-05-12", 60),
@@ -182,24 +228,44 @@ describe("getMonthOutlookWithStore", () => {
     );
     expect(outlook).toMatchObject({
       state: "active",
+      spent: 150,
       dueRecurring: 40,
       dueCharges: [{ amount: 40, expectedDate: "2026-06-09", arrived: false, late: true }],
     });
   });
 
-  it("counts a series charge the bank lists later this month as due on that date", async () => {
+  it("keeps a recurring charge due while its posted row is uncategorized and so not yet spent", async () => {
+    const gym = stored("Invented Gym", "2026-06-02", 150, { categoryType: null });
     const outlook = await getMonthOutlookWithStore(
       JUNE,
       CLOCK,
       store({
+        rows: [gym.row],
         patterns: [series("Invented Gym")],
-        detection: [
-          charge("Invented Gym", "2026-05-20", 150),
-          charge("Invented Gym", "2026-06-20", 150),
-        ],
+        detection: [charge("Invented Gym", "2026-05-02", 150), gym.evidence],
       }),
     );
     expect(outlook).toMatchObject({
+      spent: 0,
+      dueRecurring: 150,
+      remaining: 5850,
+      dueCharges: [{ amount: 150, arrived: false }],
+    });
+  });
+
+  it("counts a series charge the bank lists later this month as due on that date", async () => {
+    const gym = stored("Invented Gym", "2026-06-20", 150);
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        rows: [gym.row],
+        patterns: [series("Invented Gym")],
+        detection: [charge("Invented Gym", "2026-05-20", 150), gym.evidence],
+      }),
+    );
+    expect(outlook).toMatchObject({
+      spent: 0,
       dueCharges: [{ amount: 150, expectedDate: "2026-06-20", late: false }],
     });
   });
@@ -220,19 +286,38 @@ describe("getMonthOutlookWithStore", () => {
     expect(outlook).toMatchObject({ asOf: older, stale: true });
   });
 
-  it("reports first-sync progress from the connected institutions' finished runs", async () => {
+  it("reports first-sync progress in connected credentials finished by the current run", async () => {
+    const runStart = new Date("2026-06-15T08:50:00Z");
     const outlook = await getMonthOutlookWithStore(
       JUNE,
       CLOCK,
       store({
+        banks: ["discount", "max", "visaCal"],
         successes: [],
-        running: true,
-        lastRuns: [run("discount", new Date("2026-06-15T08:58:00Z")), run("max", null)],
+        runningSince: runStart,
+        lastRuns: [
+          run("discount", new Date("2026-06-15T08:58:00Z"), new Date("2026-06-15T08:51:00Z")),
+          run("max", null, new Date("2026-06-15T08:59:00Z")),
+          // A failed attempt from yesterday is not progress of this run.
+          run("visaCal", new Date("2026-06-14T10:05:00Z"), new Date("2026-06-14T10:00:00Z")),
+        ],
       }),
     );
     expect(outlook).toEqual({
       state: "first-sync",
-      progress: { running: true, banksDone: 1, banksTotal: 2 },
+      progress: { running: true, banksDone: 1, banksTotal: 3 },
+    });
+  });
+
+  it("reports no progress when no first sync is running", async () => {
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({ successes: [], lastRuns: [run("discount", new Date("2026-06-14T10:05:00Z"))] }),
+    );
+    expect(outlook).toEqual({
+      state: "first-sync",
+      progress: { running: false, banksDone: 0, banksTotal: 2 },
     });
   });
 

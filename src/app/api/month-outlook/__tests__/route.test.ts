@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("@/lib/budgets", () => ({
+vi.mock("@/lib/budgets", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/budgets")>()),
   getMonthOutlook: vi.fn(),
 }));
 
@@ -25,36 +26,45 @@ describe("GET /api/month-outlook", () => {
   });
 
   it("returns the outlook for a valid month", async () => {
-    const res = await get("?month=2026-05");
+    const res = await get("?year=2026&month=5");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ state: "no-connection" });
     expect(outlook).toHaveBeenCalledWith(2026, 5);
   });
 
   it("accepts the current month", async () => {
-    const res = await get("?month=2026-06");
+    const res = await get("?year=2026&month=6");
     expect(res.status).toBe(200);
     expect(outlook).toHaveBeenCalledWith(2026, 6);
   });
 
-  it.each([[""], ["?month=2026-13"], ["?month=2026-6"], ["?month=june"], ["?month=1999-12"]])(
-    "rejects %s with a Hebrew 400",
-    async (query) => {
-      const res = await get(query);
-      expect(res.status).toBe(400);
-      expect((await res.json()).error).toMatch(HEBREW);
-      expect(outlook).not.toHaveBeenCalled();
-    },
-  );
+  it("accepts a month that has begun in Israel while it is still the previous month in UTC", async () => {
+    // 22:30 UTC on May 31 is 01:30 on June 1 in Israel.
+    vi.setSystemTime(new Date("2026-05-31T22:30:00Z"));
+    const res = await get("?year=2026&month=6");
+    expect(res.status).toBe(200);
+    expect(outlook).toHaveBeenCalledWith(2026, 6);
+  });
 
-  it("rejects a month that hasn't started", async () => {
-    const res = await get("?month=2026-07");
+  it.each([
+    [""],
+    ["?year=2026"],
+    ["?month=5"],
+    ["?year=2026&month=13"],
+    ["?year=2026&month=0"],
+    ["?year=abc&month=5"],
+    ["?year=1999&month=12"],
+  ])("rejects %s with a Hebrew 400", async (query) => {
+    const res = await get(query);
     expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(HEBREW);
     expect(outlook).not.toHaveBeenCalled();
   });
 
-  it("reports one reason for a malformed month", async () => {
-    const res = await get("?month=june");
-    expect((await res.json()).error).toBe("חודש לא תקין (YYYY-MM)");
+  it("rejects a month that hasn't started", async () => {
+    const res = await get("?year=2026&month=7");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(HEBREW);
+    expect(outlook).not.toHaveBeenCalled();
   });
 });

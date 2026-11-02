@@ -17,7 +17,7 @@ function input(over: Partial<MonthOutlookInput> = {}): MonthOutlookInput {
       { month: { year: 2026, month: 4 }, expenses: 5100 },
       { month: { year: 2026, month: 5 }, expenses: 5400 },
     ],
-    dataSince: "2025-06-01",
+    historyCompleteSince: "2025-06-01",
     lastSuccessfulSyncAt: new Date("2026-06-15T06:00:00Z"),
     credentialCount: 2,
     sync: { running: false, banksDone: 0 },
@@ -30,11 +30,10 @@ function row(over: Partial<OutlookRow> & Pick<OutlookRow, "date" | "chargedAmoun
   nextId += 1;
   return {
     id: `row-${nextId}`,
-    bankAccountId: "acct-card",
-    bankType: "max",
     description: `Invented Shop ${nextId}`,
     status: "completed",
     categoryType: "expense",
+    reconciliationRole: null,
     ...over,
   };
 }
@@ -164,29 +163,44 @@ describe("monthOutlook — what counts as spent", () => {
     expect(spentOf(rows, "2026-06-20")).toBe(1000);
   });
 
-  it("counts a pending charge once when its completed version is already stored", () => {
-    const description = "Invented Grocer";
+  // The import lifecycle supersedes and sweeps pending rows (CONTEXT.md
+  // "pending lifecycle"); a pending row that survives it beside a same-looking
+  // posted one is a genuine repeat purchase, so the outlook counts every row.
+  it("counts a repeat purchase whose second charge is still pending", () => {
+    const description = "Invented Coffee";
+    const rows = [
+      spend("2026-06-08", 120, { description }),
+      spend("2026-06-10", 120, { status: "pending", description }),
+    ];
+    expect(spentOf(rows)).toBe(240);
+  });
+
+  it("counts two pending purchases beside a same-looking posted one as three", () => {
+    const description = "Invented Coffee";
     const rows = [
       spend("2026-06-08", 120, { status: "pending", description }),
+      spend("2026-06-09", 120, { status: "pending", description }),
       spend("2026-06-10", 120, { description }),
     ];
-    expect(spentOf(rows)).toBe(120);
+    expect(spentOf(rows)).toBe(360);
   });
 
-  it("still counts a pending charge with no completed twin, and twins on other accounts", () => {
-    const description = "Invented Grocer";
+  it("excludes a row reconciliation flagged as the settlement lump", () => {
     const rows = [
-      spend("2026-06-08", 120, { status: "pending", description }),
-      spend("2026-06-10", 120, { description, bankAccountId: "acct-other" }),
-      spend("2026-06-11", 45, { status: "pending" }),
+      spend("2026-06-02", 3000, { reconciliationRole: "settlement_lump" }),
+      spend("2026-06-03", 80, { reconciliationRole: "settlement_detail" }),
     ];
-    expect(spentOf(rows)).toBe(285);
+    expect(spentOf(rows)).toBe(80);
   });
 
-  it("excludes the card-settlement lump on the bank account, not a card purchase", () => {
-    const lump = { bankType: "discount", bankAccountId: "acct-bank", description: "חיוב ויזה" };
-    const rows = [spend("2026-06-02", 3000, lump), spend("2026-06-03", 80)];
-    expect(spentOf(rows)).toBe(80);
+  it.each([
+    "דמי ניהול חשבון 2026",
+    "חיוב ישיר ביטוח",
+    "שכר דירה 1234",
+    "ארנונה 10/2026",
+    "הלוואה 5555 החזר",
+  ])("counts the unflagged bank expense %s, whatever its description looks like", (d) => {
+    expect(spentOf([spend("2026-06-02", 250, { description: d })])).toBe(250);
   });
 
   it("ignores transfer, ignore, investment, income and uncategorized rows", () => {
@@ -225,7 +239,7 @@ describe("monthOutlook — without a target", () => {
       input({
         target: null,
         history: [],
-        dataSince: "2026-06-01",
+        historyCompleteSince: "2026-06-01",
         rows: [spend("2026-06-03", 400)],
       }),
     );
@@ -242,7 +256,7 @@ describe("monthOutlook — without a target", () => {
       input({
         target: null,
         history: [{ month: { year: 2026, month: 5 }, expenses: 2000 }],
-        dataSince: "2026-05-10",
+        historyCompleteSince: "2026-05-10",
       }),
     );
     expect(outlook.state).toBe("thin-history");
@@ -304,7 +318,7 @@ describe("monthOutlook — projection", () => {
 
   it("is null with no basis or crossing date when history is thin", () => {
     const outlook = monthOutlook(
-      input({ history: [], dataSince: "2026-06-01", rows: [spend("2026-06-03", 4000)] }),
+      input({ history: [], historyCompleteSince: "2026-06-01", rows: [spend("2026-06-03", 4000)] }),
     );
     expect(outlook).toMatchObject({
       state: "active",
@@ -391,6 +405,33 @@ describe("monthOutlook — projection", () => {
       }),
     );
     expect(outlook).toMatchObject({ projection: { projected: [2300], total: 2300 } });
+  });
+
+  it("lands a charge late since last month on the next day, and the crossing follows it", () => {
+    // Pace 2000 ÷ 20 days = 100/day; the 500 owed since May 29 lands on the 21st.
+    const outlook = monthOutlook(
+      input({
+        today: "2026-06-20",
+        target: 2500,
+        rows: [spend("2026-06-12", 2000)],
+        recurring: [due("2026-05-29", 500)],
+      }),
+    );
+    const active = outlook as Extract<typeof outlook, { state: "active" }>;
+    expect(active.projection?.projected.slice(0, 3)).toEqual([2000, 2600, 2700]);
+    expect(active.crossingDate).toBe("2026-06-21");
+  });
+
+  it("states no crossing date once spent plus what's due is already over the target", () => {
+    const outlook = monthOutlook(
+      input({
+        today: "2026-06-20",
+        target: 2400,
+        rows: [spend("2026-06-12", 2000)],
+        recurring: [due("2026-06-25", 500)],
+      }),
+    );
+    expect(outlook).toMatchObject({ overBy: 100, crossingDate: null });
   });
 });
 
