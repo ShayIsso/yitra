@@ -17,6 +17,7 @@ import {
 import { seedDefaultCategories } from "@/db/seed";
 import { enabledBankEntries, type BankKind } from "@/lib/bank-registry";
 import { encrypt } from "@/lib/crypto";
+import { assertThrowawayDatabase } from "./throwaway-db";
 
 /**
  * Seeds a THROWAWAY database with invented, deterministic data so the
@@ -26,8 +27,9 @@ import { encrypt } from "@/lib/crypto";
  *
  *   DATABASE_URL=postgres://…/yitra_perf npx tsx scripts/perf/seed-synthetic.ts
  *
- * Refuses to touch a database that already holds credentials or transactions,
- * so it can never mix invented rows into a real ledger.
+ * Refuses any database not named as throwaway (./throwaway-db.ts) and any that
+ * already holds credentials or transactions, so invented rows never mix into a
+ * real ledger.
  */
 
 const MONTHS_OF_HISTORY = 13;
@@ -172,15 +174,8 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function assertThrowaway(url: string) {
-  const dbName = new URL(url).pathname.replace(/^\//, "");
-  if (dbName === "yitra" || dbName === "") {
-    throw new Error(`Refusing to seed "${dbName || "(default)"}": use a throwaway database.`);
-  }
-}
-
 async function main() {
-  assertThrowaway(process.env.DATABASE_URL ?? "");
+  assertThrowawayDatabase(process.env.DATABASE_URL);
 
   const [{ n: txnCount }] = await db.select({ n: count() }).from(transactions);
   const [{ n: credCount }] = await db.select({ n: count() }).from(bankCredentials);

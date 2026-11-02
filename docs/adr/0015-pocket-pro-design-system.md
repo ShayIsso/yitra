@@ -38,12 +38,23 @@ Deep teal ink on warm paper, both themes first-class (`:root` and `[data-theme="
   pairs: foreground, muted-foreground, pos, neg, destructive and attention-text on background,
   card and muted; and card/popover/primary/secondary/accent/attention/warning/emerald/sidebar
   foregrounds on their fills, attention-text on attention-subtle, hero-foreground and hero-muted
-  on hero. Palette values stay `#rrggbb` so that test can compute them.
+  on hero. Translucent fills count too: text on a `bg-<token>/<alpha>` tint is checked
+  alpha-composited over background, card and muted, for every alpha the components use (rest and
+  hover): destructive text and foreground on destructive /10 and /20 (dark /10, /15, /20),
+  emerald text and foreground on emerald /10 and /15, foreground on warning /15. Meeting these
+  is why the money pair is darker in light (`--neg` crimson, `--pos` deep green) and the dark
+  destructive button's tint is /15 at rest and /20 on hover. `--neg` is crimson rather than
+  orange-red so negative money never reads as coral attention. A new tint or alpha is added to
+  the test with the component that introduces it. Palette values stay `#rrggbb` so the test can
+  compute them.
+- **Dark variant:** `dark:` utilities follow the app's `data-theme`, not the OS preference
+  (`@custom-variant dark` in `globals.css`).
 
 ### Typography
 
 Rubik (Hebrew + Latin) through `next/font/google`, subset to `latin` and `hebrew`, variable
-weight, `display: swap` with next/font's size-adjusted fallback so the swap does not shift layout.
+weight, `display: swap` with next/font's size-adjusted fallback so the swap does not shift layout
+(measured: home CLS 0.000 under 6× CPU / Slow 4G, `docs/perf-baseline.md`).
 Six steps, as Tailwind utilities: `text-caption` (12), `text-body` (14), `text-lead` (16),
 `text-title` (20), `text-headline` (28), `text-display` (56–72, heavy, tight). **`text-display` is
 reserved for the single hero figure on a surface.** Digits are tabular wherever amounts align:
@@ -56,8 +67,9 @@ symbol). The custom steps are registered with tailwind-merge in `cn`, or it woul
 
 Exactly three radius tokens: `--radius-small` (controls: inputs, buttons, chips, rows),
 `--radius-large` (cards, sheets, dialogs, the hero) and `--radius-full` (pills, avatars, dots;
-Tailwind's `rounded-full`). Tailwind's `rounded`, `rounded-xs`…`md` resolve to small and
-`rounded-lg`…`4xl` to large, so no radius utility yields a fourth value. Two arbitrary radii
+Tailwind's `rounded-full`). Tailwind's `rounded`, `rounded-xs`…`lg` resolve to small (shadcn's
+control radius is `rounded-lg`: buttons, inputs, selects share one shape) and `rounded-xl`…`4xl`
+to large (Card and Dialog use `rounded-xl`), so no radius utility yields a fourth value. Two arbitrary radii
 predate this ADR in shadcn primitives (`rounded-[4px]` on the checkbox, `rounded-[2px]` on chart
 legend swatches); the page slices replace them, and new code never uses an arbitrary radius.
 
@@ -97,9 +109,10 @@ in tables; no backdrop blur over large scrolling regions; no WebGL or canvas eff
 
 ### Performance
 
-The redesign may add at most +40 kB gz to the home route's first-load JS over the baseline in
-`docs/perf-baseline.md` (icons and motion included), and may not make first meaningful content
-slower on a 6× CPU / Slow 4G profile. Every redesign PR records its numbers against that baseline.
+The redesign may add at most +40 kB gz to the home route's modern-browser first-load JS
+(`noModule` polyfills excluded) over the baseline in `docs/perf-baseline.md` (278.7 kB gz; icons
+and motion included), may not make first meaningful content slower on a 6× CPU / Slow 4G profile,
+and may not introduce layout shift (CLS stays at the baseline's 0.000). Every redesign PR records its numbers against that baseline.
 
 ## Consequences
 

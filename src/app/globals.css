@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* `dark:` follows the app's theme (data-theme stamped on <html> pre-paint by
+   the root layout), not the OS preference Tailwind defaults to. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
+
 /**
  * Design tokens: the "Pocket Pro" design system (ADR-0015). Components use the
  * semantic utilities (bg-background, text-muted-foreground, text-pos, ...);
@@ -28,8 +32,9 @@
  *
  * Shape: three radii only. --radius-small (controls: inputs, buttons, chips,
  *   rows), --radius-large (cards, sheets, dialogs, the hero), and
- *   --radius-full (pills, avatars, dots; rounded-full). Every Tailwind
- *   radius step maps onto small or large; never use an arbitrary radius.
+ *   --radius-full (pills, avatars, dots; rounded-full). rounded..lg map to
+ *   small (shadcn's control radius is rounded-lg) and rounded-xl..4xl to
+ *   large (Card and Dialog use rounded-xl); never use an arbitrary radius.
  *
  * Card convention: rounded-xl + the --card-shadow / --card-border bundle,
  *   applied by src/components/ui/card.tsx only.
@@ -102,7 +107,7 @@
   --radius-xs: var(--radius-small);
   --radius-sm: var(--radius-small);
   --radius-md: var(--radius-small);
-  --radius-lg: var(--radius-large);
+  --radius-lg: var(--radius-small);
   --radius-xl: var(--radius-large);
   --radius-2xl: var(--radius-large);
   --radius-3xl: var(--radius-large);
@@ -164,8 +169,8 @@
   --card-border: rgb(15 30 31 / 0.06);
 
   /* ── Money pair (AA on every surface) ── */
-  --pos: #0b6b50;
-  --neg: #b4361f;
+  --pos: #0a6349;
+  --neg: #9e1f36;
   --destructive: var(--neg);
 
   /* ── Coral: attention only ── text on a coral fill is always ink (white on
@@ -175,8 +180,8 @@
   --attention-subtle: #ffe2d6;
   --attention-text: #a3381b;
 
-  /* Aliases resolve on <html>, where [data-theme] is stamped, so they follow
-     the active theme without being redeclared in the dark block.
+  /* Aliases of other tokens. A var() inside a custom property resolves where
+     it is declared, so the dark block redeclares each alias for its own scope.
      --warning is the coral pair under its older name; use it only for the
      attention states of ADR-0015 (badges, stale/failed sync, at-risk/over). */
   --warning: var(--attention);
@@ -245,7 +250,7 @@
   --card-border: rgb(255 255 255 / 0.08);
 
   --pos: #4fd1a5;
-  --neg: #ff7a61;
+  --neg: #ff8fa0;
 
   --attention: #ff7a5c;
   --attention-foreground: #0f1e1f;
@@ -253,6 +258,19 @@
   --attention-text: #ff9a80;
 
   --emerald-foreground: #0b1314;
+
+  --destructive: var(--neg);
+  --warning: var(--attention);
+  --warning-foreground: var(--attention-foreground);
+  --emerald: var(--pos);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--card-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 
   --hero: #0d3a3c;
   --hero-foreground: #f4f8f6;

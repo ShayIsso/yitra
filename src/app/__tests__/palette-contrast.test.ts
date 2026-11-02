@@ -3,9 +3,9 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 /**
- * WCAG AA for every text-on-surface pair the palette defines (ADR-0015
- * "Palette"), in both themes, read straight from globals.css so a token edit
- * that breaks contrast fails here.
+ * WCAG AA (ADR-0015 "Palette") in both themes, read straight from globals.css:
+ * every opaque text-on-surface pair, and every translucent tint the components
+ * actually draw text on (alpha-composited over each surface it can sit on).
  */
 
 const css = readFileSync(join(__dirname, "..", "globals.css"), "utf8");
@@ -32,17 +32,27 @@ function hex(tokens: Record<string, string>, name: string): string {
   return value;
 }
 
-function luminance(color: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const c = parseInt(color.slice(i, i + 2), 16) / 255;
+function channels(color: string): number[] {
+  return [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+}
+
+function luminance(rgb: number[]): number {
+  const [r, g, b] = rgb.map((v) => {
+    const c = v / 255;
     return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function contrast(a: string, b: string): number {
+function contrast(a: number[], b: number[]): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
+}
+
+/** `bg-<tint>/<alpha>` painted over `surface`, as the browser composites it. */
+function composite(tint: string, alpha: number, surface: string): number[] {
+  const [t, s] = [channels(tint), channels(surface)];
+  return t.map((v, i) => v * alpha + s[i] * (1 - alpha));
 }
 
 const SURFACES = ["--background", "--card", "--muted"];
@@ -78,11 +88,46 @@ const PAIRS: [string, string][] = [
   ...FILL_PAIRS,
 ];
 
+type Tint = { text: string; tint: string; alphas: { light: number[]; dark: number[] } };
+
+/**
+ * Text drawn on translucent token fills, with every alpha (rest and hover) the
+ * components use in each theme: the destructive button and badge
+ * (ui/button.tsx, ui/badge.tsx), the budget chips (budget-status-card.tsx),
+ * the toast variants (ui/toast.tsx) and the amber count badges.
+ */
+const TINTS: Tint[] = [
+  {
+    text: "--destructive",
+    tint: "--destructive",
+    alphas: { light: [0.1, 0.2], dark: [0.1, 0.15, 0.2] },
+  },
+  {
+    text: "--foreground",
+    tint: "--destructive",
+    alphas: { light: [0.1, 0.2], dark: [0.1, 0.15, 0.2] },
+  },
+  { text: "--emerald", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
+  { text: "--foreground", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
+  { text: "--foreground", tint: "--warning", alphas: { light: [0.15], dark: [0.15] } },
+];
+
 describe.each([
   ["light", light],
   ["dark", dark],
-])("palette contrast (%s)", (_theme, tokens) => {
+] as const)("palette contrast (%s)", (theme, tokens) => {
   it.each(PAIRS)("%s on %s meets WCAG AA (4.5:1)", (text, surface) => {
-    expect(contrast(hex(tokens, text), hex(tokens, surface))).toBeGreaterThanOrEqual(4.5);
+    const ratio = contrast(channels(hex(tokens, text)), channels(hex(tokens, surface)));
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+
+  const tinted = TINTS.flatMap(({ text, tint, alphas }) =>
+    alphas[theme].flatMap((alpha) =>
+      SURFACES.map((surface): [string, string, number, string] => [text, tint, alpha, surface]),
+    ),
+  );
+  it.each(tinted)("%s on %s/%s over %s meets WCAG AA (4.5:1)", (text, tint, alpha, surface) => {
+    const fill = composite(hex(tokens, tint), alpha, hex(tokens, surface));
+    expect(contrast(channels(hex(tokens, text)), fill)).toBeGreaterThanOrEqual(4.5);
   });
 });
