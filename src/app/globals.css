@@ -27,9 +27,9 @@
  *   cells, .tabular-nums).
  *
  * Shape: three radii only. --radius-small (controls: inputs, buttons, chips,
- *   rows), --radius-large (cards, sheets, dialogs, the hero), and full
- *   (pills, avatars, dots). Tailwind's rounded-xs..md resolve to small and
- *   rounded-lg..4xl to large, so no fourth radius can appear.
+ *   rows), --radius-large (cards, sheets, dialogs, the hero), and
+ *   --radius-full (pills, avatars, dots; rounded-full). Every Tailwind
+ *   radius step maps onto small or large; never use an arbitrary radius.
  *
  * Card convention: rounded-xl + the --card-shadow / --card-border bundle,
  *   applied by src/components/ui/card.tsx only.
@@ -150,6 +150,7 @@
   /* ── Shape and motion (theme-independent) ── */
   --radius-small: 0.625rem;
   --radius-large: 1.375rem;
+  --radius-full: 9999px;
   --radius: var(--radius-small);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -165,7 +166,7 @@
   /* ── Money pair (AA on every surface) ── */
   --pos: #0b6b50;
   --neg: #b4361f;
-  --destructive: #b4361f;
+  --destructive: var(--neg);
 
   /* ── Coral: attention only ── text on a coral fill is always ink (white on
      coral fails AA); coral-coloured text uses --attention-text. */
@@ -174,14 +175,16 @@
   --attention-subtle: #ffe2d6;
   --attention-text: #a3381b;
 
-  /* Pending / stale / in-progress states are attention states: --warning is
-     the coral pair under its older name. */
-  --warning: #ff6847;
-  --warning-foreground: #0f1e1f;
+  /* Aliases resolve on <html>, where [data-theme] is stamped, so they follow
+     the active theme without being redeclared in the dark block.
+     --warning is the coral pair under its older name; use it only for the
+     attention states of ADR-0015 (badges, stale/failed sync, at-risk/over). */
+  --warning: var(--attention);
+  --warning-foreground: var(--attention-foreground);
 
   /* Retired "emerald = positive" tokens, kept as aliases of the money pair
      until the redesign's cleanup removes their last uses. */
-  --emerald: #0b6b50;
+  --emerald: var(--pos);
   --emerald-foreground: #ffffff;
 
   /* ── Hero surface: dark teal in both themes ── */
@@ -200,14 +203,14 @@
   --chart-5: #a05470;
 
   /* ── Sidebar ── */
-  --sidebar: #fffdf9;
-  --sidebar-foreground: #0f1e1f;
-  --sidebar-primary: #0c4547;
-  --sidebar-primary-foreground: #f7f3ec;
-  --sidebar-accent: #efe8dd;
-  --sidebar-accent-foreground: #0f1e1f;
-  --sidebar-border: rgb(15 30 31 / 0.08);
-  --sidebar-ring: #0e6965;
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--card-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 [data-theme="dark"],
@@ -243,17 +246,12 @@
 
   --pos: #4fd1a5;
   --neg: #ff7a61;
-  --destructive: #ff7a61;
 
   --attention: #ff7a5c;
   --attention-foreground: #0f1e1f;
   --attention-subtle: #3a2219;
   --attention-text: #ff9a80;
 
-  --warning: #ff7a5c;
-  --warning-foreground: #0f1e1f;
-
-  --emerald: #4fd1a5;
   --emerald-foreground: #0b1314;
 
   --hero: #0d3a3c;
@@ -267,15 +265,6 @@
   --chart-3: #f0bd55;
   --chart-4: #6ea6d8;
   --chart-5: #d47f9d;
-
-  --sidebar: #131d1e;
-  --sidebar-foreground: #ecf2ef;
-  --sidebar-primary: #7fd3c9;
-  --sidebar-primary-foreground: #062627;
-  --sidebar-accent: #1d292a;
-  --sidebar-accent-foreground: #ecf2ef;
-  --sidebar-border: rgb(255 255 255 / 0.08);
-  --sidebar-ring: #45bdb2;
 }
 
 @layer base {

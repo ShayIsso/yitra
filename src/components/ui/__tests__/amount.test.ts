@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/amount";
 
 describe("amountColorClass", () => {
-  it("maps positive money to text-pos (emerald)", () => {
+  it("maps positive money to text-pos", () => {
     expect(amountColorClass(1234.5, true)).toBe("text-pos");
   });
 

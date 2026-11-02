@@ -54,9 +54,12 @@ symbol). The custom steps are registered with tailwind-merge in `cn`, or it woul
 
 ### Shape
 
-Exactly three radii: `--radius-small` (controls: inputs, buttons, chips, rows), `--radius-large`
-(cards, sheets, dialogs, the hero) and full (pills, avatars, dots). Tailwind's `rounded-xs`…`md`
-resolve to small and `rounded-lg`…`4xl` to large, so a fourth radius cannot appear.
+Exactly three radius tokens: `--radius-small` (controls: inputs, buttons, chips, rows),
+`--radius-large` (cards, sheets, dialogs, the hero) and `--radius-full` (pills, avatars, dots;
+Tailwind's `rounded-full`). Tailwind's `rounded`, `rounded-xs`…`md` resolve to small and
+`rounded-lg`…`4xl` to large, so no radius utility yields a fourth value. Two arbitrary radii
+predate this ADR in shadcn primitives (`rounded-[4px]` on the checkbox, `rounded-[2px]` on chart
+legend swatches); the page slices replace them, and new code never uses an arbitrary radius.
 
 ### Icons
 

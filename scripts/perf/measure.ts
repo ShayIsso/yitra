@@ -26,6 +26,8 @@ const RUNS = Number(process.env.RUNS ?? 7);
 const CPU_THROTTLE = 6;
 const NETWORK = PredefinedNetworkConditions["Slow 4G"];
 
+// Mirrors createSession (src/lib/auth/session.ts), which cannot be imported
+// here: it pulls in next/headers and the full env parse.
 function mintSessionCookie(): string {
   const key = process.env.ENCRYPTION_KEY;
   if (!key) throw new Error("ENCRYPTION_KEY (the server's) is required to mint a session.");

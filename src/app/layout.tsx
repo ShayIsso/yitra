@@ -3,10 +3,7 @@ import { Rubik } from "next/font/google";
 import { MotionProvider } from "@/components/motion";
 import "./globals.css";
 
-/**
- * Variable Rubik, Hebrew + Latin subsets only. next/font self-hosts it and
- * generates a size-adjusted local fallback, so the swap does not shift layout.
- */
+/** next/font's size-adjusted local fallback keeps the swap from shifting layout. */
 const rubik = Rubik({
   variable: "--font-rubik",
   subsets: ["latin", "hebrew"],

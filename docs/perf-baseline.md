@@ -34,6 +34,15 @@ the machine and its load. To compare timings, run the probe on `origin/main`
 and on your branch **back to back on the same machine**, and report both
 medians alongside the baseline above.
 
+**Script revisions since the baseline.** The second commit on the #314 branch
+made the seed read its two institutions from the bank registry (ADR-0013) and
+build its uncategorized rows explicitly (four rows with fixed amounts instead
+of copies of the previous row), and taught `module-cost.ts` to report lazy
+chunks separately. Neither touches application code or the first-load JS
+figure, and the timing probe is unchanged; re-measuring `a8a5f8d` later in
+the same session gave the same 317.3 kB and FCP/LCP within noise
+(2084 / 6168 ms).
+
 ## Reproducing the measurement
 
 Everything runs against a throwaway database (never the dev DB, which holds

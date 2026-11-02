@@ -244,7 +244,7 @@ async function main() {
   const push = (
     date: Date,
     description: string,
-    category: string,
+    category: string | null,
     amount: number,
     account: "bank" | "card",
   ) => {
@@ -261,8 +261,8 @@ async function main() {
       chargedCurrency: "ILS",
       type: "normal",
       status: "completed",
-      categoryId: catId(category),
-      categorySource: "rule",
+      categoryId: category === null ? null : catId(category),
+      categorySource: category === null ? null : "rule",
     });
   };
 
@@ -290,17 +290,7 @@ async function main() {
   // A few uncategorized rows so the attention counters have something to show.
   for (let i = 0; i < 4; i++) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1 + i));
-    if (d <= now) {
-      rows.push({
-        ...rows[rows.length - 1],
-        externalId: `perf-${++seq}`,
-        date: isoDate(d),
-        processedDate: isoDate(d),
-        description: `עסקה לא מסווגת ${i + 1}`,
-        categoryId: null,
-        categorySource: null,
-      });
-    }
+    if (d <= now) push(d, `עסקה לא מסווגת ${i + 1}`, null, -(120 + 35 * i), "card");
   }
   for (let i = 0; i < rows.length; i += 200) {
     await db.insert(transactions).values(rows.slice(i, i + 200));

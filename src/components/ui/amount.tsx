@@ -90,6 +90,8 @@ export function formatAmountParts(
 
 export type AmountSize = "caption" | "body" | "lead" | "title" | "headline" | "display";
 
+// Spelled out in full, never built as `text-${size}`: Tailwind only emits
+// utilities whose complete class name appears in the source.
 const SIZE_CLASS: Record<AmountSize, string> = {
   caption: "text-caption",
   body: "text-body",
@@ -101,6 +103,11 @@ const SIZE_CLASS: Record<AmountSize, string> = {
 
 const FIGURE_CLASS = "font-extrabold tracking-tight";
 
+/** The display step is reserved for the hero figure, so it is always a figure. */
+function isFigure(size: AmountSize | undefined, figure: boolean): boolean {
+  return figure || size === "display";
+}
+
 /** Type-scale and weight classes for an amount; empty means inherit. */
 export function amountTypographyClass({
   size,
@@ -111,7 +118,7 @@ export function amountTypographyClass({
 }): string {
   // text-display carries its own weight and tracking tokens.
   if (size === "display") return SIZE_CLASS.display;
-  return cn(size && SIZE_CLASS[size], figure && FIGURE_CLASS);
+  return cn(size && SIZE_CLASS[size], isFigure(size, figure) && FIGURE_CLASS);
 }
 
 /**
@@ -178,7 +185,7 @@ export function Amount({
     className,
   );
 
-  if (!figure && size !== "display") {
+  if (!isFigure(size, figure)) {
     return <span className={classes}>{formatAmount(amount, currency, fractionDigits)}</span>;
   }
   return (
