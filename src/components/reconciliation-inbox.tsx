@@ -404,37 +404,43 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
       ) : (
         <>
           <div className="flex flex-col gap-2">
-            <div
-              role="toolbar"
-              aria-label="פעולות על קבוצות נבחרות"
-              className="bg-card sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]"
-            >
-              <label className="text-body flex min-h-11 cursor-pointer items-center gap-3 px-2">
-                <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="בחר הכל" />
-                <span aria-hidden="true" className="tabular-nums">
-                  {selectedIds.length > 0 ? `${selectedIds.length} נבחרו` : "בחר הכל"}
-                </span>
-              </label>
-              <div className="flex w-full gap-2 sm:ms-auto sm:w-auto">
-                <Button
-                  className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
-                  onClick={() => decideSelected("approve")}
-                  disabled={bulkDisabled}
-                >
-                  <CheckIcon />
-                  אשר נבחרים
-                </Button>
-                <Button
-                  variant="outline"
-                  className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
-                  onClick={() => decideSelected("reject")}
-                  disabled={bulkDisabled}
-                >
-                  <XIcon />
-                  דחה נבחרים
-                </Button>
+            {selectable.length > 0 && (
+              <div
+                role="toolbar"
+                aria-label="פעולות על קבוצות נבחרות"
+                className="bg-card sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]"
+              >
+                <label className="text-body flex min-h-11 cursor-pointer items-center gap-3 px-2">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="בחר הכל"
+                  />
+                  <span aria-hidden="true" className="tabular-nums">
+                    {selectedIds.length > 0 ? `${selectedIds.length} נבחרו` : "בחר הכל"}
+                  </span>
+                </label>
+                <div className="flex w-full gap-2 sm:ms-auto sm:w-auto">
+                  <Button
+                    className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
+                    onClick={() => decideSelected("approve")}
+                    disabled={bulkDisabled}
+                  >
+                    <CheckIcon />
+                    אשר נבחרים
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
+                    onClick={() => decideSelected("reject")}
+                    disabled={bulkDisabled}
+                  >
+                    <XIcon />
+                    דחה נבחרים
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
             {bulkFailed && (
               <div

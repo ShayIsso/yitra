@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { db } from "@/db";
 import { transactions } from "@/db/schema";
-import { inArray, isNull, and } from "drizzle-orm";
+import { inArray, isNull, and, lte } from "drizzle-orm";
 import { selectUnpairedNotRejected } from "./rejection-writes";
 
 /**
@@ -20,7 +20,7 @@ export interface SuspectedTransferRouter {
    * Credits are dropped: a credit is never queued as a singleton (#303).
    */
   filterUnpaired(txnIds: string[]): Promise<string[]>;
-  /** Queue a single row as a pending suspected-transfer inbox item. */
+  /** Queue a single unpaired debit as a pending suspected-transfer inbox item; a credit is a no-op. */
   queueSuspectedTransfer(txnId: string): Promise<void>;
 }
 
@@ -48,6 +48,12 @@ export const drizzleSuspectedTransferRouter: SuspectedTransferRouter = {
 
 // Guard the write to still-unpaired rows: a concurrent P-phase confirm between
 // filterUnpaired and here must not be clobbered into a fresh singleton group.
+// The debit predicate holds the #303 invariant for any caller, not only those
+// that went through filterUnpaired first.
 function eqUnpaired(txnId: string) {
-  return and(inArray(transactions.id, [txnId]), isNull(transactions.reconciliationGroupId));
+  return and(
+    inArray(transactions.id, [txnId]),
+    isNull(transactions.reconciliationGroupId),
+    lte(transactions.chargedAmount, "0"),
+  );
 }

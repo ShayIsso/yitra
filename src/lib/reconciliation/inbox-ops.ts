@@ -123,7 +123,8 @@ async function transferFlipFor(
   if (!bankSide) return null;
   // A suspected transfer has no second leg to double-count against, so a
   // category the user chose (or user-tier memory applied) after it was queued
-  // outranks the suspicion. A pair keeps its flip: without it both legs count.
+  // outranks the suspicion. A pair keeps its flip: a P2 mirror is one charge
+  // seen from two accounts, so without it the charge counts twice.
   const keepUserCategory = members.length === 1;
   if (
     keepUserCategory &&

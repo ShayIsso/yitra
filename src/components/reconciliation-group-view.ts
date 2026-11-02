@@ -61,15 +61,28 @@ export function reconciliationGroupView(members: PendingMember[]): Reconciliatio
 }
 
 /**
- * Mirrors `approveGroup` (reconciliation inbox-ops): a row the user categorized
- * after it was queued keeps that category on approve; otherwise it becomes an
- * internal transfer and leaves the totals on its side of the ledger.
+ * A credit is a positive amount; zero is not one. Routing, the router's write
+ * and bulk approve on the server draw the same line (#303). `directionText`
+ * deliberately differs: it follows the money colours, which read zero as
+ * incoming.
+ */
+function isCredit(chargedAmount: number): boolean {
+  return chargedAmount > 0;
+}
+
+/**
+ * Mirrors `approveGroup` (reconciliation inbox-ops), which decides from the
+ * source alone: a `user`/`memory` row keeps whatever it has, even NULL after its
+ * category was deleted; any other row becomes an internal transfer and leaves
+ * the totals on its side of the ledger.
  */
 export function suspectedTransferConsequence(row: PendingMember): string {
-  if ((row.categorySource === "user" || row.categorySource === "memory") && row.categoryName) {
-    return `התנועה כבר מסווגת כ״${row.categoryName}״. אישור ישאיר את הסיווג הזה.`;
+  if (row.categorySource === "user" || row.categorySource === "memory") {
+    return row.categoryName
+      ? `התנועה כבר מסווגת כ״${row.categoryName}״. אישור ישאיר את הסיווג הזה.`
+      : "התנועה סווגה בעבר באופן ידני. אישור לא ישנה את הסיווג שלה.";
   }
-  const leaves = row.chargedAmount < 0 ? "בהוצאות" : "בהכנסות";
+  const leaves = isCredit(row.chargedAmount) ? "בהכנסות" : "בהוצאות";
   return `לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר ${leaves}.`;
 }
 
@@ -78,7 +91,7 @@ export function suspectedTransferConsequence(row: PendingMember): string {
  * server: such a row is approved one by one, never swept in with a selection.
  */
 export function isBulkApprovable(view: ReconciliationGroupView): boolean {
-  return !(view.kind === "suspected-transfer" && view.row.chargedAmount > 0);
+  return !(view.kind === "suspected-transfer" && isCredit(view.row.chargedAmount));
 }
 
 /** Zero reads as incoming, matching the money colours (`amountColorClass`). */

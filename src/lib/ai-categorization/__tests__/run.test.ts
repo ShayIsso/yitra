@@ -680,6 +680,30 @@ describe("runAiCategorization — full pipeline", () => {
     });
   });
 
+  it("offers a transfer-shaped zero-amount row for routing: zero is not a credit", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [
+        {
+          id: "t-zero",
+          description: "העברה לחשבון שלי",
+          bankType: "discount",
+          categoryId: null,
+          categorySource: null,
+          chargedAmount: 0,
+        },
+      ],
+    });
+
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider: scriptedProvider([]),
+    });
+
+    expect(summary.suspectedTransferIds).toEqual(["t-zero"]);
+  });
+
   it("spaces batches by the pacing policy's inter-batch delay (injected sleep, no real timers)", async () => {
     const txns: StoredTxn[] = Array.from({ length: 5 }, (_, i) => ({
       id: `t${i}`,

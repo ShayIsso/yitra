@@ -183,6 +183,14 @@ describe("bulk approve", () => {
     expect(confirmed.map((c) => c.groupId)).toEqual(["debit", "pair"]);
   });
 
+  it("approves a zero-amount singleton in bulk: zero is not a credit", async () => {
+    const zero = row({ id: "zero", reconciliationGroupId: "zero", chargedAmount: 0 });
+    const { store, confirmed } = storeOf({ zero: [zero] });
+
+    expect(await approveGroups(["zero"], store)).toEqual({ skipped: [] });
+    expect(confirmed.map((c) => c.groupId)).toEqual(["zero"]);
+  });
+
   it("still approves a singleton credit on its own", async () => {
     const credit = row({ id: "salary", chargedAmount: 12000 });
     const { store, confirmed } = storeOf({ g: [credit] });
