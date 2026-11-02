@@ -1,83 +1,108 @@
 "use client";
 
 import { useId } from "react";
-import { Loader2, CheckCircle2, XCircle, AlertTriangle, CircleSlash } from "lucide-react";
+import {
+  ArrowsClockwiseIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  KeyIcon,
+  PauseIcon,
+  WarningCircleIcon,
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { BankSyncState } from "@/components/sync-stream";
+import type { BankStatusIcon, BankStatusTone, BankStatusView } from "@/components/bank-status-view";
+import { cn } from "@/lib/utils";
 
-// One institution's live sync status and OTP entry, shared by the Sync page and the wizard.
+// One institution's sync status and OTP entry, shared by the Sync page and the wizard.
 
-export const STATUS_TEXT: Record<string, string> = {
-  initializing: "מאתחל...",
-  logging_in: "מתחבר...",
-  login_success: "התחברות הצליחה",
-  scraping: "מוריד תנועות...",
-  importing: "מייבא לבסיס נתונים...",
-  complete: "הושלם",
-  error: "שגיאה",
-  otp_required: "נדרש קוד אימות",
-  otp_timeout: "פג תוקף הקוד",
-  interrupted: "הופסק",
+const TONE_CLASS: Record<BankStatusTone, string> = {
+  waiting: "text-muted-foreground",
+  running: "text-foreground",
+  done: "text-foreground font-medium",
+  attention: "text-attention-text font-medium",
+  quiet: "text-muted-foreground",
 };
 
-const SPINNING_STATUSES = new Set(["initializing", "logging_in", "scraping", "importing"]);
+function StatusGlyph({ icon }: { icon: BankStatusIcon }) {
+  const className = "size-4 shrink-0";
+  switch (icon) {
+    case "clock":
+      return <ClockIcon weight="fill" className={className} />;
+    case "sync":
+      return <ArrowsClockwiseIcon className={className} />;
+    case "check":
+      return <CheckCircleIcon weight="fill" className={className} />;
+    case "warning":
+      return <WarningCircleIcon weight="fill" className={className} />;
+    case "key":
+      return <KeyIcon className={className} />;
+    case "pause":
+      return <PauseIcon weight="fill" className={className} />;
+    case "dot":
+      return (
+        <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
+          <span className="bg-muted-foreground size-2 rounded-full" />
+        </span>
+      );
+  }
+}
 
-function formatCountdown(seconds: number): string {
+/**
+ * One institution's status as an icon beside words (see `bank-status-view.ts`).
+ * Success glyphs stay in the text colour: `pos`/`neg` are for money only.
+ * Only states that ask something of the owner are announced: a live region on
+ * every row would read out every stage of every run.
+ */
+export function BankStatus({ view, className }: { view: BankStatusView; className?: string }) {
+  return (
+    <span
+      role={view.alert ? "alert" : undefined}
+      data-tone={view.tone}
+      className={cn("text-body flex items-center gap-1.5", TONE_CLASS[view.tone], className)}
+    >
+      <StatusGlyph icon={view.icon} />
+      <span className="min-w-0">{view.label}</span>
+    </span>
+  );
+}
+
+export function BankStatusDetail({ view }: { view: BankStatusView }) {
+  if (!view.detail) return null;
+  return <p className="bg-muted text-body rounded-lg px-3 py-2 break-words">{view.detail}</p>;
+}
+
+/**
+ * A determinate bar, filled from the inline start. `fillClassName` overrides
+ * the fill (colour, or `transition-none` for a bar that should only step).
+ * Decorative: the words beside it carry the state.
+ */
+export function StageProgress({
+  value,
+  fillClassName,
+}: {
+  value: number | null;
+  fillClassName?: string;
+}) {
+  if (value === null) return null;
+  return (
+    <div aria-hidden="true" className="bg-muted h-1.5 overflow-hidden rounded-full">
+      <div
+        className={cn(
+          // transform-origin has no logical form, hence the rtl: override.
+          "bg-bar-strong h-full origin-left rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none rtl:origin-right",
+          fillClassName,
+        )}
+        style={{ transform: `scaleX(${value})` }}
+      />
+    </div>
+  );
+}
+
+export function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-export function LiveBankStatus({ state }: { state: BankSyncState }) {
-  return (
-    <>
-      {SPINNING_STATUSES.has(state.status) && (
-        <span className="text-muted-foreground flex items-center gap-1.5">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {STATUS_TEXT[state.status]}
-        </span>
-      )}
-      {state.status === "login_success" && (
-        <span className="text-foreground flex items-center gap-1.5">
-          <CheckCircle2 className="h-4 w-4" />
-          {STATUS_TEXT.login_success}
-        </span>
-      )}
-      {state.status === "complete" && (
-        <span className="text-foreground flex items-center gap-1.5">
-          <CheckCircle2 className="h-4 w-4" />
-          {state.transactionCount !== undefined
-            ? `${state.transactionCount} תנועות`
-            : STATUS_TEXT.complete}
-        </span>
-      )}
-      {state.status === "otp_required" && (
-        <span className="text-muted-foreground flex items-center gap-1.5">
-          <AlertTriangle className="h-4 w-4" />
-          {STATUS_TEXT.otp_required}
-        </span>
-      )}
-      {state.status === "otp_timeout" && (
-        <span className="text-destructive flex items-center gap-1.5">
-          <AlertTriangle className="h-4 w-4" />
-          {STATUS_TEXT.otp_timeout}
-        </span>
-      )}
-      {state.status === "interrupted" && (
-        <span className="text-muted-foreground flex items-center gap-1.5">
-          <CircleSlash className="h-4 w-4" />
-          {STATUS_TEXT.interrupted}
-        </span>
-      )}
-      {state.status === "error" && (
-        <span className="text-destructive flex items-center gap-1.5">
-          <XCircle className="h-4 w-4" />
-          {state.error ?? STATUS_TEXT.error}
-        </span>
-      )}
-    </>
-  );
 }
 
 export type OtpEntryProps = {

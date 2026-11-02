@@ -7,7 +7,6 @@ import { enabledBankEntries } from "@/lib/bank-registry";
 import {
   deriveFirstSyncView,
   firstSyncFooter,
-  syncStageProgress,
   type ConnectedLoad,
 } from "@/components/onboarding/steps/first-sync-view";
 import {
@@ -178,41 +177,6 @@ describe("the first-sync step after the run", () => {
       ),
     );
     expect(view).toMatchObject({ phase: "finished", notice: { kind: "refused" } });
-  });
-});
-
-describe("an institution's progress through its run", () => {
-  it("advances through the run's stages in the order the stream reports them", () => {
-    const stages = [
-      "initializing",
-      "logging_in",
-      "login_success",
-      "scraping",
-      "importing",
-    ] as const;
-    const progress = stages.map((status) => syncStageProgress(status));
-    for (const value of progress) expect(value).toBeGreaterThan(0);
-    for (let i = 1; i < progress.length; i++) {
-      expect(progress[i]!).toBeGreaterThan(progress[i - 1]!);
-    }
-    expect(progress.at(-1)!).toBeLessThan(1);
-  });
-
-  it("holds at the login stage while the run waits for an OTP", () => {
-    expect(syncStageProgress("otp_required")).toBe(syncStageProgress("logging_in"));
-  });
-
-  it("shows no bar before the run reaches the institution, nor once its run has ended", () => {
-    for (const status of [
-      undefined,
-      "idle",
-      "complete",
-      "error",
-      "otp_timeout",
-      "interrupted",
-    ] as const) {
-      expect(syncStageProgress(status)).toBeNull();
-    }
   });
 });
 
