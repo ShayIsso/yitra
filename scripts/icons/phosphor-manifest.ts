@@ -45,6 +45,12 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   HardDrives: ["regular"],
   Cloud: ["regular"],
 
+  // Reports and subscriptions: change direction, sort, CSV download
+  ArrowUp: ["regular"],
+  ArrowDown: ["regular"],
+  ArrowsDownUp: ["regular"],
+  DownloadSimple: ["regular"],
+
   // Status
   WarningCircle: ["fill"],
   CheckCircle: ["fill"],
