@@ -78,22 +78,25 @@ Every command that touches the database gets the throwaway URL inline, never
 from an `export` a later shell might lack: `drizzle.config.ts` and the seed
 load the project `.env`, whose `DATABASE_URL` is the real dev database. Both
 `migrate-throwaway.ts` and the seed refuse any database whose name does not
-end in `_perf` or `_t<number>` (`scripts/perf/throwaway-db.ts`).
+end in `_perf` or `_t<number>` (`scripts/perf/throwaway-db.ts`). The build and
+server have no such guard, so every step reads the URL through `${PERF_DB:?}`,
+which aborts the command in a shell where `PERF_DB` is unset instead of letting
+Next fall back to `.env`.
 
 ```sh
 # 1. Throwaway database, migrated and seeded with synthetic data.
 docker exec yitra-db-1 createdb -U yitra yitra_perf
 PERF_DB=postgres://yitra:yitra_dev@localhost:5432/yitra_perf
 PERF_KEY=$(openssl rand -hex 32)   # any fresh key; the probe signs its session with it
-DATABASE_URL=$PERF_DB npx tsx scripts/perf/migrate-throwaway.ts
-DATABASE_URL=$PERF_DB ENCRYPTION_KEY=$PERF_KEY npx tsx scripts/perf/seed-synthetic.ts
+DATABASE_URL=${PERF_DB:?} npx tsx scripts/perf/migrate-throwaway.ts
+DATABASE_URL=${PERF_DB:?} ENCRYPTION_KEY=${PERF_KEY:?} npx tsx scripts/perf/seed-synthetic.ts
 
 # 2. Production build and server.
-rm -rf .next && DATABASE_URL=$PERF_DB ENCRYPTION_KEY=$PERF_KEY AI_PROVIDER=off npm run build
-DATABASE_URL=$PERF_DB ENCRYPTION_KEY=$PERF_KEY AI_PROVIDER=off PORT=3400 npm start &
+rm -rf .next && DATABASE_URL=${PERF_DB:?} ENCRYPTION_KEY=${PERF_KEY:?} AI_PROVIDER=off npm run build
+DATABASE_URL=${PERF_DB:?} ENCRYPTION_KEY=${PERF_KEY:?} AI_PROVIDER=off PORT=3400 npm start &
 
 # 3. Probe: first-load JS + 7 throttled cold loads (plus one discarded warm-up).
-BASE_URL=http://localhost:3400 ENCRYPTION_KEY=$PERF_KEY \
+BASE_URL=http://localhost:3400 ENCRYPTION_KEY=${PERF_KEY:?} \
 CHROMIUM_PATH="<path to a Chrome/Chromium binary>" \
 npx tsx scripts/perf/measure.ts
 

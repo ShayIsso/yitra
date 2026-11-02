@@ -20,7 +20,8 @@ function block(selector: string): Record<string, string> {
 }
 
 const light = block(":root");
-const dark = { ...light, ...block('[data-theme="dark"],\n.dark') };
+const darkScope = block('[data-theme="dark"],\n.dark');
+const dark = { ...light, ...darkScope };
 
 function hex(tokens: Record<string, string>, name: string): string {
   const value = tokens[name];
@@ -129,5 +130,19 @@ describe.each([
   it.each(tinted)("%s on %s/%s over %s meets WCAG AA (4.5:1)", (text, tint, alpha, surface) => {
     const fill = composite(hex(tokens, tint), alpha, hex(tokens, surface));
     expect(contrast(channels(hex(tokens, text)), fill)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("dark scope", () => {
+  // A var() inside a custom property resolves where it is declared, so an
+  // alias declared only on :root keeps its light value inside a nested
+  // .dark scope. The resolver above cannot see that; this guard can.
+  const aliases = Object.entries(light)
+    .filter(([, value]) => /^var\(--[a-z0-9-]+\)$/.test(value))
+    .map(([name]) => name)
+    .filter((name) => !["--radius"].includes(name));
+
+  it.each(aliases)("redeclares the %s alias", (name) => {
+    expect(darkScope[name]).toBe(light[name]);
   });
 });
