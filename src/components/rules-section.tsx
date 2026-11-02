@@ -30,8 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   CheckIcon,
   ListChecksIcon,
-  MagicWandIcon,
   MagnifyingGlassIcon,
+  SparkleIcon,
   TrashIcon,
 } from "@/components/icons";
 import { createRuleSchema } from "@/lib/categories/schemas";
@@ -311,7 +311,7 @@ export function RulesSection({
                       label={`יישום הכלל ${rule.pattern} על תנועות קיימות`}
                       onClick={() => openApply(rule)}
                     >
-                      <MagicWandIcon />
+                      <SparkleIcon weight="regular" />
                     </RowAction>
                     <RowAction
                       label={`מחיקת הכלל ${rule.pattern}`}

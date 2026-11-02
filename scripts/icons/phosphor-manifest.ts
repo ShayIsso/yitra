@@ -64,16 +64,13 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   ListChecks: ["regular"],
   Wallet: ["regular"],
   Target: ["regular"],
-  CircleHalf: ["regular"],
   Archive: ["regular"],
   LinkBreak: ["regular"],
-  ClockCounterClockwise: ["regular"],
-  MagicWand: ["regular"],
 
   // Status
   WarningCircle: ["fill"],
   CheckCircle: ["fill"],
-  Clock: ["fill", "regular"],
+  Clock: ["fill"],
   Play: ["fill"],
   Pause: ["fill"],
 

@@ -3,12 +3,12 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  ArrowsClockwiseIcon,
   BankIcon,
   CaretLeftIcon,
   CaretRightIcon,
-  CircleHalfIcon,
-  ClockIcon,
   ListChecksIcon,
+  MoonIcon,
   PiggyBankIcon,
   SparkleIcon,
   TagIcon,
@@ -43,8 +43,8 @@ const SECTION_ICONS: Record<SettingsSection, React.ReactNode> = {
   targets: <TargetIcon />,
   budgets: <WalletIcon />,
   goals: <PiggyBankIcon weight="regular" />,
-  scheduler: <ClockIcon weight="regular" />,
-  appearance: <CircleHalfIcon />,
+  scheduler: <ArrowsClockwiseIcon weight="regular" />,
+  appearance: <MoonIcon />,
 };
 
 const PHONE_QUERY = "(max-width: 47.99rem)";

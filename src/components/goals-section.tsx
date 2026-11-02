@@ -10,7 +10,6 @@ import {
   ArrowUpIcon,
   CaretDownIcon,
   CheckIcon,
-  ClockCounterClockwiseIcon,
   InfoIcon,
   PiggyBankIcon,
   TrashIcon,
@@ -475,7 +474,7 @@ export function GoalsSection({
             aria-expanded={showArchived}
             className="text-muted-foreground hover:text-foreground focus-visible:ring-ring text-body flex min-h-12 w-full items-center gap-2 px-4 text-start outline-none focus-visible:ring-3 focus-visible:ring-inset"
           >
-            <ClockCounterClockwiseIcon className="size-4" />
+            <ArchiveIcon className="size-4" />
             <span className="flex-1">יעדים בארכיון ({archivedGoals.length})</span>
             <CaretDownIcon
               className={cn("size-4 transition-transform", showArchived && "rotate-180")}
