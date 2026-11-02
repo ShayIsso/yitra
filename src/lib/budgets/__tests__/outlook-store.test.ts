@@ -21,7 +21,6 @@ function spend(date: string, amount: number, over: Partial<OutlookRow> = {}): Ou
     date,
     description: `Invented Shop ${nextId}`,
     chargedAmount: -amount,
-    status: "completed",
     categoryType: "expense",
     reconciliationRole: null,
     ...over,
@@ -78,7 +77,7 @@ function run(bank: string, finishedAt: Date | null, startedAt?: Date): SyncRunSu
   };
 }
 
-/** A store over plain arrays; `loadRows` honors its date window as the SQL does. */
+/** A store over plain arrays; `loadMonth` buckets rows by calendar month as the SQL does. */
 function store(
   over: Partial<{
     rows: OutlookRow[];
@@ -93,7 +92,7 @@ function store(
     firstSuccess: Date | null;
     runningSince: Date | null;
   }> = {},
-): MonthOutlookStore & { windows: [string, string][] } {
+): MonthOutlookStore & { monthsRead: string[] } {
   const data = {
     rows: [],
     accountStarts: ["2025-01-01", "2025-01-03"],
@@ -109,12 +108,13 @@ function store(
     runningSince: null,
     ...over,
   };
-  const windows: [string, string][] = [];
+  const monthsRead: string[] = [];
   return {
-    windows,
-    async loadRows(from, to) {
-      windows.push([from, to]);
-      return data.rows.filter((r) => r.date >= from && r.date <= to);
+    monthsRead,
+    async loadMonth({ year, month }) {
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      monthsRead.push(key);
+      return data.rows.filter((r) => r.date.startsWith(`${key}-`));
     },
     async accountHistoryStarts() {
       return data.accountStarts;
@@ -160,7 +160,21 @@ describe("getMonthOutlookWithStore", () => {
     });
     const outlook = await getMonthOutlookWithStore(JUNE, CLOCK, s);
     expect(outlook).toMatchObject({ state: "no-target", spent: 200, usualMonth: 4166.67 });
-    expect(s.windows).toEqual([["2025-06-01", "2026-06-30"]]);
+    expect([...s.monthsRead].sort()).toEqual([
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+    ]);
   });
 
   it("excludes the flagged settlement lump from history months too", async () => {
@@ -187,8 +201,8 @@ describe("getMonthOutlookWithStore", () => {
         target: null,
         rows: [
           spend("2026-05-10", 1000),
-          spend("2026-06-08", 120, { status: "pending", description }),
-          spend("2026-06-09", 120, { status: "pending", description }),
+          Object.assign({ status: "pending" }, spend("2026-06-08", 120, { description })),
+          Object.assign({ status: "pending" }, spend("2026-06-09", 120, { description })),
           spend("2026-06-10", 120, { description }),
         ],
       }),

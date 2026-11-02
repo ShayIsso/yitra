@@ -31,7 +31,6 @@ function row(over: Partial<OutlookRow> & Pick<OutlookRow, "date" | "chargedAmoun
   return {
     id: `row-${nextId}`,
     description: `Invented Shop ${nextId}`,
-    status: "completed",
     categoryType: "expense",
     reconciliationRole: null,
     ...over,
@@ -41,6 +40,9 @@ function row(over: Partial<OutlookRow> & Pick<OutlookRow, "date" | "chargedAmoun
 /** An expense outflow of `amount` shekels on `date`. */
 const spend = (date: string, amount: number, over: Partial<OutlookRow> = {}) =>
   row({ date, chargedAmount: -amount, ...over });
+
+/** The stored row as the bank still reports it: pending. The outlook takes rows as stored. */
+const pending = (r: OutlookRow): OutlookRow => Object.assign({ status: "pending" }, r);
 
 describe("monthOutlook — connection states", () => {
   it("is no-connection when no bank is connected", () => {
@@ -170,7 +172,7 @@ describe("monthOutlook — what counts as spent", () => {
     const description = "Invented Coffee";
     const rows = [
       spend("2026-06-08", 120, { description }),
-      spend("2026-06-10", 120, { status: "pending", description }),
+      pending(spend("2026-06-10", 120, { description })),
     ];
     expect(spentOf(rows)).toBe(240);
   });
@@ -178,8 +180,8 @@ describe("monthOutlook — what counts as spent", () => {
   it("counts two pending purchases beside a same-looking posted one as three", () => {
     const description = "Invented Coffee";
     const rows = [
-      spend("2026-06-08", 120, { status: "pending", description }),
-      spend("2026-06-09", 120, { status: "pending", description }),
+      pending(spend("2026-06-08", 120, { description })),
+      pending(spend("2026-06-09", 120, { description })),
       spend("2026-06-10", 120, { description }),
     ];
     expect(spentOf(rows)).toBe(360);
@@ -474,6 +476,18 @@ describe("monthOutlook — closed month", () => {
       target: null,
       overBy: null,
     });
+  });
+
+  it("leaves a flagged settlement lump still typed as an expense out of the month's expenses", () => {
+    const lump = spend("2026-05-15", 4000, { reconciliationRole: "settlement_lump" });
+    const outlook = monthOutlook(
+      input({
+        month: { year: 2026, month: 5 },
+        target: null,
+        rows: [spend("2026-05-10", 7500), lump],
+      }),
+    );
+    expect(outlook).toMatchObject({ state: "closed", expenses: 7500 });
   });
 });
 

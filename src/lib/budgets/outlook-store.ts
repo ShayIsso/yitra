@@ -1,7 +1,7 @@
 /**
  * Gathers `monthOutlook`'s inputs behind a store (ADR-0007) and calls the pure
- * core. Rows are read on `transactions.date` through analytics'
- * `monthDateRange`, the window every Dashboard and budget figure uses, so the
+ * core. Rows are read one calendar month at a time through analytics' single
+ * month query, the window every Dashboard and budget figure uses, so the
  * outlook's spend agrees with them.
  */
 import { monthDateRange } from "@/lib/analytics";
@@ -13,8 +13,8 @@ import {
 import type { SyncRunSummary } from "@/lib/sync/runs";
 import { merchantKey, sameMerchant } from "@/lib/transaction-matching";
 import {
-  countsAsSpend,
   monthOutlook,
+  spendRowIds,
   outlookMonthExpenses,
   type MonthOutlook,
   type OutlookRecurringCharge,
@@ -27,8 +27,8 @@ import type { YearMonth } from "./pace";
 const HISTORY_MONTHS = 12;
 
 export type MonthOutlookStore = {
-  /** Every transaction dated in [from, to], inclusive YYYY-MM-DD. */
-  loadRows(from: string, to: string): Promise<OutlookRow[]>;
+  /** Every transaction dated in the calendar month. */
+  loadMonth(month: YearMonth): Promise<OutlookRow[]>;
   /** YYYY-MM-DD of each bank account's earliest stored transaction. */
   accountHistoryStarts(): Promise<string[]>;
   expenseTarget(): Promise<number | null>;
@@ -60,9 +60,6 @@ function addMonths(month: YearMonth, delta: number): YearMonth {
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };
 }
 
-const keyOf = (month: YearMonth): string =>
-  monthDateRange(month.year, month.month).from.slice(0, 7);
-
 /**
  * Each live, active series' charge for the month. Its latest charge has
  * arrived only when that row is in the month up to today AND counts as spend
@@ -79,7 +76,7 @@ function recurringCharges(
   today: string,
 ): OutlookRecurringCharge[] {
   const { from, to } = monthDateRange(month.year, month.month);
-  const spendIds = new Set(monthRows.filter(countsAsSpend).map((r) => r.id));
+  const spendIds = spendRowIds(monthRows);
   // Rows the bank already lists for later months (installments) would make a
   // series' latest charge next month's and hide this month's from both spent
   // and due, so evidence stops at the month's end.
@@ -153,9 +150,10 @@ export async function getMonthOutlookWithStore(
   clock: OutlookClock,
   store: MonthOutlookStore,
 ): Promise<MonthOutlook> {
-  const historyStart = addMonths(month, -HISTORY_MONTHS);
+  const priorMonths = Array.from({ length: HISTORY_MONTHS }, (_, i) => addMonths(month, -(i + 1)));
   const [
-    rows,
+    monthRows,
+    priorRows,
     accountStarts,
     target,
     recurring,
@@ -165,10 +163,8 @@ export async function getMonthOutlookWithStore(
     firstSuccess,
     runningSince,
   ] = await Promise.all([
-    store.loadRows(
-      monthDateRange(historyStart.year, historyStart.month).from,
-      monthDateRange(month.year, month.month).to,
-    ),
+    store.loadMonth(month),
+    Promise.all(priorMonths.map((m) => store.loadMonth(m))),
     store.accountHistoryStarts(),
     store.expenseTarget(),
     store.recurring(),
@@ -179,22 +175,11 @@ export async function getMonthOutlookWithStore(
     store.syncRunningSince(),
   ]);
 
-  const rowsByMonth = new Map<string, OutlookRow[]>();
-  for (const row of rows) {
-    const key = row.date.slice(0, 7);
-    const bucket = rowsByMonth.get(key);
-    if (bucket) bucket.push(row);
-    else rowsByMonth.set(key, [row]);
-  }
-  const rowsOf = (m: YearMonth) => rowsByMonth.get(keyOf(m)) ?? [];
+  const history: PriorMonthExpenses[] = priorMonths.map((prior, i) => ({
+    month: prior,
+    expenses: outlookMonthExpenses(priorRows[i], prior),
+  }));
 
-  const history: PriorMonthExpenses[] = [];
-  for (let back = 1; back <= HISTORY_MONTHS; back++) {
-    const prior = addMonths(month, -back);
-    history.push({ month: prior, expenses: outlookMonthExpenses(rowsOf(prior), prior) });
-  }
-
-  const monthRows = rowsOf(month);
   return monthOutlook({
     month,
     today: clock.today,

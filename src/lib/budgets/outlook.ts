@@ -9,20 +9,21 @@
  * refund offsets spend, transfer/ignore are invisible and investment is not an
  * expense. On top of that the outlook drops two kinds of row a month-to-date
  * figure must not count: rows dated after `today` (scheduled and installment
- * rows the bank already lists) and a row reconciliation flagged as a
- * `settlement_lump` (CONTEXT.md "settlement charge"). A lump is recognised by
- * that flag only, never by its description: outside P1's pairing with card
- * totals the descriptor shape also matches ordinary direct debits, years and
- * reference numbers. Pending rows count as stored: the import's pending
- * lifecycle already supersedes and sweeps them, so a pending row beside a
- * same-looking posted one is a repeat purchase.
+ * rows the bank already lists) and the flagged settlement lump
+ * (`excludeSettlementLumps`). Analytics applies that rule to per-category
+ * figures only and keeps month totals type-driven; the outlook's spent is a
+ * month total that applies it too (#328), because the hero must not read an
+ * unreconciled bill lump as this month's spending. Pending rows count as
+ * stored: the import's pending lifecycle already supersedes and sweeps them, so
+ * a row beside a same-looking one is a repeat purchase.
  */
 import {
   computeMonthlySummary,
+  excludeSettlementLumps,
   outflowContribution,
   type AnalyticsTransaction,
+  type ReconciliationRole,
 } from "@/lib/analytics";
-import type { reconciliationRoleEnum } from "@/db/schema";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 
 /**
@@ -66,9 +67,8 @@ export type OutlookRow = {
   date: string;
   description: string;
   chargedAmount: number;
-  status: "pending" | "completed";
   categoryType: AnalyticsTransaction["categoryType"];
-  reconciliationRole: (typeof reconciliationRoleEnum.enumValues)[number] | null;
+  reconciliationRole: ReconciliationRole | null;
 };
 
 /** One live recurring series' charge for the month (CONTEXT.md "projected charge"). */
@@ -220,21 +220,21 @@ function isoDay(month: YearMonth, day: number): string {
  */
 function countedRows(rows: readonly OutlookRow[], month: YearMonth, throughDate: string) {
   const prefix = `${monthKey(month)}-`;
-  return rows.filter(
-    (r) => r.date.startsWith(prefix) && r.date <= throughDate && !isSettlementLump(r),
+  return excludeSettlementLumps(rows).filter(
+    (r) => r.date.startsWith(prefix) && r.date <= throughDate,
   );
 }
 
-const isSettlementLump = (row: Pick<OutlookRow, "reconciliationRole">): boolean =>
-  row.reconciliationRole === "settlement_lump";
-
 /**
- * Whether a row adds to the month's spend under the outlook's rules: an
- * expense-typed row that is not the flagged settlement lump. A recurring
- * series has arrived only through such a row.
+ * Ids of the month's rows that add to spend: expense-typed and not the flagged
+ * lump. A recurring series has arrived only through one of these.
  */
-export function countsAsSpend(row: Pick<OutlookRow, "categoryType" | "reconciliationRole">) {
-  return row.categoryType === "expense" && !isSettlementLump(row);
+export function spendRowIds(rows: readonly OutlookRow[]): Set<string> {
+  return new Set(
+    excludeSettlementLumps(rows)
+      .filter((r) => r.categoryType === "expense")
+      .map((r) => r.id),
+  );
 }
 
 /** A whole month by the outlook's rules. */

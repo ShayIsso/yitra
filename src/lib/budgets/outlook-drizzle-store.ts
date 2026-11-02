@@ -1,6 +1,7 @@
-import { and, eq, gte, lte, min } from "drizzle-orm";
+import { min } from "drizzle-orm";
 import { db } from "@/db";
-import { bankCredentials, categories, transactions } from "@/db/schema";
+import { bankCredentials, transactions } from "@/db/schema";
+import { getMonthTransactionDetails } from "@/lib/analytics";
 import { drizzleRecurringStore } from "@/lib/recurring-detection";
 // Deep import, as the other server readers of sync runs do: the sync barrel
 // loads the scraper.
@@ -17,26 +18,8 @@ export function makeDrizzleMonthOutlookStore(
   expenseTarget: () => Promise<number | null>,
 ): MonthOutlookStore {
   return {
-    async loadRows(from, to) {
-      const rows = await db
-        .select({
-          id: transactions.id,
-          date: transactions.date,
-          description: transactions.description,
-          chargedAmount: transactions.chargedAmount,
-          status: transactions.status,
-          categoryType: categories.type,
-          reconciliationRole: transactions.reconciliationRole,
-        })
-        .from(transactions)
-        .leftJoin(categories, eq(transactions.categoryId, categories.id))
-        .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-      return rows.map((r) => ({
-        ...r,
-        chargedAmount: Number(r.chargedAmount),
-        categoryType: r.categoryType ?? null,
-      }));
+    loadMonth(month) {
+      return getMonthTransactionDetails(month.year, month.month);
     },
 
     // Deleting a credential cascades to its accounts and their transactions,
