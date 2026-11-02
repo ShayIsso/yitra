@@ -8,7 +8,6 @@ import {
   CheckCircleIcon,
   ClockIcon,
   InfoIcon,
-  PauseIcon,
   PlusIcon,
   WarningCircleIcon,
 } from "@/components/icons";
@@ -17,8 +16,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
 import { observedFromResponse } from "@/components/institution-picker";
-import { OtpEntry, STATUS_TEXT } from "@/components/sync-bank-status";
-import { useSyncStream, type BankSyncState, type SyncStreamState } from "@/components/sync-stream";
+import {
+  BankStatus,
+  BankStatusDetail,
+  OtpEntry,
+  StageProgress,
+} from "@/components/sync-bank-status";
+import { awaitsCode, liveBankStatus } from "@/components/bank-status-view";
+import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
 import { cn } from "@/lib/utils";
 import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
@@ -29,7 +34,6 @@ import type { SetupStepProps, StepMeta, StepNavigation } from "../step-navigatio
 import {
   deriveFirstSyncView,
   firstSyncFooter,
-  syncStageProgress,
   type ConnectedLoad,
   type FirstSyncView,
 } from "./first-sync-view";
@@ -285,7 +289,7 @@ function InstitutionList({
         const trust = bankTrustOf(institution.bankType, observed);
         const failureNote =
           live?.status === "error" ? unverifiedFailureNote(institution.bankType, trust) : null;
-        const progress = syncStageProgress(live?.status);
+        const status = liveBankStatus(live, { running, otp: stream.otp[institution.bankType] });
         return (
           <li key={institution.id} className="flex flex-col gap-3 px-4 py-4">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -295,18 +299,10 @@ function InstitutionList({
               >
                 <InstitutionTrustBadge trust={trust} />
               </InstitutionIdentity>
-              <p className="text-body ms-auto flex items-center gap-1.5">
-                <RowStatus state={live} running={running} />
-              </p>
+              <BankStatus view={status} className="ms-auto" />
             </div>
-            {progress !== null && (
-              <div aria-hidden="true" className="bg-muted h-1.5 overflow-hidden rounded-full">
-                <div
-                  className="bg-bar-strong h-full origin-left rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none rtl:origin-right"
-                  style={{ transform: `scaleX(${progress})` }}
-                />
-              </div>
-            )}
+            <StageProgress value={status.progress} />
+            <BankStatusDetail view={status} />
             {failureNote && (
               <p className="text-muted-foreground text-body text-pretty">{failureNote}</p>
             )}
@@ -320,7 +316,7 @@ function InstitutionList({
                 צפה בצילום מסך
               </a>
             )}
-            {live?.status === "otp_required" && (
+            {awaitsCode(live, stream.otp[institution.bankType]) && (
               <OtpEntry
                 code={stream.otpDrafts[institution.bankType] ?? ""}
                 secondsLeft={stream.otp[institution.bankType]?.secondsLeft}
@@ -333,63 +329,6 @@ function InstitutionList({
       })}
     </ConnectedList>
   );
-}
-
-/**
- * One institution's state in words beside an icon, so no outcome is told by
- * colour alone. A failure or a missed OTP is an attention state (ADR-0015:
- * coral means attention), never the red of negative money. Only those are
- * announced: a live region per row would read out every stage of every run.
- */
-function RowStatus({ state, running }: { state: BankSyncState | undefined; running: boolean }) {
-  if (!state || state.status === "idle") {
-    return (
-      <span className="text-muted-foreground flex items-center gap-1.5">
-        {running && <ClockIcon className="size-4 shrink-0" />}
-        {running ? "ממתין לתורו" : "ממתין"}
-      </span>
-    );
-  }
-  switch (state.status) {
-    case "complete":
-      return (
-        <span className="flex items-center gap-1.5 font-medium">
-          <CheckCircleIcon className="text-foreground size-4 shrink-0" />
-          {state.transactionCount !== undefined
-            ? `${state.transactionCount} תנועות`
-            : STATUS_TEXT.complete}
-        </span>
-      );
-    case "otp_required":
-    case "otp_timeout":
-      return (
-        <span role="alert" className="text-attention-text flex items-center gap-1.5 font-medium">
-          <WarningCircleIcon className="size-4 shrink-0" />
-          {STATUS_TEXT[state.status]}
-        </span>
-      );
-    case "error":
-      return (
-        <span role="alert" className="text-attention-text flex items-center gap-1.5 font-medium">
-          <WarningCircleIcon className="size-4 shrink-0" />
-          {state.error ?? STATUS_TEXT.error}
-        </span>
-      );
-    case "interrupted":
-      return (
-        <span className="text-muted-foreground flex items-center gap-1.5">
-          <PauseIcon className="size-4 shrink-0" />
-          {STATUS_TEXT.interrupted}
-        </span>
-      );
-    default:
-      return (
-        <span className="text-muted-foreground flex items-center gap-1.5">
-          <ArrowsClockwiseIcon className="size-4 shrink-0" />
-          {STATUS_TEXT[state.status]}
-        </span>
-      );
-  }
 }
 
 function Outcome({

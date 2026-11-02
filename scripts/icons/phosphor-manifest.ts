@@ -14,7 +14,7 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   House: ["regular", "fill", "duotone"],
   ArrowsLeftRight: ["regular", "fill", "duotone"],
   ChartPieSlice: ["regular", "fill"],
-  Tray: ["regular", "fill"],
+  Tray: ["regular", "fill", "duotone"],
   Repeat: ["regular", "fill", "duotone"],
   ArrowsClockwise: ["regular", "fill"],
   GearSix: ["regular", "fill"],
