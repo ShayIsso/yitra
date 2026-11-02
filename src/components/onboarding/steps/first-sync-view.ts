@@ -1,5 +1,5 @@
 import type { ConnectedInstitution } from "../connected-institutions";
-import type { SyncStreamState } from "@/components/sync-stream";
+import type { BankSyncState, SyncStreamState } from "@/components/sync-stream";
 
 export type ConnectedLoad =
   | { readonly status: "loading" }
@@ -87,4 +87,24 @@ export function firstSyncFooter(view: FirstSyncView): {
     case "finished":
       return { primary: "finish", skip: false };
   }
+}
+
+const STAGE_PROGRESS: Partial<Record<BankSyncState["status"], number>> = {
+  initializing: 0.1,
+  logging_in: 0.25,
+  otp_required: 0.25,
+  login_success: 0.45,
+  scraping: 0.65,
+  importing: 0.85,
+};
+
+/**
+ * How far one institution's run has come, for a determinate bar. The stream
+ * reports stages, not percentages, so these are stage positions rather than a
+ * measure of time; `null` before the run reaches the institution and once it
+ * has ended, where the row states the outcome instead. An OTP wait holds at
+ * the login stage it interrupts.
+ */
+export function syncStageProgress(status: BankSyncState["status"] | undefined): number | null {
+  return (status && STAGE_PROGRESS[status]) ?? null;
 }

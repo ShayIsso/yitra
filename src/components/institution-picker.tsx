@@ -52,7 +52,7 @@
  */
 
 import * as React from "react";
-import { FlaskConical } from "lucide-react";
+import { FlaskIcon } from "@/components/icons";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InstitutionTrustBadge } from "@/components/institution-trust";
@@ -225,13 +225,16 @@ export function InstitutionPicker({
           className="bg-muted/50 space-y-3 rounded-lg border p-3 text-sm"
         >
           <p className="flex gap-2">
-            <FlaskConical className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+            <FlaskIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
             <span>
               {bankLabel(value)} נתמך, אך עדיין לא נבדק על ידינו מול חשבון אמיתי. ייתכן שהסנכרון
               ייכשל או יחזיר נתונים חלקיים.
             </span>
           </p>
-          <label htmlFor={acknowledgmentId} className="flex items-center gap-2 font-medium">
+          <label
+            htmlFor={acknowledgmentId}
+            className="flex min-h-11 items-center gap-2 font-medium"
+          >
             <Checkbox
               id={acknowledgmentId}
               checked={acknowledgment.acknowledgedId === value}

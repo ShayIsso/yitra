@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, CircleSlash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,22 +89,31 @@ export type OtpEntryProps = {
 };
 
 export function OtpEntry({ code, secondsLeft, onCodeChange, onSubmit }: OtpEntryProps) {
+  const inputId = useId();
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      <label htmlFor={inputId} className="sr-only">
+        קוד אימות שהתקבל ב-SMS
+      </label>
       <Input
-        className="max-w-[160px]"
+        id={inputId}
+        className="h-11 max-w-[11rem] tabular-nums"
         placeholder="הזן קוד SMS"
+        inputMode="numeric"
+        autoComplete="one-time-code"
         value={code}
         onChange={(e) => onCodeChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") onSubmit();
         }}
       />
-      <Button size="sm" onClick={onSubmit}>
+      <Button className="h-11 px-4" onClick={onSubmit}>
         אשר
       </Button>
       {secondsLeft !== undefined && secondsLeft > 0 && (
-        <span className="text-muted-foreground text-sm">{formatCountdown(secondsLeft)}</span>
+        <span className="text-muted-foreground text-body tabular-nums">
+          {formatCountdown(secondsLeft)}
+        </span>
       )}
     </div>
   );

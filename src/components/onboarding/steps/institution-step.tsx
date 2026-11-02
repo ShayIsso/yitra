@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Trash2 } from "lucide-react";
+import { PlusIcon, ShieldCheckIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,7 +25,6 @@ import {
   FormRootError,
   applyActionErrors,
 } from "@/components/ui/form";
-import { BankBadge } from "@/components/bank-badge";
 import { CredentialFields } from "@/components/credential-fields";
 import { InstitutionPicker, useInstitutionPicker } from "@/components/institution-picker";
 import {
@@ -40,6 +39,7 @@ import {
   type CredentialValues,
 } from "@/lib/credentials/form";
 import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
+import { InstitutionIdentity } from "../institution-identity";
 import { StepFooter } from "../step-footer";
 import type { SetupStepProps, StepMeta } from "../step-navigation";
 
@@ -47,7 +47,7 @@ import type { SetupStepProps, StepMeta } from "../step-navigation";
 export const institutionStepMeta: StepMeta = {
   label: "חשבון",
   title: "חיבור בנק או כרטיס אשראי",
-  description: "הוסיפו את פרטי ההתחברות לחשבון הראשון. הפרטים נשמרים מוצפנים במסד הנתונים שלכם.",
+  description: "בחרו את הבנק או חברת האשראי, והזינו את פרטי ההתחברות שלכם לאתר שלהם.",
 };
 
 type ConnectedLoad =
@@ -92,9 +92,9 @@ export function InstitutionStep({ navigation }: SetupStepProps) {
     return (
       <div className="flex flex-col gap-6">
         <div aria-busy="true" className="flex flex-col gap-4">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-11 w-full" />
         </div>
         <StepFooter navigation={navigation} primary={{ disabled: true }} />
       </div>
@@ -154,31 +154,33 @@ export function ConnectedSummary({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="border-border rounded-lg border">
-        <h3 className="bg-muted/50 px-4 py-2 text-sm font-semibold">חשבונות מחוברים</h3>
-        <ul className="flex flex-col gap-2 px-4 py-3">
+      <section className="flex flex-col gap-2">
+        <h2 className="text-muted-foreground text-caption font-medium">חשבונות מחוברים</h2>
+        <ul className="border-border divide-border flex flex-col divide-y rounded-xl border">
           {connected.map((credential) => (
-            <li key={credential.id} className="flex min-w-0 items-center gap-3 text-sm">
-              <BankBadge bankType={credential.bankType} />
-              <span className="truncate">{credential.displayName}</span>
+            <li key={credential.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
+              <InstitutionIdentity
+                bankType={credential.bankType}
+                displayName={credential.displayName}
+              />
               <Button
                 variant="ghost"
-                size="sm"
-                className="text-muted-foreground ms-auto"
+                size="lg"
+                className="text-muted-foreground min-w-11 shrink-0"
                 onClick={() => openRemove(credential)}
                 disabled={navigation.pending}
                 aria-label={`הסרת ${credential.displayName}`}
               >
-                <Trash2 />
-                הסרה
+                <TrashIcon />
+                <span className="max-sm:sr-only">הסרה</span>
               </Button>
             </li>
           ))}
         </ul>
       </section>
       <div>
-        <Button variant="outline" onClick={onAddAnother} disabled={navigation.pending}>
-          <Plus />
+        <Button variant="outline" size="lg" onClick={onAddAnother} disabled={navigation.pending}>
+          <PlusIcon />
           הוספת חשבון נוסף
         </Button>
       </div>
@@ -194,15 +196,27 @@ export function ConnectedSummary({
             </DialogDescription>
           </DialogHeader>
           {error && (
-            <p role="alert" className="text-destructive text-sm">
+            <p role="alert" className="text-destructive text-body">
               {error}
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTarget(null)} disabled={removing}>
+            <Button
+              variant="outline"
+              size="lg"
+              className="min-h-11"
+              onClick={() => setTarget(null)}
+              disabled={removing}
+            >
               ביטול
             </Button>
-            <Button variant="destructive" onClick={confirmRemove} disabled={removing}>
+            <Button
+              variant="destructive"
+              size="lg"
+              className="min-h-11"
+              onClick={confirmRemove}
+              disabled={removing}
+            >
               {removing ? "מסיר..." : "הסרה"}
             </Button>
           </DialogFooter>
@@ -252,7 +266,7 @@ function InstitutionForm({ navigation }: SetupStepProps) {
         className="flex flex-col gap-6"
         noValidate
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <FormField
             control={form.control}
             name="bankType"
@@ -292,7 +306,14 @@ function InstitutionForm({ navigation }: SetupStepProps) {
 
           {selectedEntry && <CredentialFields entry={selectedEntry} mode="add" />}
 
-          <FormRootError />
+          <FormRootError role="alert" />
+
+          <p className="bg-muted text-body flex items-start gap-3 rounded-lg p-4">
+            <ShieldCheckIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
+            <span className="text-pretty">
+              הפרטים נשמרים מוצפנים במסד הנתונים שלכם, ומשמשים רק למשיכת התנועות.
+            </span>
+          </p>
         </div>
 
         <StepFooter

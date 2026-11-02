@@ -44,12 +44,12 @@ export function ProviderStep({ navigation }: SetupStepProps) {
       <div className="flex flex-col gap-6">
         {load.kind === "loading" ? (
           <div aria-busy="true" className="flex flex-col gap-3">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full rounded-xl" />
+            <Skeleton className="h-20 w-full rounded-xl" />
+            <Skeleton className="h-20 w-full rounded-xl" />
           </div>
         ) : (
-          <p role="alert" className="text-destructive text-sm">
+          <p role="alert" className="text-destructive text-body">
             לא הצלחנו לטעון את ההגדרה. אפשר לדלג ולבחור ספק מאוחר יותר בהגדרות.
           </p>
         )}

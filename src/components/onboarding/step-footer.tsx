@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import type { StepNavigation } from "./step-navigation";
 
@@ -23,7 +23,8 @@ export type StepFooterProps = {
  * Back, skip and continue, wired to the frame's navigation. A step body renders
  * this once, last; it overrides only `primary`, and may pass `navigation` with
  * `skip: null` where its primary already leads where skipping would. In RTL
- * the forward direction is leftward, hence the arrow choice.
+ * the forward direction is leftward, hence the caret choice. On a phone the bar
+ * pins to the bottom of the viewport, so a long step never hides its way on.
  */
 export function StepFooter({ navigation, primary = {} }: StepFooterProps) {
   const busy = navigation.pending || primary.pending === true;
@@ -31,11 +32,11 @@ export function StepFooter({ navigation, primary = {} }: StepFooterProps) {
   const type = primary.type ?? "button";
 
   return (
-    <div className="border-border flex flex-wrap-reverse items-center justify-between gap-2 border-t pt-4">
+    <div className="bg-background border-border sticky bottom-0 z-10 -mx-4 mt-auto flex flex-wrap-reverse items-center justify-between gap-2 border-t px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:static md:mx-0 md:bg-transparent md:px-0 md:pt-5 md:pb-0">
       <div>
         {navigation.back && (
           <Button variant="ghost" size="lg" onClick={navigation.back} disabled={busy}>
-            <ArrowRight />
+            <CaretRightIcon />
             חזרה
           </Button>
         )}
@@ -51,11 +52,11 @@ export function StepFooter({ navigation, primary = {} }: StepFooterProps) {
           type={type}
           onClick={type === "submit" ? undefined : (primary.onClick ?? navigation.advance)}
           disabled={busy || primary.disabled === true}
-          className="min-w-24"
+          aria-busy={busy || undefined}
+          className="min-w-28 px-4"
         >
-          {busy ? <Loader2 className="animate-spin" /> : null}
           {label}
-          {!busy && <ArrowLeft />}
+          {!busy && <CaretLeftIcon />}
         </Button>
       </div>
     </div>

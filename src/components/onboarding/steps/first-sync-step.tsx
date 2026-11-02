@@ -2,22 +2,32 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Link2Off } from "lucide-react";
+import {
+  ArrowsClockwiseIcon,
+  BankIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  InfoIcon,
+  PauseIcon,
+  PlusIcon,
+  WarningCircleIcon,
+} from "@/components/icons";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BankBadge } from "@/components/bank-badge";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
 import { observedFromResponse } from "@/components/institution-picker";
-import { LiveBankStatus, OtpEntry } from "@/components/sync-bank-status";
-import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
+import { OtpEntry, STATUS_TEXT } from "@/components/sync-bank-status";
+import { useSyncStream, type BankSyncState, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
 import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
+import { InstitutionIdentity } from "../institution-identity";
 import { StepFooter, type StepFooterPrimary } from "../step-footer";
 import type { SetupStepProps, StepMeta, StepNavigation } from "../step-navigation";
 import {
   deriveFirstSyncView,
   firstSyncFooter,
+  syncStageProgress,
   type ConnectedLoad,
   type FirstSyncView,
 } from "./first-sync-view";
@@ -170,15 +180,15 @@ export function FirstSyncBody({
     <div className="flex flex-col gap-6">
       {view.phase === "loading" && (
         <div aria-busy="true" className="flex flex-col gap-3">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-16 w-full rounded-xl" />
         </div>
       )}
 
       {view.phase === "unavailable" && (
-        <p role="alert" className="text-muted-foreground text-sm">
+        <Callout role="alert" icon={<InfoIcon className="text-muted-foreground" />}>
           לא הצלחנו לטעון את החשבונות המחוברים. אפשר לסיים עכשיו ולסנכרן מאוחר יותר מעמוד הסנכרון.
-        </p>
+        </Callout>
       )}
 
       {view.phase === "no-credentials" && <NothingToSync />}
@@ -189,6 +199,7 @@ export function FirstSyncBody({
           <InstitutionList
             connected={load.connected}
             stream={stream}
+            running={view.phase === "running"}
             observed={observed}
             onOtpChange={onOtpChange}
             onOtpSubmit={onOtpSubmit}
@@ -202,23 +213,42 @@ export function FirstSyncBody({
   );
 }
 
+function Callout({
+  icon,
+  role,
+  children,
+}: {
+  icon: React.ReactNode;
+  role?: "alert" | "status";
+  children: React.ReactNode;
+}) {
+  return (
+    <div role={role} className="bg-muted text-body flex items-start gap-3 rounded-lg p-4">
+      <span className="mt-0.5 shrink-0 [&_svg]:size-5">{icon}</span>
+      <div className="flex min-w-0 flex-col gap-1 leading-relaxed text-pretty">{children}</div>
+    </div>
+  );
+}
+
 function NothingToSync() {
   return (
-    <div className="border-border flex flex-col gap-4 rounded-lg border px-4 py-5">
-      <div className="flex items-start gap-3">
-        <Link2Off className="text-muted-foreground mt-0.5 size-5 shrink-0" strokeWidth={1.5} />
-        <div className="flex flex-col gap-1 text-sm">
-          <p className="font-medium">עדיין לא חיברתם חשבון, ולכן אין מה לסנכרן.</p>
-          <p className="text-muted-foreground">
-            אפשר לחזור ולחבר חשבון עכשיו, או לסיים ולחבר אותו מאוחר יותר בהגדרות.
-          </p>
-        </div>
+    <div className="border-border flex flex-col items-start gap-4 rounded-xl border p-5">
+      <span className="bg-muted flex size-12 items-center justify-center rounded-full">
+        <BankIcon className="size-6" />
+      </span>
+      <div className="text-body flex flex-col gap-1">
+        <p className="font-medium">עדיין לא חיברתם חשבון, ולכן אין מה לסנכרן.</p>
+        <p className="text-muted-foreground text-pretty">
+          אפשר לחזור ולחבר חשבון עכשיו, או לסיים ולחבר אותו מאוחר יותר בהגדרות.
+        </p>
       </div>
-      <div>
-        <Link href={INSTITUTION_STEP_HREF} className={buttonVariants({ variant: "outline" })}>
-          חיבור חשבון
-        </Link>
-      </div>
+      <Link
+        href={INSTITUTION_STEP_HREF}
+        className={buttonVariants({ variant: "outline", size: "lg", className: "min-h-11 px-4" })}
+      >
+        <PlusIcon />
+        חיבור חשבון
+      </Link>
     </div>
   );
 }
@@ -226,14 +256,14 @@ function NothingToSync() {
 function PhaseNote({ view }: { view: FirstSyncView }) {
   if (view.phase === "running") {
     return (
-      <p className="text-muted-foreground text-sm">
+      <Callout icon={<ClockIcon className="text-muted-foreground" />}>
         הסנכרון פועל. השאירו את הדף פתוח עד שיסתיים — זה עשוי להימשך כמה דקות.
-      </p>
+      </Callout>
     );
   }
   if (view.phase === "ready" && view.notice === null) {
     return (
-      <p className="text-muted-foreground text-sm leading-relaxed">
+      <p className="text-muted-foreground text-body leading-relaxed text-pretty">
         הסנכרון הראשון מושך את התנועות של השנה האחרונה, חשבון אחר חשבון, וכך גם מוודא שפרטי ההתחברות
         נכונים. אם יישלח אליכם קוד אימות ב-SMS, תתבקשו להזין אותו כאן.
       </p>
@@ -245,48 +275,58 @@ function PhaseNote({ view }: { view: FirstSyncView }) {
 function InstitutionList({
   connected,
   stream,
+  running,
   observed,
   onOtpChange,
   onOtpSubmit,
 }: {
   connected: readonly ConnectedInstitution[];
   stream: SyncStreamState;
+  running: boolean;
   observed: ReadonlySet<string>;
   onOtpChange: (bank: string, code: string) => void;
   onOtpSubmit: (bank: string) => void;
 }) {
   return (
-    <section className="border-border rounded-lg border">
-      <h3 className="bg-muted/50 px-4 py-2 text-sm font-semibold">חשבונות מחוברים</h3>
-      <ul className="divide-border flex flex-col divide-y">
+    <section className="flex flex-col gap-2">
+      <h2 className="text-muted-foreground text-caption font-medium">חשבונות מחוברים</h2>
+      <ul className="border-border divide-border flex flex-col divide-y rounded-xl border">
         {connected.map((institution) => {
           const live = stream.bankStates[institution.bankType];
           const trust = bankTrustOf(institution.bankType, observed);
           const failureNote =
             live?.status === "error" ? unverifiedFailureNote(institution.bankType, trust) : null;
+          const progress = syncStageProgress(live?.status);
           return (
-            <li key={institution.id} className="flex flex-col gap-3 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <div className="flex min-w-0 items-center gap-3">
-                  <BankBadge bankType={institution.bankType} />
-                  <span className="truncate">{institution.displayName}</span>
+            <li key={institution.id} className="flex flex-col gap-3 px-4 py-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <InstitutionIdentity
+                  bankType={institution.bankType}
+                  displayName={institution.displayName}
+                >
                   <InstitutionTrustBadge trust={trust} />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {live ? (
-                    <LiveBankStatus state={live} />
-                  ) : (
-                    <span className="text-muted-foreground">ממתין</span>
-                  )}
-                </div>
+                </InstitutionIdentity>
+                <p aria-live="polite" className="text-body ms-auto flex items-center gap-1.5">
+                  <RowStatus state={live} running={running} />
+                </p>
               </div>
-              {failureNote && <p className="text-muted-foreground text-sm">{failureNote}</p>}
+              {progress !== null && (
+                <div aria-hidden="true" className="bg-muted h-1.5 overflow-hidden rounded-full">
+                  <div
+                    className="bg-bar-strong h-full origin-right rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none"
+                    style={{ transform: `scaleX(${progress})` }}
+                  />
+                </div>
+              )}
+              {failureNote && (
+                <p className="text-muted-foreground text-body text-pretty">{failureNote}</p>
+              )}
               {live?.screenshotFilename && (
                 <a
                   href={`/api/screenshots/${live.screenshotFilename}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary self-start text-xs hover:underline"
+                  className="text-primary text-body inline-flex min-h-11 items-center self-start underline-offset-4 hover:underline"
                 >
                   צפה בצילום מסך
                 </a>
@@ -307,6 +347,62 @@ function InstitutionList({
   );
 }
 
+/**
+ * One institution's state in words beside an icon, so no outcome is told by
+ * colour alone. A failure or a missed OTP is an attention state (ADR-0015:
+ * coral means attention), never the red of negative money.
+ */
+function RowStatus({ state, running }: { state: BankSyncState | undefined; running: boolean }) {
+  if (!state || state.status === "idle") {
+    return (
+      <span className="text-muted-foreground flex items-center gap-1.5">
+        {running && <ClockIcon className="size-4 shrink-0" />}
+        {running ? "ממתין לתורו" : "ממתין"}
+      </span>
+    );
+  }
+  switch (state.status) {
+    case "complete":
+      return (
+        <span className="flex items-center gap-1.5 font-medium">
+          <CheckCircleIcon className="text-pos size-4 shrink-0" />
+          {state.transactionCount !== undefined
+            ? `${state.transactionCount} תנועות`
+            : STATUS_TEXT.complete}
+        </span>
+      );
+    case "otp_required":
+    case "otp_timeout":
+      return (
+        <span className="text-attention-text flex items-center gap-1.5 font-medium">
+          <WarningCircleIcon className="size-4 shrink-0" />
+          {STATUS_TEXT[state.status]}
+        </span>
+      );
+    case "error":
+      return (
+        <span className="text-attention-text flex items-center gap-1.5 font-medium">
+          <WarningCircleIcon className="size-4 shrink-0" />
+          {state.error ?? STATUS_TEXT.error}
+        </span>
+      );
+    case "interrupted":
+      return (
+        <span className="text-muted-foreground flex items-center gap-1.5">
+          <PauseIcon className="size-4 shrink-0" />
+          {STATUS_TEXT.interrupted}
+        </span>
+      );
+    default:
+      return (
+        <span className="text-muted-foreground flex items-center gap-1.5">
+          <ArrowsClockwiseIcon className="size-4 shrink-0" />
+          {STATUS_TEXT[state.status]}
+        </span>
+      );
+  }
+}
+
 function Outcome({
   view,
   stream,
@@ -320,51 +416,67 @@ function Outcome({
 }) {
   const aiLines = stream.aiSummary ? aiSummaryLines(stream.aiSummary) : [];
   const settled = view.phase === "ready" || view.phase === "finished";
+  const needsFix =
+    settled && (view.failedInstitution || (view.phase === "finished" && view.retryable));
 
   return (
     <>
       {view.notice?.kind === "refused" && (
-        <p role="status" className="text-muted-foreground text-sm">
+        <Callout role="status" icon={<InfoIcon className="text-muted-foreground" />}>
           {view.notice.message}
-        </p>
+        </Callout>
       )}
       {view.notice?.kind === "connection-error" && (
-        <p role="alert" className="text-destructive text-sm">
+        <Callout role="alert" icon={<WarningCircleIcon className="text-attention-text" />}>
           החיבור לשרת נותק לפני שהסנכרון הסתיים. אפשר לנסות שוב.
-        </p>
+        </Callout>
       )}
 
       {view.phase === "finished" && stream.summary && (
-        <div className="border-border flex flex-col gap-1.5 rounded-lg border px-4 py-3 text-sm">
-          <p className="flex items-center gap-1.5 font-medium">
-            <CheckCircle2 className="size-4" />
-            הסנכרון הסתיים
-          </p>
+        <Callout role="status" icon={<CheckCircleIcon className="text-pos" />}>
+          <p className="font-medium">הסנכרון הסתיים</p>
           <p className="text-muted-foreground">{`סה"כ ${stream.summary.total} תנועות יובאו`}</p>
           {aiLines.map((line) => (
             <p key={line} className="text-muted-foreground">
               {line}
             </p>
           ))}
-        </div>
+        </Callout>
       )}
 
-      {settled && (view.failedInstitution || (view.phase === "finished" && view.retryable)) && (
-        <div className="flex flex-col gap-3">
+      {needsFix && (
+        <div className="border-attention flex flex-col gap-3 rounded-xl border p-4">
           {view.failedInstitution && (
-            <p className="text-muted-foreground text-sm">
-              אם פרטי ההתחברות שגויים, חזרו לשלב החשבון, הסירו את החשבון וחברו אותו מחדש עם הפרטים
-              הנכונים.
+            <p className="text-body flex items-start gap-2 text-pretty">
+              <WarningCircleIcon className="text-attention-text mt-0.5 size-5 shrink-0" />
+              <span>
+                אם פרטי ההתחברות שגויים, חזרו לשלב החשבון, הסירו את החשבון וחברו אותו מחדש עם הפרטים
+                הנכונים.
+              </span>
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
             {view.failedInstitution && (
-              <Link href={INSTITUTION_STEP_HREF} className={buttonVariants({ variant: "outline" })}>
+              <Link
+                href={INSTITUTION_STEP_HREF}
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "lg",
+                  className: "min-h-11 px-4",
+                })}
+              >
                 חזרה לשלב החשבון
               </Link>
             )}
             {view.phase === "finished" && view.retryable && (
-              <Button variant="outline" onClick={onRetry} disabled={disabled}>
+              <Button
+                variant="outline"
+                size="lg"
+                className="min-h-11 px-4"
+                onClick={onRetry}
+                disabled={disabled}
+              >
+                <ArrowsClockwiseIcon />
                 ניסיון חוזר
               </Button>
             )}
