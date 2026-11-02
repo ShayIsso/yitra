@@ -181,6 +181,10 @@ type Metric = {
   points?: boolean;
 };
 
+function comparableRate(income: number | null, rate: number | null): number | null {
+  return income !== null && income > 0 && rate !== null && rate >= -100 ? rate : null;
+}
+
 function metrics(s: MonthlyReport["summary"]): Metric[] {
   return [
     {
@@ -209,15 +213,14 @@ function metrics(s: MonthlyReport["summary"]): Metric[] {
       render: (v) => <Amount amount={Math.round(v) || 0} fractionDigits={0} />,
     },
     {
-      // Without income the rate is meaningless (spec #312 story 28): the tile
-      // prints "—", never a 0%, and a last year without income is no baseline.
+      // Without income, or past -100% off a sliver of it, the rate is not a
+      // figure to read or compare (spec #312 story 28): "—", never a 0%.
       key: "savingsRate",
       label: "אחוז חיסכון",
       icon: PercentIcon,
       value: {
         current: s.savingsRate.current,
-        lastYear:
-          s.income.lastYear !== null && s.income.lastYear > 0 ? s.savingsRate.lastYear : null,
+        lastYear: comparableRate(s.income.lastYear, s.savingsRate.lastYear),
       },
       good: "up",
       points: true,
@@ -247,7 +250,9 @@ function SummarySection({ report, label }: { report: MonthlyReport; label: strin
       <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         {metrics(report.summary).map((m) => {
           const Icon = m.icon;
-          const noRate = m.key === "savingsRate" && incomeNow <= 0;
+          const noRate =
+            m.key === "savingsRate" &&
+            comparableRate(incomeNow, report.summary.savingsRate.current) === null;
           return (
             <li
               key={m.key}
@@ -346,8 +351,8 @@ function MonthCloseSection({ monthClose }: { monthClose: MonthCloseVerdicts }) {
 
 // ── category breakdown ────────────────────────────────────────────────────────
 
-// One grid template serves the phone list and the desktop table: below md the
-// row stacks name/amount, the bar, then last year/change/share; from md every
+// One grid template serves the phone list and the desktop table: below lg the
+// row stacks name/amount, the bar, then last year/change/share; from lg every
 // field takes its own column under the header row.
 const ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1.5 [grid-template-areas:'name_amount'_'bar_bar'_'meta_share'] lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_6.5rem_6.5rem_5.5rem_3rem] lg:items-center lg:gap-y-0 lg:[grid-template-areas:'name_bar_amount_last_delta_share']";
@@ -358,7 +363,8 @@ function BreakdownSection({ report, label }: { report: MonthlyReport; label: str
   const total = report.breakdown.reduce((s, n) => s + n.amount, 0);
   const max = Math.max(
     0,
-    ...report.breakdown.map((n) => Math.max(n.amount, showGhost ? (n.lastYearAmount ?? 0) : 0)),
+    // Last year sets the scale even while hidden, so toggling it never resizes the bars.
+    ...report.breakdown.map((n) => Math.max(n.amount, n.lastYearAmount ?? 0)),
   );
 
   return (
@@ -592,7 +598,7 @@ function BreakdownRow({
 
 export function MonthlySkeleton({ withToolbar = false }: { withToolbar?: boolean }) {
   return (
-    <div className="space-y-8" aria-busy aria-label="טוען את הדוח">
+    <div className="space-y-8" role="status" aria-busy aria-label="טוען את הדוח">
       {withToolbar && (
         <div className="flex flex-wrap gap-2">
           <Skeleton className="h-11 min-w-44 flex-1 rounded-lg sm:flex-none md:h-9" />
@@ -610,6 +616,12 @@ export function MonthlySkeleton({ withToolbar = false }: { withToolbar?: boolean
             />
           ))}
         </div>
+      </div>
+      {/* The default month is closed, so the budget and target verdicts usually render. */}
+      <div className="space-y-3">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-5 w-72 max-w-full" />
+        <Skeleton className="h-48 rounded-xl" />
       </div>
       <div className="space-y-3">
         <Skeleton className="h-7 w-44" />

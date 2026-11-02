@@ -26,7 +26,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import {
   acceptPriceChangeAction,
   cancelRecurringAction,
@@ -172,7 +171,6 @@ export function SubscriptionsView({
     filters.length === 0 ? "all" : activeFilter,
   );
   const countFor = (key: FilterKey) => filterSubscriptionRows(subscriptions, alerts, key).length;
-  const isAlertFilter = (key: FilterKey) => key !== "all" && key !== "active";
 
   function toggleSort(key: SortKey) {
     setSort((s) =>
@@ -209,7 +207,7 @@ export function SubscriptionsView({
                       "text-caption min-w-5 rounded-full px-1.5 tabular-nums",
                       pressed
                         ? "bg-primary-foreground text-primary"
-                        : isAlertFilter(key) && key !== "dormant"
+                        : key === "price_change" || key === "missed_payment"
                           ? "bg-attention text-attention-foreground"
                           : "bg-muted text-muted-foreground",
                     )}
@@ -225,28 +223,26 @@ export function SubscriptionsView({
             {subscriptions.length} חיובים קבועים, אין שינויים שדורשים תשומת לב.
           </p>
         )}
-        <Select
-          value={`${sort.key}:${sort.dir}`}
-          onValueChange={(v) => {
-            if (!v) return;
-            const [key, dir] = v.split(":") as [SortKey, SortDir];
-            setSort({ key, dir });
-          }}
-        >
-          <SelectTrigger aria-label="מיון" className="h-11 w-full gap-2 sm:w-64 md:h-9">
-            <ArrowsDownUpIcon className="text-muted-foreground size-4" />
-            <span className="flex-1 text-start">
-              {SORT_OPTIONS.find((o) => o.value === `${sort.key}:${sort.dir}`)?.label}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
+        {/* Native select: the phone's own picker, and it keeps the Base UI
+            select out of this route's first-load JS. */}
+        <label className="relative block w-full sm:w-64">
+          <span className="sr-only">מיון</span>
+          <ArrowsDownUpIcon className="text-muted-foreground pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2" />
+          <select
+            value={`${sort.key}:${sort.dir}`}
+            onChange={(e) => {
+              const [key, dir] = e.target.value.split(":") as [SortKey, SortDir];
+              setSort({ key, dir });
+            }}
+            className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 text-body dark:bg-input/30 h-11 w-full rounded-lg border ps-8 pe-2.5 outline-none focus-visible:ring-3 md:h-9"
+          >
             {SORT_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <option key={o.value} value={o.value}>
                 {o.label}
-              </SelectItem>
+              </option>
             ))}
-          </SelectContent>
-        </Select>
+          </select>
+        </label>
       </div>
 
       <Card className="gap-0 py-0">
@@ -315,8 +311,8 @@ export function SubscriptionsView({
   );
 }
 
-// One grid serves the phone card and the desktop row: below md the row stacks
-// name/amount, next charge/status, the alert, then the actions; from md each
+// One grid serves the phone card and the desktop row: below lg the row stacks
+// name/amount, next charge/status, the alert, then the actions; from lg each
 // field takes a column and the alert spans the row beneath it.
 const ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 [grid-template-areas:'name_amount'_'next_status'_'alert_alert'_'actions_actions'] lg:grid-cols-[minmax(0,1fr)_7.5rem_15rem_8.5rem_9.5rem] lg:[grid-template-areas:'name_amount_next_status_actions'_'alert_alert_alert_alert_alert']";
@@ -607,30 +603,30 @@ function AlertBadge({ rowAlerts }: { rowAlerts: RowAlerts }) {
   const attention = "bg-attention-subtle text-attention-text";
   if (rowAlerts.price)
     return (
-      <Badge className={attention} icon={<WarningCircleIcon weight="fill" className="size-3" />}>
+      <Pill className={attention} icon={<WarningCircleIcon weight="fill" className="size-3" />}>
         שינוי מחיר
-      </Badge>
+      </Pill>
     );
-  if (rowAlerts.dormant) return <Badge className="text-muted-foreground border">לא פעיל</Badge>;
+  if (rowAlerts.dormant) return <Pill className="text-muted-foreground border">לא פעיל</Pill>;
   if (rowAlerts.missed)
     return (
-      <Badge className={attention} icon={<ClockIcon weight="fill" className="size-3" />}>
+      <Pill className={attention} icon={<ClockIcon weight="fill" className="size-3" />}>
         לא הגיע
-      </Badge>
+      </Pill>
     );
   if (rowAlerts.fresh)
     return (
-      <Badge
+      <Pill
         className="border-primary/40 text-primary border"
         icon={<SparkleIcon className="size-3" />}
       >
         חדש
-      </Badge>
+      </Pill>
     );
   return null;
 }
 
-function Badge({
+function Pill({
   className,
   icon,
   children,
@@ -665,13 +661,19 @@ function CancelDialog({
   const [pending, startTransition] = useTransition();
   const label = target ? (target.displayName ?? target.merchant) : "";
 
+  // The dialog stays mounted between rows, so every way out clears the error.
+  function close() {
+    setError(null);
+    onClose();
+  }
+
   function confirm() {
     if (!target) return;
     setError(null);
     startTransition(async () => {
       const result = await cancelRecurringAction({ id: target.id });
       if (result.error) setError(result.error);
-      else onClose();
+      else close();
     });
   }
 
@@ -679,10 +681,7 @@ function CancelDialog({
     <Dialog
       open={target !== null}
       onOpenChange={(open) => {
-        if (!open && !pending) {
-          setError(null);
-          onClose();
-        }
+        if (!open && !pending) close();
       }}
     >
       <DialogContent>
@@ -699,7 +698,7 @@ function CancelDialog({
           </p>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={pending} onClick={onClose}>
+          <Button variant="outline" disabled={pending} onClick={close}>
             חזרה
           </Button>
           <Button variant="destructive" disabled={pending} onClick={confirm}>

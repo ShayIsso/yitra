@@ -4,7 +4,7 @@ import { SubscriptionsHeader } from "./header";
 /** Layout-matched to the populated page: header, filter row, then the list card. */
 export default function SubscriptionsLoading() {
   return (
-    <div className="space-y-6" aria-busy aria-label="טוען את החיובים הקבועים">
+    <div className="space-y-6" role="status" aria-busy aria-label="טוען את החיובים הקבועים">
       <SubscriptionsHeader />
       <div className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

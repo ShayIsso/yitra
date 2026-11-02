@@ -208,7 +208,7 @@ function CategoryTrendsSection({ report }: { report: TrendsReport }) {
             >
               <span className="[grid-area:name]">קטגוריה</span>
               <span className="[grid-area:bars]">לאורך הטווח</span>
-              <span className="text-end [grid-area:amount]">החודש הנוכחי</span>
+              <span className="text-end [grid-area:amount]">החודש הנוכחי (חלקי)</span>
               <span className="text-end [grid-area:delta]">מול הקודם</span>
             </div>
             <ul className="divide-y">
@@ -250,8 +250,8 @@ function MiniBars({ amounts, months }: { amounts: number[]; months: TrendsMonthP
       ))}
       {hover !== null && months[hover] && (
         <div
-          className="bg-popover text-popover-foreground text-caption pointer-events-none absolute bottom-full z-10 mb-1 translate-x-1/2 rounded-lg border px-2 py-1 whitespace-nowrap shadow-[var(--card-shadow)]"
-          style={{ right: `${((hover + 0.5) / amounts.length) * 100}%` }}
+          className="bg-popover text-popover-foreground text-caption pointer-events-none absolute bottom-full z-10 mb-1 rounded-lg border px-2 py-1 whitespace-nowrap shadow-[var(--card-shadow)] ltr:-translate-x-1/2 rtl:translate-x-1/2"
+          style={{ insetInlineStart: `${((hover + 0.5) / amounts.length) * 100}%` }}
         >
           <span className="font-medium">
             {HEBREW_MONTHS[months[hover].month - 1]} {months[hover].year}
@@ -342,7 +342,7 @@ function CategoryTrendRow({
 
 function TrendsSkeleton() {
   return (
-    <div className="space-y-8" aria-busy aria-label="טוען את המגמות">
+    <div className="space-y-8" role="status" aria-busy aria-label="טוען את המגמות">
       <div className="space-y-3">
         <Skeleton className="h-7 w-36" />
         <Skeleton className="h-5 w-56 max-w-full" />
