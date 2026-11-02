@@ -61,7 +61,6 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
 
   // Settings sections and row actions (#325)
   Tag: ["regular"],
-  ListChecks: ["regular"],
   Wallet: ["regular"],
   Target: ["regular"],
   Archive: ["regular"],
