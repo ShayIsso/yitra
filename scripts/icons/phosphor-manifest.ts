@@ -21,7 +21,7 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   DotsThreeOutline: ["regular", "fill"],
 
   // Interface
-  MagnifyingGlass: ["regular"],
+  MagnifyingGlass: ["regular", "duotone"],
   Moon: ["regular"],
   Sun: ["regular"],
   X: ["regular"],
@@ -39,6 +39,13 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   ShieldCheck: ["regular"],
   Key: ["regular"],
   Flask: ["regular"],
+  Funnel: ["regular"],
+  DownloadSimple: ["regular"],
+  ListChecks: ["regular"],
+  ArrowCounterClockwise: ["regular"],
+  LinkSimple: ["regular"],
+  Robot: ["regular"],
+  CircleNotch: ["regular"],
 
   // Categorization provider choices (off, local, external)
   Prohibit: ["regular"],

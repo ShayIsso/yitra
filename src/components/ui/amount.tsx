@@ -20,21 +20,14 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-
-/** Maps common currency symbols to ISO 4217 codes for Intl.NumberFormat. */
-export const CURRENCY_SYMBOL_TO_CODE: Record<string, string> = {
-  "₪": "ILS",
-  $: "USD",
-  "€": "EUR",
-  "£": "GBP",
-};
+import { canonicalCurrency } from "@/lib/transactions/currency";
 
 /**
- * Normalises a currency string to an ISO 4217 code.
+ * Normalises a currency string to an ISO 4217 code for Intl.NumberFormat.
  * Passes through strings that are already codes (e.g. "ILS", "USD").
  */
 export function normalizeCurrency(currency: string): string {
-  return CURRENCY_SYMBOL_TO_CODE[currency] ?? currency;
+  return canonicalCurrency(currency);
 }
 
 /**
