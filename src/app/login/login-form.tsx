@@ -21,7 +21,8 @@ export function LoginForm({ destination }: { destination: "/" | "/setup" }) {
   const [loading, setLoading] = useState(false);
 
   // The input is disabled while the request runs, so focus returns to it once
-  // the error is rendered; the error itself is announced by its alert role.
+  // the error is rendered, and the field's `aria-describedby` reads the error
+  // out. No alert role on top: it would announce the same text twice.
   useEffect(() => {
     if (error) inputRef.current?.focus();
   }, [error]);
@@ -74,11 +75,7 @@ export function LoginForm({ destination }: { destination: "/" | "/setup" }) {
           aria-describedby={error ? errorId : undefined}
         />
         {error && (
-          <p
-            id={errorId}
-            role="alert"
-            className="text-destructive text-body flex items-center gap-1.5"
-          >
+          <p id={errorId} className="text-destructive text-body flex items-center gap-1.5">
             <WarningCircleIcon className="size-4 shrink-0" />
             {error}
           </p>

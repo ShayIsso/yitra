@@ -34,13 +34,16 @@ export function SetupFrame({ step, passwordDone, exitHref, children }: SetupFram
   const meta = STEP_META[step];
   const position = SETUP_STEPS.indexOf(step) + 1;
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const navigated = useRef(false);
+  const previousStep = useRef(step);
 
   // A step change is a client navigation that unmounts the button that caused
   // it, which would drop focus to the document; the new step's title takes it.
+  // Compared against the previous step rather than a mounted flag: StrictMode
+  // runs the effect twice on mount, and a flag would then steal the first
+  // load's autofocus from the password field.
   useEffect(() => {
-    if (navigated.current) titleRef.current?.focus();
-    navigated.current = true;
+    if (previousStep.current !== step) titleRef.current?.focus();
+    previousStep.current = step;
   }, [step]);
 
   const hero = (

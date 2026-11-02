@@ -302,7 +302,7 @@ function InstitutionList({
             {progress !== null && (
               <div aria-hidden="true" className="bg-muted h-1.5 overflow-hidden rounded-full">
                 <div
-                  className="bg-bar-strong h-full origin-right rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none"
+                  className="bg-bar-strong h-full origin-left rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none rtl:origin-right"
                   style={{ transform: `scaleX(${progress})` }}
                 />
               </div>
@@ -354,7 +354,7 @@ function RowStatus({ state, running }: { state: BankSyncState | undefined; runni
     case "complete":
       return (
         <span className="flex items-center gap-1.5 font-medium">
-          <CheckCircleIcon className="text-pos size-4 shrink-0" />
+          <CheckCircleIcon className="text-foreground size-4 shrink-0" />
           {state.transactionCount !== undefined
             ? `${state.transactionCount} תנועות`
             : STATUS_TEXT.complete}
@@ -422,7 +422,16 @@ function Outcome({
       )}
 
       {view.phase === "finished" && stream.summary && (
-        <Callout role="status" icon={<CheckCircleIcon className="text-pos" />}>
+        <Callout
+          role="status"
+          icon={
+            view.failedInstitution ? (
+              <InfoIcon className="text-muted-foreground" />
+            ) : (
+              <CheckCircleIcon className="text-foreground" />
+            )
+          }
+        >
           <p className="font-medium">הסנכרון הסתיים</p>
           <p className="text-muted-foreground">{`סה"כ ${stream.summary.total} תנועות יובאו`}</p>
           {aiLines.map((line) => (

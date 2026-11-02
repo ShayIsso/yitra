@@ -32,7 +32,7 @@ export function PasswordStep({ navigation, passwordSource, submitPassword }: Pas
   if (passwordSource !== "none") {
     return (
       <div className="flex flex-col gap-6">
-        <Callout icon={<CheckCircleIcon className="text-pos" />}>
+        <Callout icon={<CheckCircleIcon className="text-foreground" />}>
           {passwordSource === "environment" ? (
             <p>
               הסיסמה מוגדרת במשתנה הסביבה{" "}
@@ -68,13 +68,15 @@ function PasswordForm({ navigation, submitPassword }: Omit<PasswordStepProps, "p
   const [pending, startTransition] = useTransition();
 
   // After a refused submit, focus lands on the first field in error, which
-  // reads its message out through `aria-describedby`. It waits for `pending`
-  // to clear: the inputs are disabled until then and cannot take focus.
+  // reads its message out through `aria-describedby`, or on the password field
+  // when only the form failed (the submit button is disabled while pending, so
+  // focus would otherwise fall to the document). It waits for `pending` to
+  // clear: the inputs are disabled until then and cannot take focus.
   useEffect(() => {
     if (pending || !refocus.current) return;
     refocus.current = false;
-    if (fieldErrors.password) passwordRef.current?.focus();
-    else if (fieldErrors.confirmation) confirmationRef.current?.focus();
+    if (fieldErrors.confirmation && !fieldErrors.password) confirmationRef.current?.focus();
+    else passwordRef.current?.focus();
   }, [pending, fieldErrors]);
 
   function handleSubmit(e: React.FormEvent) {
