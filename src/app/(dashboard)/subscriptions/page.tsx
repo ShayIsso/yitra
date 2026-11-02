@@ -1,6 +1,5 @@
 export const dynamic = "force-dynamic";
 
-import { SubscriptionsTable } from "./subscriptions-table";
 import {
   detectPriceChanges,
   detectMissedPayments,
@@ -9,85 +8,69 @@ import {
   drizzleRecurringStore,
   projectSeries,
 } from "@/lib/recurring-detection";
-import type {
-  PriceChangeAlert,
-  MissedPaymentAlert,
-  NewlyDetectedAlert,
-  DormantAlert,
-} from "@/lib/recurring-detection";
 import { getAssignableCategories } from "@/lib/categories";
 import type { Category } from "@/lib/categories";
+import { SubscriptionsHeader } from "./header";
+import { SubscriptionsLoadError } from "./load-error";
+import { toSubscriptionRow, type AnomalyAlerts, type SubscriptionRow } from "./rows";
+import { SubscriptionsView } from "./subscriptions-view";
 
-export type SubscriptionRow = {
-  id: string;
-  merchant: string;
-  displayName: string | null;
-  expectedAmount: number;
-  cadence: "monthly" | "quarterly" | "annual";
-  /**
-   * Projected next charge (last observed charge + cadence interval), ISO date.
-   * null when the series has no liveness evidence — the stored
-   * `next_expected_date` is never displayed (ADR-0012).
-   */
-  projectedDate: string | null;
-  status: "active" | "paused" | "canceled";
-  confirmedAt: Date | null;
-};
-
-export type AnomalyAlerts = {
-  priceChanges: PriceChangeAlert[];
-  missedPayments: MissedPaymentAlert[];
-  newlyDetected: NewlyDetectedAlert[];
-  dormant: DormantAlert[];
-};
-
-export default async function SubscriptionsPage() {
-  // One transaction read feeds every detector and the projection — the same
+async function loadSubscriptions(): Promise<{
+  subscriptions: SubscriptionRow[];
+  alerts: AnomalyAlerts;
+}> {
+  // One transaction read feeds every detector and the projection: the same
   // liveness evidence the upcoming forecast uses, so the two pages agree.
   const [patterns, recentTxns] = await Promise.all([
     drizzleRecurringStore.getPersistedPatterns(),
     drizzleRecurringStore.getTransactionsForDetection(),
   ]);
 
-  // Run detectors server-side; pass today once so pure functions stay pure.
+  // Pass today once so the pure detectors and the row view agree on "now".
   const today = new Date();
   const projections = projectSeries(patterns, recentTxns, today);
+  const subscriptions = patterns.map((pattern, i) =>
+    toSubscriptionRow(pattern, projections[i], today),
+  );
 
-  const subscriptions: SubscriptionRow[] = patterns.map((pattern, i) => {
-    const { isLive, evidence } = projections[i];
-    return {
-      id: pattern.id,
-      merchant: pattern.merchant,
-      displayName: pattern.displayName,
-      expectedAmount: pattern.expectedAmount,
-      cadence: pattern.cadence,
-      // A dead series gets no projected charge — projecting one is the #192 defect.
-      projectedDate: isLive && evidence ? evidence.projectedDate.toISOString().slice(0, 10) : null,
-      status: pattern.status,
-      confirmedAt: pattern.confirmedAt,
-    };
-  });
+  return {
+    subscriptions,
+    alerts: {
+      priceChanges: detectPriceChanges(patterns, recentTxns),
+      missedPayments: detectMissedPayments(patterns, recentTxns, today),
+      newlyDetected: detectNewlyDetected(patterns, recentTxns),
+      dormant: detectDormant(patterns, recentTxns, today),
+    },
+  };
+}
 
-  const priceChanges = detectPriceChanges(patterns, recentTxns);
-  const missedPayments = detectMissedPayments(patterns, recentTxns, today);
-  const newlyDetected = detectNewlyDetected(patterns, recentTxns);
-  const dormant = detectDormant(patterns, recentTxns, today);
+export default async function SubscriptionsPage() {
+  let data: Awaited<ReturnType<typeof loadSubscriptions>>;
+  try {
+    data = await loadSubscriptions();
+  } catch {
+    // Nothing is logged: a driver error can carry query parameters, i.e. bank data.
+    return (
+      <div className="space-y-6">
+        <SubscriptionsHeader />
+        <SubscriptionsLoadError />
+      </div>
+    );
+  }
 
-  const alerts: AnomalyAlerts = { priceChanges, missedPayments, newlyDetected, dormant };
-
-  // Fetch categories for the naming dialog's optional category dropdown —
-  // assignable (leaf) only (ADR-0011 §3): a group is never a valid assignment.
-  const categories: Category[] = await getAssignableCategories();
+  // For the naming dialog's optional category field: assignable (leaf) only
+  // (ADR-0011 §3), a group is never a valid assignment. Optional, so a failed
+  // read only hides the field.
+  const categories: Category[] = await getAssignableCategories().catch(() => []);
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">מנויים והוצאות חוזרות</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          הוצאות שזוהו כחוזרות על בסיס היסטוריית העסקאות שלך
-        </p>
-      </div>
-      <SubscriptionsTable subscriptions={subscriptions} alerts={alerts} categories={categories} />
+    <div className="space-y-6">
+      <SubscriptionsHeader />
+      <SubscriptionsView
+        subscriptions={data.subscriptions}
+        alerts={data.alerts}
+        categories={categories}
+      />
     </div>
   );
 }

@@ -74,6 +74,9 @@ const FILL_PAIRS: [text: string, fill: string][] = [
   ["--attention-foreground", "--attention"],
   ["--warning-foreground", "--warning"],
   ["--attention-text", "--attention-subtle"],
+  // Teal link and badge text (reports table toggle, "new" subscription badge).
+  ["--primary", "--card"],
+  ["--primary", "--background"],
   ["--emerald-foreground", "--emerald"],
   ["--hero-foreground", "--hero"],
   ["--hero-muted", "--hero"],
@@ -101,9 +104,11 @@ type Tint = {
  * Text drawn on translucent token fills, with every alpha (rest and hover) the
  * components use in each theme: the destructive button and badge
  * (ui/button.tsx, ui/badge.tsx), the budget chips (budget-status-card.tsx),
- * the toast variants (ui/toast.tsx), the amber count badges, and on the hero
+ * the toast variants (ui/toast.tsx), the amber count badges, on the hero
  * the entry screens' sheen, current step and control hover
- * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx).
+ * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx), and the sand
+ * washes under the reports' expanded group rows (/40) and the subscriptions'
+ * alert panels (/70).
  */
 const TINTS: Tint[] = [
   {
@@ -125,6 +130,8 @@ const TINTS: Tint[] = [
     alphas: { light: [0.1], dark: [0.1] },
     surfaces: ["--hero"],
   })),
+  { text: "--foreground", tint: "--muted", alphas: { light: [0.4, 0.7], dark: [0.4, 0.7] } },
+  { text: "--muted-foreground", tint: "--muted", alphas: { light: [0.4, 0.7], dark: [0.4, 0.7] } },
 ];
 
 describe.each([

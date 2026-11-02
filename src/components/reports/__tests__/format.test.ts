@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { formatInvestment } from "@/components/reports-panel";
+import {
+  formatInvestment,
+  formatPercent,
+  formatPointsDelta,
+  formatSignedPercent,
+} from "@/components/reports/format";
 import { computeMonthlySummary } from "@/lib/analytics";
 
 const digits = (s: string) => s.replace(/[^\d]/g, "");
+const LRM = "‎";
 
 describe("formatInvestment", () => {
   it("shows a net deposit as a plain amount", () => {
@@ -29,5 +35,27 @@ describe("formatInvestment", () => {
     expect(digits(label)).toBe("3000");
     expect(label).toContain("-");
     expect(label).toContain("משיכה נטו");
+  });
+});
+
+describe("signed figures in RTL", () => {
+  it("anchors a change's sign to the left of its digits with a left-to-right mark", () => {
+    expect(formatSignedPercent(12.4)).toBe(`${LRM}+12%`);
+    expect(formatSignedPercent(-7.6)).toBe(`${LRM}-8%`);
+  });
+
+  it("prints no sign on a change that rounds to zero", () => {
+    expect(formatSignedPercent(0.3)).toBe("0%");
+    expect(formatSignedPercent(-0.3)).toBe("0%");
+  });
+
+  it("states savings-rate changes in points with the same anchored sign", () => {
+    expect(formatPointsDelta(4.2)).toBe(`${LRM}+4 נק׳`);
+    expect(formatPointsDelta(-11)).toBe(`${LRM}-11 נק׳`);
+  });
+
+  it("keeps a negative savings rate's minus anchored and a positive one unsigned", () => {
+    expect(formatPercent(-15)).toBe(`${LRM}-15%`);
+    expect(formatPercent(23)).toBe("23%");
   });
 });
