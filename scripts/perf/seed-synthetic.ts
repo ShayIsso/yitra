@@ -15,6 +15,7 @@ import {
   transactions,
 } from "@/db/schema";
 import { seedDefaultCategories } from "@/db/seed";
+import { enabledBankEntries, type BankKind } from "@/lib/bank-registry";
 import { encrypt } from "@/lib/crypto";
 
 /**
@@ -161,6 +162,12 @@ const FIXED_MONTHLY = [
   },
 ] as const;
 
+function firstInstitutionOfKind(kind: BankKind): string {
+  const entry = enabledBankEntries().find((e) => e.kind === kind);
+  if (!entry) throw new Error(`The bank registry has no ${kind} institution`);
+  return entry.id;
+}
+
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -181,6 +188,9 @@ async function main() {
     throw new Error("Refusing to seed: the database already holds credentials or transactions.");
   }
 
+  const bankInstitution = firstInstitutionOfKind("bank");
+  const cardInstitution = firstInstitutionOfKind("card");
+
   await seedDefaultCategories();
   const cats = await db.select({ id: categories.id, name: categories.name }).from(categories);
   const catId = (name: string) => {
@@ -193,7 +203,7 @@ async function main() {
   const [bankCred] = await db
     .insert(bankCredentials)
     .values({
-      bankType: "discount",
+      bankType: bankInstitution,
       displayName: "בנק לדוגמה",
       encryptedCredentials: placeholder.encrypted,
       iv: placeholder.iv,
@@ -204,7 +214,7 @@ async function main() {
   const [cardCred] = await db
     .insert(bankCredentials)
     .values({
-      bankType: "max",
+      bankType: cardInstitution,
       displayName: "כרטיס לדוגמה",
       encryptedCredentials: cardPlaceholder.encrypted,
       iv: cardPlaceholder.iv,
@@ -339,14 +349,14 @@ async function main() {
   const lastSync = new Date(now.getTime() - 6 * 60 * 60 * 1000);
   await db.insert(syncRuns).values([
     {
-      bank: "discount",
+      bank: bankInstitution,
       startedAt: lastSync,
       finishedAt: lastSync,
       status: "success",
       transactionsImported: 12,
     },
     {
-      bank: "max",
+      bank: cardInstitution,
       startedAt: lastSync,
       finishedAt: lastSync,
       status: "success",

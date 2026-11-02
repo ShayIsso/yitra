@@ -20,6 +20,7 @@ One file per binding architectural decision. Format: `NNNN-kebab-title.md`, numb
 | [0012](./0012-evidence-based-derived-recurring-lifecycle.md)        | Evidence-based, derived recurring lifecycle                              | Accepted                                       |
 | [0013](./0013-declarative-bank-registry.md)                         | The bank registry is the single source of institution facts              | Accepted                                       |
 | [0014](./0014-first-run-bootstrap-and-secret-placement.md)          | First-run bootstrap: which secrets are environment, which are app state  | Accepted                                       |
+| [0015](./0015-pocket-pro-design-system.md)                          | The Pocket Pro design system                                             | Accepted                                       |
 
 ## Format
 

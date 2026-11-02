@@ -109,13 +109,18 @@ These are non-negotiable:
 
 ## UI/Design Rules
 
+The design system is **ADR-0015 (Pocket Pro)**; tokens live in `src/app/globals.css`.
+
 - **RTL** (`dir="rtl"`) is mandatory. Primary language: Hebrew.
-- **Light theme only.** No dark mode (Phase 2 backlog item).
-- **Shadcn UI** components. **Lucide** icons. **No emoji anywhere.**
-- **Typography:** Assistant (Google Fonts) with Hebrew support.
-- **Palette:** Neutral whites/grays. Emerald/green accent for positive balances only.
-- **NO** bright saturated gradients, heavy shadows, or busy patterns.
-- **Mobile responsive.**
+- **Light and dark** are both first-class (`data-theme` stamped pre-paint by the root layout). Design and verify every UI change in both.
+- **Palette:** deep teal ink on warm paper. Use semantic tokens (`bg-background`, `text-muted-foreground`, `text-pos`, …), never raw hues. **Coral (`attention`) means attention only** — badges, stale/failed sync, at-risk/over states. Positive/negative money uses the `pos`/`neg` pair via `<Amount>`; colour is never the only good/bad signal. Category colours as small dots only. Every text pair must pass WCAG AA in both themes (`palette-contrast.test.ts`).
+- **Typography:** Rubik via `next/font`. Six steps: `text-caption`, `text-body`, `text-lead`, `text-title`, `text-headline`, `text-display` — display is reserved for the single hero figure. Tabular numerals wherever amounts align; amounts go through `<Amount>` (`size`, `figure`).
+- **Shape:** three radii only — small, large, full.
+- **Shadcn UI** components. **Phosphor icons** from `@/components/icons` (regular inactive, fill active, duotone for insight/category marks; add icons via the manifest + generator). Lucide remains in older components until the redesign cleanup. **No emoji anywhere.**
+- **Motion** only through `@/components/motion` (`m.*` under LazyMotion): transform/opacity only, once-only entrances, no count-up on money, no infinite animation except skeleton pulse; reduced motion keeps opacity only.
+- **Performance budget:** home first-load JS ≤ +40 kB gz over `docs/perf-baseline.md` for the whole redesign (icons ≤ ~10 kB); first meaningful content no slower. UI PRs record their numbers with `scripts/perf/measure.ts`.
+- **NO** coral glow behind text, heavy shadows, busy patterns, backdrop blur over large scrolling regions, or WebGL/canvas effects.
+- **Mobile responsive**, tap targets ≥ 44px.
 - **All formatting (dates, currency) must happen in client components only** to prevent hydration mismatches.
 
 ## Pages

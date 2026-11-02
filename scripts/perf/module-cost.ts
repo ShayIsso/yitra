@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "fs";
-import { join, resolve } from "path";
+import { join, relative, resolve } from "path";
 import { gzipSync } from "zlib";
 import { build } from "esbuild";
 
@@ -20,12 +20,22 @@ import { build } from "esbuild";
 
 const REACT_EXTERNALS = ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"];
 
-async function bundledBytes(options: { entry?: string; contents?: string }): Promise<Buffer> {
+type Cost = { eager: Buffer; lazy: Buffer };
+
+/**
+ * Bundles with code splitting so a dynamic `import()` lands in its own chunk,
+ * as it does in the Next build: `eager` is the entry plus every chunk it
+ * statically imports, `lazy` is everything reachable only through `import()`.
+ */
+async function bundle(options: { entry?: string; contents?: string }): Promise<Cost> {
   const result = await build({
     ...(options.entry
       ? { entryPoints: [options.entry] }
       : { stdin: { contents: options.contents!, resolveDir: process.cwd(), loader: "ts" } }),
     bundle: true,
+    splitting: true,
+    outdir: "/module-cost",
+    metafile: true,
     minify: true,
     format: "esm",
     platform: "browser",
@@ -35,15 +45,36 @@ async function bundledBytes(options: { entry?: string; contents?: string }): Pro
     external: REACT_EXTERNALS,
     define: { "process.env.NODE_ENV": '"production"' },
     alias: { "@": resolve("src") },
+    nodePaths: [resolve("node_modules")],
     logLevel: "silent",
   });
-  return Buffer.concat(result.outputFiles.map((f) => Buffer.from(f.contents)));
+  const outputs = result.metafile.outputs;
+  const entryOut = Object.keys(outputs).find((k) => outputs[k].entryPoint !== undefined)!;
+  const eagerKeys = new Set<string>();
+  const visit = (key: string) => {
+    if (eagerKeys.has(key)) return;
+    eagerKeys.add(key);
+    for (const imp of outputs[key].imports) {
+      if (imp.kind === "import-statement" && !imp.external) visit(imp.path);
+    }
+  };
+  visit(entryOut);
+  const bytesOf = (keep: (key: string) => boolean) =>
+    Buffer.concat(
+      result.outputFiles
+        .filter((f) => keep(relative(process.cwd(), f.path)) || keep(f.path.replace(/^\//, "")))
+        .map((f) => Buffer.from(f.contents)),
+    );
+  const isEager = (key: string) => eagerKeys.has(key);
+  return { eager: bytesOf(isEager), lazy: bytesOf((k) => k in outputs && !isEager(k)) };
 }
 
-function report(label: string, bytes: Buffer) {
-  const gz = gzipSync(bytes, { level: 9 }).length;
+const gzKb = (bytes: Buffer) => (gzipSync(bytes, { level: 9 }).length / 1024).toFixed(1);
+
+function report(label: string, { eager, lazy }: Cost) {
+  const lazyPart = lazy.length ? `; lazy chunks ${gzKb(lazy)} kB gz` : "";
   console.log(
-    `${label}: ${(gz / 1024).toFixed(1)} kB gz (${(bytes.length / 1024).toFixed(1)} kB min)`,
+    `${label}: ${gzKb(eager)} kB gz (${(eager.length / 1024).toFixed(1)} kB min)${lazyPart}`,
   );
 }
 
@@ -80,9 +111,9 @@ async function main() {
     if (arg === "--lucide-in-use") {
       const icons = lucideIconsInUse();
       const contents = `export { ${icons.join(", ")} } from "lucide-react";`;
-      report(`lucide-react, ${icons.length} icons in use`, await bundledBytes({ contents }));
+      report(`lucide-react, ${icons.length} icons in use`, await bundle({ contents }));
     } else {
-      report(arg, await bundledBytes({ entry: arg }));
+      report(arg, await bundle({ entry: arg }));
     }
   }
 }

@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { Assistant } from "next/font/google";
+import { Rubik } from "next/font/google";
+import { MotionProvider } from "@/components/motion";
 import "./globals.css";
 
-const assistant = Assistant({
-  variable: "--font-sans",
+/**
+ * Variable Rubik, Hebrew + Latin subsets only. next/font self-hosts it and
+ * generates a size-adjusted local fallback, so the swap does not shift layout.
+ */
+const rubik = Rubik({
+  variable: "--font-rubik",
   subsets: ["latin", "hebrew"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -30,14 +36,14 @@ export default function RootLayout({
     <html
       lang="he"
       dir="rtl"
-      className={`${assistant.variable} h-full antialiased`}
+      className={`${rubik.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="bg-background text-foreground flex min-h-full flex-col font-sans">
-        {children}
+        <MotionProvider>{children}</MotionProvider>
       </body>
     </html>
   );
