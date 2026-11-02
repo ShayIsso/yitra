@@ -1,15 +1,27 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Target, ArrowUp, ArrowDown, Archive, History, Info } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CaretDownIcon,
+  CheckIcon,
+  InfoIcon,
+  PiggyBankIcon,
+  TrashIcon,
+  TrayIcon,
+} from "@/components/icons";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -35,6 +47,19 @@ import {
   archiveGoalAction,
   setTrackingSinceAction,
 } from "@/app/actions/goals";
+import { cn } from "@/lib/utils";
+import {
+  AddButton,
+  ROW_BUTTON,
+  RowAction,
+  SHEET_CONTROLS,
+  SectionBody,
+  SectionEmpty,
+  SectionHeader,
+  SettingsList,
+  CONTROLS,
+} from "@/components/settings/parts";
+import { AmountInput } from "@/components/settings/amount-input";
 
 type StoredGoal = {
   id: string;
@@ -88,35 +113,6 @@ function formatMonthLabel(value: string): string {
   );
 }
 
-function NumberField({
-  value,
-  onChange,
-  onBlur,
-  name,
-  inputRef,
-  min,
-}: {
-  value: number;
-  onChange: (value: number) => void;
-  onBlur: () => void;
-  name: string;
-  inputRef: React.Ref<HTMLInputElement>;
-  min?: number;
-}) {
-  return (
-    <Input
-      type="number"
-      min={min}
-      step="0.01"
-      value={Number.isNaN(value) ? "" : value}
-      onChange={(e) => onChange(e.target.value === "" ? Number.NaN : Number(e.target.value))}
-      onBlur={onBlur}
-      name={name}
-      ref={inputRef}
-    />
-  );
-}
-
 /** The pool's tracking-since editor (CONTEXT.md "savings pool"). Editing it
  * recomputes every goal's ladder progress, so the consequence is stated inline. */
 function TrackingSinceEditor({ initial }: { initial: string | null }) {
@@ -143,15 +139,15 @@ function TrackingSinceEditor({ initial }: { initial: string | null }) {
   }
 
   return (
-    <div className="bg-muted/30 rounded-lg border px-4 py-3">
+    <Card className={cn("gap-3 px-4", CONTROLS)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <label className="text-sm font-medium" htmlFor="tracking-since">
+        <div className="flex min-w-0 flex-1 basis-56 flex-col gap-1">
+          <label className="text-body font-medium" htmlFor="tracking-since">
             מעקב מאז
           </label>
-          <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
-            <Info className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.5} />
-            עריכה מחשבת מחדש את ההתקדמות של כל היעדים.
+          <p className="text-muted-foreground text-caption flex items-start gap-1.5">
+            <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
+            החיסכון נטו נצבר מהחודש הזה. עריכה מחשבת מחדש את ההתקדמות של כל היעדים.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -162,13 +158,30 @@ function TrackingSinceEditor({ initial }: { initial: string | null }) {
             onChange={(e) => setMonth(e.target.value)}
             className="w-44"
           />
-          <Button size="sm" onClick={save} disabled={!dirty || isPending}>
+          <Button onClick={save} disabled={!dirty || isPending}>
             {isPending ? "שומר..." : "שמור"}
           </Button>
         </div>
       </div>
-      {error && <p className="text-destructive mt-2 text-sm">{error}</p>}
-    </div>
+      {error && (
+        <p role="alert" className="text-destructive text-body">
+          {error}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/** A goal's ladder progress as a thin bar; neutral fill, since saving progress is not money colour. */
+function ProgressBar({ current, target }: { current: number; target: number }) {
+  const share = target > 0 ? Math.min(1, Math.max(0, current / target)) : 0;
+  return (
+    <span aria-hidden="true" className="bg-bar block h-1.5 w-full overflow-hidden rounded-full">
+      <span
+        className="bg-bar-strong block h-full rounded-full"
+        style={{ width: `${share * 100}%` }}
+      />
+    </span>
   );
 }
 
@@ -222,7 +235,7 @@ export function GoalsSection({
     defaultValues: emptyForm(),
   });
 
-  const mode = form.watch("mode");
+  const mode = useWatch({ control: form.control, name: "mode" });
 
   function openAdd() {
     setEditing(null);
@@ -354,74 +367,50 @@ export function GoalsSection({
     });
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">יעדי חיסכון</h3>
-          <p className="text-muted-foreground text-sm">
-            היעדים הפעילים מסודרים כסולם עדיפויות: החיסכון נטו המצטבר (מאגר משותף) מחולק מלמעלה
-            למטה, כל יעד עד לתקרת היעד שלו. שינוי הסדר מחשב מחדש את ההתקדמות.
-          </p>
-        </div>
-        <Button size="sm" onClick={openAdd}>
-          הוסף יעד
-        </Button>
-      </div>
+  const hasAnyGoal = goals.length > 0;
 
-      <TrackingSinceEditor initial={initialTrackingSince} />
+  return (
+    <SectionBody labelledBy="goals">
+      <SectionHeader
+        section="goals"
+        description="היעדים הפעילים מסודרים כסולם עדיפויות: החיסכון נטו המצטבר מחולק מלמעלה למטה, כל יעד עד לסכום שלו. שינוי הסדר מחשב מחדש את ההתקדמות."
+        action={activeGoals.length > 0 && <AddButton label="יעד חדש" onClick={openAdd} />}
+      />
 
       {activeGoals.length === 0 ? (
-        <div className="text-muted-foreground flex items-center gap-2 rounded-lg border border-dashed px-4 py-6 text-sm">
-          <Target className="size-4" />
-          עדיין לא הוגדרו יעדי חיסכון.
-        </div>
+        <SectionEmpty
+          icon={<PiggyBankIcon />}
+          title={hasAnyGoal ? "אין יעדים פעילים" : "עדיין אין יעדי חיסכון"}
+          description="יעד חיסכון הוא סכום שתרצו לצבור, למשל קרן חירום או חופשה. Yitra עוקבת אחרי ההתקדמות לפי החיסכון נטו בכל חודש."
+          action={<AddButton label="יעד חדש" onClick={openAdd} />}
+        />
       ) : (
-        <div className="divide-y rounded-lg border">
+        <SettingsList>
           {activeGoals.map((goal, index) => {
             const status = statusById.get(goal.id);
             const complete = isComplete(goal);
             return (
-              <div
-                key={goal.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex flex-col">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6"
-                      aria-label="העבר למעלה"
-                      disabled={index === 0 || isReorderPending}
-                      onClick={() => handleReorder(goal, "up")}
-                    >
-                      <ArrowUp className="size-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6"
-                      aria-label="העבר למטה"
-                      disabled={index === activeGoals.length - 1 || isReorderPending}
-                      onClick={() => handleReorder(goal, "down")}
-                    >
-                      <ArrowDown className="size-3.5" />
-                    </Button>
-                  </div>
-                  <div className="text-muted-foreground w-5 text-center text-sm tabular-nums">
+              <li key={goal.id} className="flex flex-wrap items-center gap-x-1 gap-y-0 pe-2">
+                <button
+                  type="button"
+                  onClick={() => openEdit(goal)}
+                  aria-label={`עריכת היעד ${goal.name}`}
+                  className={cn(ROW_BUTTON, "basis-56")}
+                >
+                  <span className="bg-muted text-body flex size-10 shrink-0 items-center justify-center rounded-full font-semibold tabular-nums">
                     {index + 1}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium">{goal.name}</span>
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="text-body truncate font-medium">{goal.name}</span>
                       {complete && (
-                        <span className="rounded-full border border-emerald-200 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        <Badge variant="secondary">
+                          <CheckIcon data-icon="inline-start" />
                           הושלם
-                        </span>
+                        </Badge>
                       )}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
+                    </span>
+                    <span className="text-caption text-muted-foreground">
                       {status ? (
                         <>
                           <Amount amount={status.current} colorize={false} fractionDigits={0} />{" "}
@@ -433,79 +422,91 @@ export function GoalsSection({
                       )}{" "}
                       · מתחיל {formatMonthLabel(goal.startMonth)}
                       {goal.targetMonth && <> · עד {formatMonthLabel(goal.targetMonth)}</>}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-                  <Button variant="outline" size="sm" onClick={() => openEdit(goal)}>
-                    ערוך
-                  </Button>
+                    </span>
+                    {status && <ProgressBar current={status.current} target={status.target} />}
+                  </span>
+                </button>
+                <div className="ms-auto flex shrink-0 items-center">
+                  <RowAction
+                    label={`העברת ${goal.name} למעלה`}
+                    disabled={index === 0 || isReorderPending}
+                    onClick={() => handleReorder(goal, "up")}
+                  >
+                    <ArrowUpIcon />
+                  </RowAction>
+                  <RowAction
+                    label={`העברת ${goal.name} למטה`}
+                    disabled={index === activeGoals.length - 1 || isReorderPending}
+                    onClick={() => handleReorder(goal, "down")}
+                  >
+                    <ArrowDownIcon />
+                  </RowAction>
                   {/* Archive is the completion gesture (#183): only a goal that
                       has held at 100% can be archived to release its claim. */}
                   {complete && (
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <RowAction
+                      label={`העברת ${goal.name} לארכיון`}
                       onClick={() => openArchive(goal)}
-                      className="gap-1"
                     >
-                      <Archive className="size-3.5" />
-                      ארכיון
-                    </Button>
+                      <TrayIcon weight="regular" />
+                    </RowAction>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <RowAction
+                    label={`מחיקת היעד ${goal.name}`}
                     onClick={() => openDelete(goal)}
-                    className="text-red-600 hover:text-red-700"
+                    destructive
                   >
-                    מחק
-                  </Button>
+                    <TrashIcon />
+                  </RowAction>
                 </div>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </SettingsList>
       )}
 
+      <TrackingSinceEditor initial={initialTrackingSince} />
+
       {archivedGoals.length > 0 && (
-        <div className="rounded-lg border">
+        <Card className="gap-0 py-0">
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
             aria-expanded={showArchived}
-            className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 px-4 py-3 text-sm"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring text-body flex min-h-12 w-full items-center gap-2 px-4 text-start outline-none focus-visible:ring-3 focus-visible:ring-inset"
           >
-            <History className="size-4" strokeWidth={1.5} />
-            יעדים בארכיון ({archivedGoals.length})
+            <TrayIcon weight="regular" className="size-4" />
+            <span className="flex-1">יעדים בארכיון ({archivedGoals.length})</span>
+            <CaretDownIcon
+              className={cn("size-4 transition-transform", showArchived && "rotate-180")}
+            />
           </button>
           {showArchived && (
-            <div className="divide-y border-t">
+            <ul className="divide-border flex flex-col divide-y border-t">
               {archivedGoals.map((goal) => (
-                <div
+                <li
                   key={goal.id}
-                  className="text-muted-foreground flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                  className="text-muted-foreground text-body flex min-h-12 items-center justify-between gap-3 px-4 py-2"
                 >
-                  <span className="truncate">{goal.name}</span>
-                  <span className="shrink-0 self-end sm:self-auto">
+                  <span className="min-w-0 truncate">{goal.name}</span>
+                  <span className="shrink-0">
                     <Amount amount={goal.targetAmount} colorize={false} fractionDigits={0} />
                   </span>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </div>
+        </Card>
       )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
-            <DialogTitle>{editing ? "ערוך יעד חיסכון" : "הוסף יעד חיסכון"}</DialogTitle>
+            <DialogTitle>{editing ? "עריכת יעד חיסכון" : "יעד חיסכון חדש"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 pb-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -542,12 +543,12 @@ export function GoalsSection({
                       <FormItem>
                         <FormLabel>סכום פתיחה</FormLabel>
                         <FormControl>
-                          <NumberField
+                          <AmountInput
                             value={field.value}
                             onChange={field.onChange}
                             onBlur={field.onBlur}
                             name={field.name}
-                            inputRef={field.ref}
+                            ref={field.ref}
                             min={0}
                           />
                         </FormControl>
@@ -560,19 +561,19 @@ export function GoalsSection({
                 {/* Entry-mode toggle: both resolve to the same stored
                     cumulative target (CONTEXT.md "savings goal") — this only
                     picks how the number is phrased on the way in. */}
-                <div className="flex gap-2">
+                <div role="group" aria-label="אופן הגדרת הסכום" className="flex gap-2">
                   <Button
                     type="button"
-                    size="sm"
                     variant={mode === "cumulative" ? "default" : "outline"}
+                    aria-pressed={mode === "cumulative"}
                     onClick={() => form.setValue("mode", "cumulative")}
                   >
                     סכום כולל
                   </Button>
                   <Button
                     type="button"
-                    size="sm"
                     variant={mode === "monthly" ? "default" : "outline"}
+                    aria-pressed={mode === "monthly"}
                     onClick={() => form.setValue("mode", "monthly", { shouldValidate: false })}
                   >
                     סכום לחודש
@@ -588,12 +589,12 @@ export function GoalsSection({
                         <FormItem>
                           <FormLabel>סכום יעד כולל</FormLabel>
                           <FormControl>
-                            <NumberField
+                            <AmountInput
                               value={field.value}
                               onChange={field.onChange}
                               onBlur={field.onBlur}
                               name={field.name}
-                              inputRef={field.ref}
+                              ref={field.ref}
                               min={0}
                             />
                           </FormControl>
@@ -632,12 +633,12 @@ export function GoalsSection({
                         <FormItem>
                           <FormLabel>סכום לחודש</FormLabel>
                           <FormControl>
-                            <NumberField
+                            <AmountInput
                               value={field.value}
                               onChange={field.onChange}
                               onBlur={field.onBlur}
                               name={field.name}
-                              inputRef={field.ref}
+                              ref={field.ref}
                               min={0}
                             />
                           </FormControl>
@@ -689,17 +690,20 @@ export function GoalsSection({
         </DialogContent>
       </Dialog>
 
-      {/* Archive confirmation dialog */}
       <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
             <DialogTitle>העברת יעד לארכיון</DialogTitle>
+            <DialogDescription>
+              להעביר את היעד &quot;{archiving?.name}&quot; לארכיון? היעד ישוחרר מסולם העדיפויות
+              והמאגר המשותף יזרום מחדש ליעדים שמתחתיו. היעד יישאר לצפייה בהיסטוריה בלבד.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground py-2 text-sm">
-            להעביר את היעד &quot;{archiving?.name}&quot; לארכיון? היעד ישוחרר מסולם העדיפויות והמאגר
-            המשותף יזרום מחדש ליעדים שמתחתיו. היעד יישאר לצפייה בהיסטוריה בלבד.
-          </p>
-          {archiveError && <p className="text-destructive text-sm">{archiveError}</p>}
+          {archiveError && (
+            <p role="alert" className="text-destructive text-body">
+              {archiveError}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -715,16 +719,19 @@ export function GoalsSection({
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
             <DialogTitle>מחיקת יעד</DialogTitle>
+            <DialogDescription>
+              האם למחוק את היעד &quot;{deleting?.name}&quot;? הפעולה אינה הפיכה.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground py-2 text-sm">
-            האם למחוק את היעד &quot;{deleting?.name}&quot;? הפעולה אינה הפיכה.
-          </p>
-          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
+          {deleteError && (
+            <p role="alert" className="text-destructive text-body">
+              {deleteError}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -733,16 +740,12 @@ export function GoalsSection({
             >
               ביטול
             </Button>
-            <Button
-              onClick={handleDelete}
-              disabled={isDeletePending}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeletePending}>
               {isDeletePending ? "מוחק..." : "מחק"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SectionBody>
   );
 }

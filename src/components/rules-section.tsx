@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -25,18 +26,37 @@ import {
   FormSubmit,
   applyActionErrors,
 } from "@/components/ui/form";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { EmptyState } from "@/components/empty-state";
-import { Tags, ChevronDown, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import {
+  CheckIcon,
+  ListChecksIcon,
+  MagnifyingGlassIcon,
+  SparkleIcon,
+  TrashIcon,
+} from "@/components/icons";
 import { createRuleSchema } from "@/lib/categories/schemas";
+import { cn } from "@/lib/utils";
 // Value import from the pure hierarchy module (no DB dependency) — importing
 // this client component's other category bindings from "@/lib/categories"
 // itself would pull the Drizzle-backed index.ts (and postgres) into the
 // client bundle, per Next's module-not-found trace on Node builtins.
 import { firstAssignableCategoryId } from "@/lib/categories/hierarchy";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
-import { GroupedCategorySelectItems } from "@/components/grouped-category-select-items";
+import {
+  CategoryDot,
+  GroupedCategorySelectItems,
+} from "@/components/grouped-category-select-items";
+import {
+  AddButton,
+  RowAction,
+  SHEET_CONTROLS,
+  SectionBody,
+  SectionEmpty,
+  SectionHeader,
+  SettingsList,
+  SettingsRow,
+  CONTROLS,
+} from "@/components/settings/parts";
 import {
   previewRetroactiveApplyAction,
   applyRetroactivelyAction,
@@ -62,16 +82,8 @@ const MATCH_TYPE_LABELS: Record<MatchType, string> = {
   regex: "ביטוי רגולרי",
 };
 
-const MATCH_TYPE_CLASSES: Record<MatchType, string> = {
-  contains: "bg-blue-100 text-blue-800 border-blue-200",
-  starts_with: "bg-purple-100 text-purple-800 border-purple-200",
-  exact: "bg-orange-100 text-orange-800 border-orange-200",
-  regex: "bg-gray-100 text-gray-700 border-gray-200",
-};
-
-// ADR-0010: rules are a deliberately-authored, occasionally-touched artifact
-// (merchant memory is the default learning path) — a list past this size no
-// longer earns permanently-expanded vertical space on Settings (#181).
+// A list past this size gets a search field (#181); rules are authored
+// deliberately (ADR-0010), so most installs never reach it.
 const SEARCH_THRESHOLD = 8;
 
 type RuleFormValues = z.infer<typeof createRuleSchema>;
@@ -95,9 +107,6 @@ export function RulesSection({
   tree: CategoryTreeNode<Category>[];
 }) {
   const [rules, setRules] = React.useState<CategoryRule[]>(initialRules);
-  // Empty section starts open (nothing to hide, and a first-time user needs
-  // the create-rule empty state visible); a populated list starts collapsed.
-  const [expanded, setExpanded] = React.useState(initialRules.length === 0);
   const [search, setSearch] = React.useState("");
   const [formOpen, setFormOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -120,6 +129,10 @@ export function RulesSection({
 
   const categoryMap = React.useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c.name])),
+    [categories],
+  );
+  const categoryColor = React.useMemo(
+    () => new Map(categories.map((c) => [c.id, c.color])),
     [categories],
   );
 
@@ -194,7 +207,6 @@ export function RulesSection({
       } else if ("id" in result && result.id) {
         const id = result.id;
         setRules((prev) => [...prev, { id, ...values }].sort((a, b) => b.priority - a.priority));
-        setExpanded(true);
       }
       setFormOpen(false);
     });
@@ -235,112 +247,96 @@ export function RulesSection({
   }
 
   return (
-    <div className="space-y-4">
-      <Collapsible open={expanded} onOpenChange={setExpanded} className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h3 className="text-lg font-semibold">כללי סיווג</h3>
-            {hasRules && (
-              <span className="text-muted-foreground text-sm">{rules.length} כללים</span>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button size="sm" onClick={openAdd}>
-              הוסף כלל
-            </Button>
-            {hasRules && (
-              <CollapsibleTrigger render={<Button variant="outline" size="sm" />}>
-                {expanded ? "הסתר כללים" : "הצג כללים"}
-                <ChevronDown
-                  className={cn("size-4 transition-transform", expanded && "rotate-180")}
-                />
-              </CollapsibleTrigger>
-            )}
-          </div>
+    <SectionBody labelledBy="rules">
+      <SectionHeader
+        section="rules"
+        description="כלל משייך לקטגוריה כל תנועה שהתיאור שלה מתאים לתבנית. כשכמה כללים מתאימים, הכלל בעדיפות הגבוהה יותר קובע."
+        action={hasRules && <AddButton label="כלל חדש" onClick={openAdd} />}
+      />
+
+      {rules.length > SEARCH_THRESHOLD && (
+        <div className={cn("relative", CONTROLS)}>
+          <MagnifyingGlassIcon className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חיפוש לפי תבנית או קטגוריה"
+            aria-label="חיפוש כללים"
+            dir="auto"
+            className="ps-9"
+          />
         </div>
+      )}
 
-        <CollapsibleContent>
-          <div className="space-y-3 pt-1">
-            {rules.length > SEARCH_THRESHOLD && (
-              <div className="relative">
-                <Search className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="חיפוש לפי תבנית או קטגוריה"
-                  dir="auto"
-                  className="ps-9"
-                />
-              </div>
-            )}
-
-            <div className="divide-y rounded-lg border">
-              {!hasRules && (
-                <EmptyState
-                  icon={Tags}
-                  heading="לא נוצרו כללי קטגוריה"
-                  explainer="צור כלל כדי לקטלג עסקאות באופן אוטומטי לפי תיאור."
-                  cta={{ label: "הוסף כלל", onClick: openAdd }}
-                />
-              )}
-              {hasRules && filteredRules.length === 0 && (
-                <p className="text-muted-foreground px-4 py-6 text-center text-sm">
-                  לא נמצאו כללים תואמים לחיפוש
-                </p>
-              )}
-              {filteredRules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium ${MATCH_TYPE_CLASSES[rule.matchType]}`}
-                    >
+      {!hasRules ? (
+        <SectionEmpty
+          icon={<ListChecksIcon />}
+          title="עדיין אין כללי סיווג"
+          description="סיווג ידני של תנועה כבר נזכר לפעם הבאה. כלל מתאים כשרוצים לסווג בבת אחת כל תנועה שהתיאור שלה מתאים לתבנית."
+          action={<AddButton label="כלל חדש" onClick={openAdd} />}
+        />
+      ) : filteredRules.length === 0 ? (
+        <p className="text-muted-foreground text-body py-6 text-center">
+          לא נמצאו כללים תואמים לחיפוש
+        </p>
+      ) : (
+        <SettingsList>
+          {filteredRules.map((rule) => {
+            const categoryName = categoryMap[rule.categoryId] ?? "קטגוריה לא ידועה";
+            const color = categoryColor.get(rule.categoryId);
+            return (
+              <SettingsRow
+                key={rule.id}
+                onOpen={() => openEdit(rule)}
+                openLabel={`עריכת הכלל ${rule.pattern}`}
+                title={
+                  <bdi dir="auto" title={rule.pattern}>
+                    {rule.pattern}
+                  </bdi>
+                }
+                subtitle={
+                  <>
+                    <Badge variant="outline" className="text-muted-foreground font-normal">
                       {MATCH_TYPE_LABELS[rule.matchType]}
+                    </Badge>
+                    <span className="inline-flex min-w-0 items-center gap-1">
+                      {color && <CategoryDot color={color} />}
+                      <span className="truncate">{categoryName}</span>
                     </span>
-                    <span className="truncate text-sm font-medium" title={rule.pattern}>
-                      {rule.pattern}
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
-                      {categoryMap[rule.categoryId] ?? rule.categoryId}
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
-                      עדיפות: {rule.priority}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-                    <Button variant="outline" size="sm" onClick={() => openApply(rule)}>
-                      יישום על קיימים
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => openEdit(rule)}>
-                      ערוך
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                      onClick={() => openDelete(rule)}
+                    <span className="tabular-nums">עדיפות {rule.priority}</span>
+                  </>
+                }
+                trailing={
+                  <>
+                    <RowAction
+                      label={`יישום הכלל ${rule.pattern} על תנועות קיימות`}
+                      onClick={() => openApply(rule)}
                     >
-                      מחק
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+                      <SparkleIcon weight="regular" />
+                    </RowAction>
+                    <RowAction
+                      label={`מחיקת הכלל ${rule.pattern}`}
+                      onClick={() => openDelete(rule)}
+                      destructive
+                    >
+                      <TrashIcon />
+                    </RowAction>
+                  </>
+                }
+              />
+            );
+          })}
+        </SettingsList>
+      )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
-            <DialogTitle>{editing ? "ערוך כלל" : "הוסף כלל"}</DialogTitle>
+            <DialogTitle>{editing ? "עריכת כלל" : "כלל חדש"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 pb-4">
                 <FormField
                   control={form.control}
                   name="categoryId"
@@ -420,6 +416,9 @@ export function RulesSection({
                       <FormControl>
                         <Input
                           type="number"
+                          inputMode="numeric"
+                          dir="ltr"
+                          className="text-end tabular-nums"
                           min={0}
                           value={Number.isNaN(field.value) ? "" : field.value}
                           onChange={(e) =>
@@ -432,6 +431,9 @@ export function RulesSection({
                           ref={field.ref}
                         />
                       </FormControl>
+                      <p className="text-muted-foreground text-caption">
+                        מספר גבוה יותר גובר כשכמה כללים מתאימים לאותה תנועה.
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -457,16 +459,20 @@ export function RulesSection({
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
             <DialogTitle>מחיקת כלל</DialogTitle>
+            <DialogDescription>
+              האם למחוק את הכלל עבור &quot;<bdi>{deleting?.pattern}</bdi>&quot;? תנועות שכבר סווגו
+              לפיו נשארות כפי שהן.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground py-2 text-sm">
-            האם למחוק את הכלל עבור &quot;{deleting?.pattern}&quot;?
-          </p>
-          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
+          {deleteError && (
+            <p role="alert" className="text-destructive text-body">
+              {deleteError}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -475,18 +481,13 @@ export function RulesSection({
             >
               ביטול
             </Button>
-            <Button
-              onClick={handleDelete}
-              disabled={isDeletePending}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeletePending}>
               {isDeletePending ? "מוחק..." : "מחק"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Apply to existing dialog */}
       <Dialog
         open={applyOpen}
         onOpenChange={(open) => {
@@ -499,19 +500,24 @@ export function RulesSection({
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
             <DialogTitle>יישום על עסקאות קיימות</DialogTitle>
           </DialogHeader>
-          <div className="py-2">
+          <div className="text-body pb-4">
             {applySuccess ? (
-              <p className="text-sm text-emerald-700">{applySuccess}</p>
+              <p role="status" className="flex items-start gap-2">
+                <CheckIcon className="mt-0.5 size-4 shrink-0" />
+                {applySuccess}
+              </p>
             ) : applyPreviewCount === null && !error ? (
-              <p className="text-muted-foreground text-sm">בודק עסקאות...</p>
+              <p className="text-muted-foreground">בודק עסקאות...</p>
             ) : error ? (
-              <p className="text-sm text-red-600">{error}</p>
+              <p role="alert" className="text-destructive">
+                {error}
+              </p>
             ) : (
-              <p className="text-sm">
+              <p>
                 {applyPreviewCount === 0
                   ? "לא נמצאו עסקאות לא מסווגות התואמות לכלל זה."
                   : `כלל זה יסווג ${applyPreviewCount} עסקאות לא מסווגות. להמשיך?`}
@@ -540,6 +546,6 @@ export function RulesSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SectionBody>
   );
 }

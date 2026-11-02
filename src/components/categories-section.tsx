@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -36,14 +36,15 @@ import {
   Globe,
   Volleyball,
   HandCoins,
-  Unlink,
   type LucideIcon,
 } from "lucide-react";
+import { ArrowUpIcon, ChartPieSliceIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -72,6 +73,18 @@ import {
   deleteCategoryAction,
 } from "@/app/actions/categories";
 import { getCategoryBudgetAction } from "@/app/actions/budgets";
+import { CategoryDot } from "@/components/grouped-category-select-items";
+import {
+  AddButton,
+  RowAction,
+  RowTile,
+  SHEET_CONTROLS,
+  SectionBody,
+  SectionEmpty,
+  SectionHeader,
+  SettingsList,
+  SettingsRow,
+} from "@/components/settings/parts";
 
 type CategoryType = "income" | "expense" | "investment" | "transfer" | "ignore";
 
@@ -163,24 +176,19 @@ const TYPE_LABELS: Record<CategoryType, string> = {
   ignore: "התעלם",
 };
 
-// income/expense/investment keep deliberate categorical palette colors (parallel
-// to DeltaChip's #168 semantics) — not dark-adaptation oversights, do not sweep.
-const TYPE_CLASSES: Record<CategoryType, string> = {
-  income: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  expense: "bg-red-100 text-red-800 border-red-200",
-  investment: "bg-blue-100 text-blue-800 border-blue-200",
-  transfer: "bg-muted text-muted-foreground",
-  ignore: "bg-muted text-muted-foreground",
-};
-
 // Sentinel for the "no parent — root category" Select option (ADR-0011: a
 // category's own group-ness is derived from having children, never a flag —
 // the form just offers "root" vs "under this existing root category").
 const NO_PARENT = "__none__";
 
-function CategoryIcon({ name, color }: { name: string; color: string }) {
+/**
+ * `categories.icon` stores Lucide names, so the glyph comes from that set until
+ * the stored names are mapped onto the app's icon set. It draws in ink; the
+ * category's colour shows only as its dot (ADR-0015).
+ */
+function CategoryIcon({ name }: { name: string }) {
   const Icon = ICON_MAP[name] ?? MoreHorizontal;
-  return <Icon className="size-4" style={{ color }} />;
+  return <Icon strokeWidth={1.75} />;
 }
 
 type CategoryFormValues = z.infer<typeof createCategorySchema>;
@@ -233,7 +241,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
     return counts;
   }, [categories]);
 
-  const watchedType = form.watch("type");
+  const watchedType = useWatch({ control: form.control, name: "type" });
   const parentCandidates = React.useMemo(
     () => candidateParents(categories, watchedType, editing?.id),
     [categories, watchedType, editing],
@@ -348,102 +356,90 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
     });
   }
 
-  function renderRow(cat: Category, opts: { isGroup: boolean; indent: boolean }) {
+  function renderRow(cat: Category, opts: { childCount: number; indent: boolean }) {
+    const facts = [TYPE_LABELS[cat.type]];
+    if (opts.childCount > 0) facts.push(`קבוצה של ${opts.childCount}`);
+    if (cat.isDefault) facts.push("ברירת מחדל");
     return (
-      <div
+      <SettingsRow
         key={cat.id}
-        className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${opts.indent ? "ps-10" : ""}`}
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className="flex size-8 shrink-0 items-center justify-center rounded-md"
-            style={{ backgroundColor: `${cat.color}20` }}
-          >
-            <CategoryIcon name={cat.icon} color={cat.color} />
-          </div>
-          <span className="truncate text-sm font-medium">{cat.name}</span>
-          <span
-            className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium ${TYPE_CLASSES[cat.type]}`}
-          >
-            {TYPE_LABELS[cat.type]}
-          </span>
-          {opts.isGroup && (
-            <span className="text-muted-foreground inline-flex shrink-0 items-center rounded-full border border-dashed px-2 py-0.5 text-xs font-medium">
-              קבוצה
-            </span>
-          )}
-          <span
-            className="size-4 shrink-0 rounded-full border"
-            style={{ backgroundColor: cat.color }}
-            title={cat.color}
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-          {opts.indent && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDetach(cat)}
-              disabled={isDetachPending}
-            >
-              <Unlink />
-              נתק מהקבוצה
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => openEdit(cat)}>
-            ערוך
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={cat.isDefault}
-            onClick={() => !cat.isDefault && openDelete(cat)}
-            className={
-              cat.isDefault ? "cursor-not-allowed opacity-40" : "text-red-600 hover:text-red-700"
-            }
-          >
-            מחק
-          </Button>
-        </div>
-      </div>
+        indent={opts.indent}
+        onOpen={() => openEdit(cat)}
+        openLabel={`עריכת ${cat.name}`}
+        leading={
+          <RowTile>
+            <CategoryIcon name={cat.icon} />
+          </RowTile>
+        }
+        title={cat.name}
+        subtitle={
+          <>
+            <CategoryDot color={cat.color} />
+            {facts.join(" · ")}
+          </>
+        }
+        trailing={
+          <>
+            {opts.indent && (
+              <RowAction
+                label={`ניתוק ${cat.name} מהקבוצה`}
+                onClick={() => handleDetach(cat)}
+                disabled={isDetachPending}
+              >
+                <ArrowUpIcon />
+              </RowAction>
+            )}
+            {!cat.isDefault && (
+              <RowAction label={`מחיקת ${cat.name}`} onClick={() => openDelete(cat)} destructive>
+                <TrashIcon />
+              </RowAction>
+            )}
+          </>
+        }
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">קטגוריות</h3>
-          <p className="text-muted-foreground text-sm">
-            קטגוריה שיש לה תתי-קטגוריות הופכת אוטומטית לקבוצה. ניתן ליצור קבוצה חדשה, להעביר
-            קטגוריות אליה ולנתק אותן בחזרה — מבלי לשנות סיווג של אף עסקה.
-          </p>
-        </div>
-        <Button size="sm" onClick={openAdd}>
-          הוסף קטגוריה
-        </Button>
-      </div>
+    <SectionBody labelledBy="categories">
+      <SectionHeader
+        section="categories"
+        description="קטגוריה שיש לה תתי-קטגוריות הופכת לקבוצה. אפשר להעביר קטגוריות לקבוצה ולנתק אותן בחזרה, בלי לשנות סיווג של אף תנועה."
+        action={<AddButton label="קטגוריה חדשה" onClick={openAdd} />}
+      />
 
-      {detachError && <p className="text-destructive text-sm">{detachError}</p>}
+      {detachError && (
+        <p role="alert" className="text-destructive text-body">
+          {detachError}
+        </p>
+      )}
 
-      <div className="divide-y rounded-lg border">
-        {tree.map((node) => (
-          <React.Fragment key={node.id}>
-            {renderRow(node, { isGroup: node.children.length > 0, indent: false })}
-            {node.children.map((child) => renderRow(child, { isGroup: false, indent: true }))}
-          </React.Fragment>
-        ))}
-      </div>
+      {tree.length === 0 ? (
+        <SectionEmpty
+          icon={<ChartPieSliceIcon weight="regular" />}
+          title="אין עדיין קטגוריות"
+          description="קטגוריות מסדרות את התנועות להכנסות, הוצאות, השקעות והעברות, וכל הדוחות נשענים עליהן."
+          action={<AddButton label="קטגוריה חדשה" onClick={openAdd} />}
+        />
+      ) : (
+        <SettingsList>
+          {tree.map((node) => (
+            <React.Fragment key={node.id}>
+              {renderRow(node, { childCount: node.children.length, indent: false })}
+              {node.children.map((child) => renderRow(child, { childCount: 0, indent: true }))}
+            </React.Fragment>
+          ))}
+        </SettingsList>
+      )}
 
-      {/* Add / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
-            <DialogTitle>{editing ? "ערוך קטגוריה" : "הוסף קטגוריה"}</DialogTitle>
+            <DialogTitle>{editing ? "עריכת קטגוריה" : "קטגוריה חדשה"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 pb-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -524,7 +520,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
                         </SelectContent>
                       </Select>
                       {editingIsGroup ? (
-                        <p className="text-muted-foreground text-sm">
+                        <p className="text-muted-foreground text-caption">
                           לקבוצה עם תתי-קטגוריות אין קבוצת אב משלה.
                         </p>
                       ) : (
@@ -589,10 +585,12 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
                             onBlur={field.onBlur}
                             name={field.name}
                             ref={field.ref}
-                            className="h-9 w-12 cursor-pointer rounded border p-1"
+                            className="border-input h-11 w-14 cursor-pointer rounded-lg border bg-transparent p-1 md:h-9 md:w-12"
                           />
                         </FormControl>
-                        <span className="text-muted-foreground text-sm">{field.value}</span>
+                        <span dir="ltr" className="text-muted-foreground text-body font-mono">
+                          {field.value}
+                        </span>
                       </div>
                       <FormMessage />
                     </FormItem>
@@ -619,36 +617,34 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={closeDeleteDialog}>
-        <DialogContent>
+        <DialogContent className={SHEET_CONTROLS}>
           <DialogHeader>
             <DialogTitle>
               {deleting && childrenCount.get(deleting.id) ? "מחיקת קבוצה" : "מחיקת קטגוריה"}
             </DialogTitle>
+            <DialogDescription>
+              {deleting && childrenCount.get(deleting.id) ? (
+                <>
+                  מחיקת הקבוצה &quot;{deleting.name}&quot; תנתק את תתי-הקטגוריות שבתוכה בחזרה
+                  לקטגוריות שורש. שום עסקה, כלל סיווג או זיכרון ספק המשויכים אליהן לא ייפגעו.
+                  {deletingHasBudget && <> לקבוצה זו יש תקציב חודשי — הוא יימחק יחד איתה.</>}
+                </>
+              ) : (
+                <>
+                  האם למחוק את הקטגוריה &quot;{deleting?.name}&quot;? עסקאות משויכות יאבדו את הסיווג
+                  שלהן.
+                  {deletingHasBudget && <> לקטגוריה זו יש תקציב חודשי — הוא יימחק יחד איתה.</>}
+                </>
+              )}
+              {isBudgetCheckPending && <> בודק אם יש תקציב מקושר...</>}
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground py-2 text-sm">
-            {deleting && childrenCount.get(deleting.id) ? (
-              <>
-                מחיקת הקבוצה &quot;{deleting.name}&quot; תנתק את תתי-הקטגוריות שבתוכה בחזרה
-                לקטגוריות שורש. שום עסקה, כלל סיווג או זיכרון ספק המשויכים אליהן לא ייפגעו.
-                {deletingHasBudget && <> לקבוצה זו יש תקציב חודשי — הוא יימחק יחד איתה.</>}
-              </>
-            ) : (
-              <>
-                האם למחוק את הקטגוריה &quot;{deleting?.name}&quot;? עסקאות משויכות יאבדו את הסיווג
-                שלהן.
-                {deletingHasBudget && <> לקטגוריה זו יש תקציב חודשי — הוא יימחק יחד איתה.</>}
-              </>
-            )}
-            {isBudgetCheckPending && (
-              <>
-                {" "}
-                <span className="italic">בודק אם יש תקציב מקושר...</span>
-              </>
-            )}
-          </p>
-          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
+          {deleteError && (
+            <p role="alert" className="text-destructive text-body">
+              {deleteError}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -658,15 +654,15 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
               ביטול
             </Button>
             <Button
+              variant="destructive"
               onClick={handleDelete}
               disabled={isDeletePending || isBudgetCheckPending}
-              className="bg-red-600 text-white hover:bg-red-700"
             >
               {isDeletePending ? "מוחק..." : "מחק"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SectionBody>
   );
 }

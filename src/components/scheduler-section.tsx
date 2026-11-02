@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { CheckIcon, InfoIcon } from "@/components/icons";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { saveSchedulerConfigAction } from "@/app/actions/scheduler";
+import { SectionBody, SectionHeader, CONTROLS } from "@/components/settings/parts";
+import { cn } from "@/lib/utils";
 
 type SchedulerConfig = {
   enabled: boolean;
@@ -42,57 +46,76 @@ export function SchedulerSection({ initialConfig }: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold">סנכרון אוטומטי יומי</h3>
-        <p className="text-muted-foreground mt-1 text-sm">
-          הגדר סנכרון אוטומטי חד-יומי. שינויים ייכנסו לתוקף בהפעלה הבאה של האפליקציה.
-        </p>
-      </div>
+    <SectionBody labelledBy="scheduler">
+      <SectionHeader
+        section="scheduler"
+        description="סנכרון אחד ביום, בשעה שתבחרו. שינויים נכנסים לתוקף בהפעלה הבאה של האפליקציה."
+      />
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Checkbox
-            id="scheduler-enabled"
-            checked={enabled}
-            onCheckedChange={(checked) => {
-              setEnabled(checked === true);
-              setStatus("idle");
-            }}
-          />
-          <Label htmlFor="scheduler-enabled">הפעל סנכרון אוטומטי</Label>
-        </div>
+      <Card className={cn("gap-0 py-0", CONTROLS)}>
+        <form onSubmit={handleSubmit}>
+          <div className="divide-border flex flex-col divide-y">
+            <label
+              htmlFor="scheduler-enabled"
+              className="flex min-h-14 cursor-pointer items-center justify-between gap-4 px-4 py-3"
+            >
+              <span className="text-body font-medium">סנכרון אוטומטי יומי</span>
+              <Switch
+                id="scheduler-enabled"
+                checked={enabled}
+                onCheckedChange={(checked) => {
+                  setEnabled(checked);
+                  setStatus("idle");
+                }}
+              />
+            </label>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="cron-time">שעת סנכרון</Label>
-          <Input
-            id="cron-time"
-            type="time"
-            value={cronTime}
-            onChange={(e) => {
-              setCronTime(e.target.value);
-              setStatus("idle");
-            }}
-            className="w-36"
-            disabled={!enabled}
-          />
-          <p className="text-muted-foreground text-xs">
-            בנקים הדורשים קוד OTP ידולגו אוטומטית בסנכרון המתוזמן.
-          </p>
-        </div>
+            <div className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex min-h-11 items-center justify-between gap-4">
+                <Label htmlFor="cron-time" className={cn(!enabled && "text-muted-foreground")}>
+                  שעת סנכרון
+                </Label>
+                <Input
+                  id="cron-time"
+                  type="time"
+                  dir="ltr"
+                  value={cronTime}
+                  onChange={(e) => {
+                    setCronTime(e.target.value);
+                    setStatus("idle");
+                  }}
+                  className="w-32 tabular-nums"
+                  disabled={!enabled}
+                />
+              </div>
+              <p className="text-muted-foreground text-caption flex items-start gap-1.5">
+                <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
+                בנקים שדורשים קוד חד-פעמי (OTP) מדולגים בסנכרון המתוזמן.
+              </p>
+            </div>
+          </div>
 
-        {status === "error" && errorMessage && (
-          <p className="text-destructive text-sm">{errorMessage}</p>
-        )}
-
-        {status === "saved" && (
-          <p className="text-sm text-emerald-600">ההגדרות נשמרו. ייכנסו לתוקף בהפעלה הבאה.</p>
-        )}
-
-        <Button type="submit" disabled={saving} size="sm">
-          {saving ? "שומר..." : "שמור"}
-        </Button>
-      </form>
-    </div>
+          <div className="flex flex-wrap items-center gap-3 border-t px-4 py-3">
+            <Button type="submit" disabled={saving} className="max-md:px-4">
+              {saving ? "שומר..." : "שמור"}
+            </Button>
+            {status === "error" && errorMessage && (
+              <p role="alert" className="text-destructive text-body">
+                {errorMessage}
+              </p>
+            )}
+            {status === "saved" && (
+              <p
+                role="status"
+                className="text-muted-foreground text-body inline-flex items-center gap-1.5"
+              >
+                <CheckIcon className="size-4" />
+                ההגדרות נשמרו ויחולו בהפעלה הבאה.
+              </p>
+            )}
+          </div>
+        </form>
+      </Card>
+    </SectionBody>
   );
 }
