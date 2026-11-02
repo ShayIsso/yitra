@@ -43,6 +43,9 @@ import {
 type Decision = "approve" | "reject";
 
 const ACTION_BUTTON = "h-11 px-4 md:h-9";
+/** Shared by the bulk toolbar and its skeleton, so the two keep one height. */
+const TOOLBAR_SURFACE =
+  "bg-card flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]";
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -324,7 +327,8 @@ function InboxHeader({ children }: { children: React.ReactNode }) {
 /**
  * Approved and rejected groups leave the list at once; the server re-renders
  * the route (the actions' `revalidatePath`), so the shell's pending badge and
- * the `groups` prop follow without a reload or an extra `router.refresh()`.
+ * the `groups` prop follow without a reload. No `router.refresh()` on top: the
+ * action's response already carries the re-rendered route.
  */
 export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
   const router = useRouter();
@@ -407,7 +411,7 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
               <div
                 role="toolbar"
                 aria-label="פעולות על קבוצות נבחרות"
-                className="bg-card sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]"
+                className={cn(TOOLBAR_SURFACE, "sticky top-2 z-10")}
               >
                 <label className="text-body flex min-h-11 cursor-pointer items-center gap-3 px-2">
                   <Checkbox
@@ -493,7 +497,7 @@ function GroupCardSkeleton() {
         <div className="flex items-start gap-3 p-4 pb-3">
           <Skeleton className="size-10 shrink-0 rounded-full" />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Skeleton className="h-6 w-32" />
               <Skeleton className="h-5 w-16 rounded-full" />
             </div>
@@ -519,7 +523,7 @@ function GroupCardSkeleton() {
         </div>
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="me-auto flex min-h-11 items-center gap-3 pe-2">
-            <Skeleton className="size-4 rounded-[4px]" />
+            <Skeleton className="size-4 rounded-sm" />
             <Skeleton className="h-4 w-8" />
           </div>
           <Skeleton className={cn(ACTION_BUTTON, "w-20 rounded-lg")} />
@@ -540,9 +544,9 @@ export function ReconciliationInboxSkeleton() {
       <InboxHeader>
         <Skeleton className="h-[1.375rem] w-44" />
       </InboxHeader>
-      <div className="bg-card flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]">
+      <div className={TOOLBAR_SURFACE}>
         <div className="flex min-h-11 items-center gap-3 px-2">
-          <Skeleton className="size-4 rounded-[4px]" />
+          <Skeleton className="size-4 rounded-sm" />
           <Skeleton className="h-4 w-14" />
         </div>
         <div className="flex w-full gap-2 sm:ms-auto sm:w-auto">

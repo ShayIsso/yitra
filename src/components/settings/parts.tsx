@@ -223,9 +223,8 @@ export function SectionEmpty({
 /**
  * An inline error for one section, with a retry. `onRetry` defaults to a soft
  * `router.refresh()`, which re-reads every section's data and keeps the
- * `?section=` it is on. That needs Next >= 16.3 (#339): the React DOM bundled
- * before it dropped a refresh that suspended under this page's visible
- * Suspense boundary, leaving the error on screen.
+ * `?section=` it is on. Under this page's `loading.tsx` boundary that refresh
+ * commits reliably only on Next >= 16.3 (#339).
  */
 export function SectionError({
   message = "לא הצלחנו לטעון את הנתונים של החלק הזה.",
