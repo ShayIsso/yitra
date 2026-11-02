@@ -263,7 +263,7 @@ describe("buildInsightFacts", () => {
       { id: "r3", name: "ביטוח שנתי", amount: 500, date: "2026-03-25", cadence: "annual" },
     ];
 
-    it("recaps last month while the month is current, without the settlement lump", () => {
+    it("recaps last month while the month is current, keeping the lump out of category figures", () => {
       const { recap } = buildInsightFacts(
         sources({
           rows: {
@@ -277,17 +277,28 @@ describe("buildInsightFacts", () => {
       );
       expect(recap).toMatchObject({
         month: { year: 2026, month: 2 },
-        income: 10000,
-        expenses: 2200,
-        netSavings: 7800,
-        savingsRate: 78,
         topCategory: { categoryId: "food", name: "מזון", color: "#111111", amount: 1700 },
         biggestChange: { categoryId: "food", name: "מזון", amount: 1700, previous: 1000 },
         mostExpensiveDay: { date: "2026-02-03", amount: 1200, topDescription: "סופר לדוגמה" },
         recurring: { count: 2, monthlyTotal: 100 },
-        verdict: { target: 2000, over: true, by: 200 },
       });
       expect(recap?.topCategory?.share).toBeCloseTo(0.773, 3);
+    });
+
+    it("keeps the recap's month totals equal to the Dashboard's, lump category and all", () => {
+      const { recap } = buildInsightFacts(
+        sources({
+          rows: { month: [], previous: february, beforePrevious: january },
+          expenseTarget: 5000,
+        }),
+      );
+      expect(recap).toMatchObject({
+        income: 10000,
+        expenses: 5200,
+        netSavings: 4800,
+        savingsRate: 48,
+        verdict: { target: 5000, over: true, by: 200 },
+      });
     });
 
     it("recaps the month itself once it is closed", () => {
@@ -296,13 +307,13 @@ describe("buildInsightFacts", () => {
           month: { year: 2026, month: 2 },
           today: "2026-04-02",
           rows: { month: february, previous: january, beforePrevious: [] },
-          expenseTarget: 2500,
+          expenseTarget: 6000,
         }),
       );
       expect(recap).toMatchObject({
         month: { year: 2026, month: 2 },
-        expenses: 2200,
-        verdict: { target: 2500, over: false, by: 300 },
+        expenses: 5200,
+        verdict: { target: 6000, over: false, by: 800 },
       });
     });
 
@@ -365,16 +376,22 @@ describe("buildInsightFacts", () => {
     ]);
   });
 
-  it("passes the upcoming recurring charges through without their cadence", () => {
+  it("passes the upcoming recurring charges through, rounded to agorot, without their cadence", () => {
     const facts = buildInsightFacts(
       sources({
         upcoming: [
-          { id: "r1", name: "מנוי לדוגמה", amount: 40, date: "2026-03-20", cadence: "monthly" },
+          {
+            id: "r1",
+            name: "מנוי לדוגמה",
+            amount: 100 / 3,
+            date: "2026-03-20",
+            cadence: "monthly",
+          },
         ],
       }),
     );
     expect(facts.upcomingRecurring).toEqual([
-      { id: "r1", name: "מנוי לדוגמה", amount: 40, date: "2026-03-20" },
+      { id: "r1", name: "מנוי לדוגמה", amount: 33.33, date: "2026-03-20" },
     ]);
   });
 });

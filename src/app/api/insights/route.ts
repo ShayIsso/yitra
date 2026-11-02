@@ -5,6 +5,7 @@ import {
   getAccountBalances,
   getMonthTransactionDetails,
   getRollupCategories,
+  previousMonth,
   selectInsights,
 } from "@/lib/analytics";
 import { getBudgetStatuses, getMonthlyTargets } from "@/lib/budgets";
@@ -17,11 +18,6 @@ const querySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100),
   month: z.coerce.number().int().min(1).max(12),
 });
-
-function monthsBefore(year: number, month: number, count: number) {
-  const index = year * 12 + (month - 1) - count;
-  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
-}
 
 const toIsoDate = (date: Date): string => date.toISOString().slice(0, 10);
 
@@ -36,9 +32,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const { year, month } = querySchema.parse(Object.fromEntries(searchParams));
     const now = new Date();
+    // UTC calendar date, the same "today" the budgets pace and next-debit reads use.
     const today = toIsoDate(now);
-    const previous = monthsBefore(year, month, 1);
-    const beforePrevious = monthsBefore(year, month, 2);
+    const previous = previousMonth({ year, month });
+    const beforePrevious = previousMonth(previous);
 
     const [
       monthRows,

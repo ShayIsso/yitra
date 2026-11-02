@@ -3,6 +3,7 @@ import {
   selectInsights,
   isMonthOverMonthChangeVisible,
   areQuietCategoriesVisible,
+  previousMonth,
   type InsightFacts,
 } from "../index";
 
@@ -69,23 +70,23 @@ describe("selectInsights", () => {
     expect(selectInsights(facts())).toEqual([]);
   });
 
-  it("totals the upcoming card debits into one card dated by the earliest debit", () => {
+  it("totals the upcoming card debits, to the agora, into one card dated by the earliest debit", () => {
     const insights = selectInsights(
       facts({
         cardDebits: [
-          { accountId: "a2", displayName: "כרטיס ב", amount: 900, date: "2026-03-20" },
-          { accountId: "a1", displayName: "כרטיס א", amount: 1200, date: "2026-03-10" },
+          { accountId: "a2", displayName: "כרטיס ב", amount: 200.2, date: "2026-03-20" },
+          { accountId: "a1", displayName: "כרטיס א", amount: 100.1, date: "2026-03-10" },
         ],
       }),
     );
     expect(insights).toEqual([
       {
         kind: "card-debit",
-        total: 2100,
+        total: 300.3,
         date: "2026-03-10",
         cards: [
-          { accountId: "a1", displayName: "כרטיס א", amount: 1200, date: "2026-03-10" },
-          { accountId: "a2", displayName: "כרטיס ב", amount: 900, date: "2026-03-20" },
+          { accountId: "a1", displayName: "כרטיס א", amount: 100.1, date: "2026-03-10" },
+          { accountId: "a2", displayName: "כרטיס ב", amount: 200.2, date: "2026-03-20" },
         ],
       },
     ]);
@@ -163,6 +164,13 @@ describe("selectInsights", () => {
     it("ignores rises under ₪100 and categories with no spend last month", () => {
       const insights = selectInsights(facts({ categoryChanges: [changes[2], changes[3]] }));
       expect(insights).toEqual([]);
+    });
+
+    it("counts a rise of exactly ₪100 despite float residue", () => {
+      const [jump] = selectInsights(
+        facts({ categoryChanges: [{ ...groceries, amount: 128.01, previous: 28.01 }] }),
+      );
+      expect(jump).toMatchObject({ kind: "category-jump", change: 100 });
     });
 
     it("is hidden before day 7 of the current month", () => {
@@ -255,6 +263,13 @@ describe("selectInsights", () => {
       }),
     );
     expect(insights).toEqual([]);
+  });
+});
+
+describe("previousMonth", () => {
+  it("steps back one calendar month, across the year boundary", () => {
+    expect(previousMonth({ year: 2026, month: 3 })).toEqual({ year: 2026, month: 2 });
+    expect(previousMonth({ year: 2026, month: 1 })).toEqual({ year: 2025, month: 12 });
   });
 });
 

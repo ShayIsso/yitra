@@ -4,10 +4,21 @@
  * dependency-free (no DB, no `new Date()`), like `month-window`, so client
  * components can import the gating rules from this file directly. The facts it
  * selects from are reduced server-side by `buildInsightFacts` (analytics index).
+ * Client code must import values from `@/lib/analytics/insights`, never from
+ * `@/lib/analytics`, whose index pulls the DB client into the bundle.
  */
 import { monthDateRange } from "./month-window";
 
 export type InsightMonth = { year: number; month: number };
+
+export function previousMonth({ year, month }: InsightMonth): InsightMonth {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
+}
+
+/** Sums of amounts that each fit in agorot, so float residue never reaches a figure or a threshold. */
+function roundAgorot(amount: number): number {
+  return Math.round(amount * 100) / 100 || 0;
+}
 
 /** An upcoming card-account debit, from the account's next-debit estimate. */
 export type CardDebitFact = {
@@ -60,6 +71,11 @@ export type BiggestExpenseFact = {
   categoryName: string | null;
 };
 
+/**
+ * One whole month's story. Its totals are the Dashboard's month totals (type
+ * driven, so they agree with every other surface); its category, day and
+ * biggest-expense figures leave the settlement lump out by shape.
+ */
 export type RecapFact = {
   month: InsightMonth;
   income: number;
@@ -76,8 +92,13 @@ export type RecapFact = {
   } | null;
   biggestChange: { categoryId: string; name: string; amount: number; previous: number } | null;
   mostExpensiveDay: { date: string; amount: number; topDescription: string | null } | null;
+  /** The live monthly series as of today — what recurring charges take each month now. */
   recurring: { count: number; monthlyTotal: number };
-  /** Null when no expense target is set. */
+  /**
+   * Month expenses against the current expense target (no target history is
+   * kept — the same simplification month-close verdicts make). Null when no
+   * target is set.
+   */
   verdict: { target: number; over: boolean; by: number } | null;
 };
 
@@ -154,7 +175,7 @@ function cardDebitInsight(debits: CardDebitFact[]): Insight | null {
   const cards = [...debits].sort((a, b) => a.date.localeCompare(b.date));
   return {
     kind: "card-debit",
-    total: cards.reduce((sum, c) => sum + c.amount, 0),
+    total: roundAgorot(cards.reduce((sum, c) => sum + c.amount, 0)),
     date: cards[0].date,
     cards,
   };
@@ -194,7 +215,7 @@ function upcomingRecurringInsight(
   if (due.length === 0) return null;
   return {
     kind: "upcoming-recurring",
-    total: due.reduce((sum, c) => sum + c.amount, 0),
+    total: roundAgorot(due.reduce((sum, c) => sum + c.amount, 0)),
     charges: due,
   };
 }
@@ -206,13 +227,14 @@ function upcomingRecurringInsight(
 export const CATEGORY_JUMP_MIN_INCREASE = 100;
 
 function categoryJumpInsight(changes: CategoryChangeFact[]): Insight | null {
-  let jump: CategoryChangeFact | null = null;
-  for (const c of changes) {
-    if (c.previous <= 0 || c.amount - c.previous < CATEGORY_JUMP_MIN_INCREASE) continue;
-    if (!jump || c.amount - c.previous > jump.amount - jump.previous) jump = c;
+  let jump: { fact: CategoryChangeFact; change: number } | null = null;
+  for (const fact of changes) {
+    const change = roundAgorot(fact.amount - fact.previous);
+    if (fact.previous <= 0 || change < CATEGORY_JUMP_MIN_INCREASE) continue;
+    if (!jump || change > jump.change) jump = { fact, change };
   }
   if (!jump) return null;
-  return { kind: "category-jump", ...jump, change: jump.amount - jump.previous };
+  return { kind: "category-jump", ...jump.fact, change: jump.change };
 }
 
 /**
