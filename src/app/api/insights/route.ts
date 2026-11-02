@@ -65,7 +65,12 @@ export async function GET(request: Request) {
       createReviewStore().getPendingSuggestionCount(),
     ]);
 
-    const { upcoming } = projectUpcomingCharges(patterns, recentTxns, now);
+    // Liveness on the same day the facts are judged on, as the month outlook does.
+    const { upcoming } = projectUpcomingCharges(
+      patterns,
+      recentTxns,
+      new Date(`${today}T00:00:00.000Z`),
+    );
 
     const facts = buildInsightFacts({
       month: { year, month },

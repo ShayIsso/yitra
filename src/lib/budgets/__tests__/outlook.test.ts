@@ -187,8 +187,9 @@ describe("monthOutlook — what counts as spent", () => {
   });
 
   it("counts a charge once after its posted version superseded the pending row in place", () => {
-    // The importer's takeover rewrites the pending row into the posted one: one
-    // stored row, so one charge — the outlook only ever sees the result.
+    // Documents the delegated case: the importer's takeover rewrites the pending
+    // row into the posted one (proved in transactions' pending-supersede tests),
+    // leaving one stored row — the outlook only ever sees that result.
     const posted = spend("2026-06-10", 120, {
       id: "row-taken-over",
       description: "Invented Bakery",

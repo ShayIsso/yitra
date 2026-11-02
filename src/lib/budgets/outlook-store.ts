@@ -64,9 +64,9 @@ function addMonths(month: YearMonth, delta: number): YearMonth {
  * Each live, active series' charge for the month. Its latest charge has
  * arrived only when that row is in the month up to today AND counts as spend
  * — an uncategorized posting adds nothing to spent, so it stays due (awaiting
- * a category, not late) rather than vanishing from both. A charge the bank lists later in the month is due
- * on that date; any other is due on its projected date, which may be in the
- * past (late but live).
+ * a category, not late) rather than vanishing from both. A charge the bank
+ * lists later in the month is due on that date; any other is due on its
+ * projected date, which may be in the past (late but live).
  */
 function recurringCharges(
   patterns: PersistedRecurringPattern[],

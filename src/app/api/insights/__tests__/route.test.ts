@@ -16,13 +16,17 @@ vi.mock("@/lib/budgets", () => ({
   getMonthlyTargets: vi.fn(async () => ({ expenseTarget: null, savingsTarget: null })),
 }));
 
-vi.mock("@/lib/recurring-detection", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/recurring-detection")>()),
-  drizzleRecurringStore: {
-    getPersistedPatterns: vi.fn(async () => []),
-    getTransactionsForDetection: vi.fn(async () => []),
-  },
-}));
+vi.mock("@/lib/recurring-detection", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/recurring-detection")>();
+  return {
+    ...original,
+    projectUpcomingCharges: vi.fn(original.projectUpcomingCharges),
+    drizzleRecurringStore: {
+      getPersistedPatterns: vi.fn(async () => []),
+      getTransactionsForDetection: vi.fn(async () => []),
+    },
+  };
+});
 
 vi.mock("@/lib/transactions", () => ({
   getUncategorizedTransactionCount: vi.fn(async () => 0),
@@ -34,6 +38,7 @@ vi.mock("@/lib/ai-categorization", () => ({
 
 import { buildInsightFacts } from "@/lib/analytics";
 import { getBudgetStatuses } from "@/lib/budgets";
+import { projectUpcomingCharges } from "@/lib/recurring-detection";
 import { GET } from "../route";
 
 const get = (query: string) => GET(new Request(`http://localhost:3000/api/insights${query}`));
@@ -56,6 +61,9 @@ describe("GET /api/insights", () => {
     expect(res.status).toBe(200);
     expect(vi.mocked(buildInsightFacts).mock.calls[0][0].today).toBe("2026-06-01");
     expect(getBudgetStatuses).toHaveBeenCalledWith(2026, 6, "2026-06-01");
+    expect(vi.mocked(projectUpcomingCharges).mock.calls[0][2]).toEqual(
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
   });
 
   it("rejects an invalid month with a 400", async () => {
