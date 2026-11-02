@@ -41,12 +41,13 @@ export function createAiCategorizationStore(client: DbClient = db): AiCategoriza
           id: transactions.id,
           description: transactions.description,
           bankType: bankCredentials.bankType,
+          chargedAmount: transactions.chargedAmount,
         })
         .from(transactions)
         .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
         .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
         .where(isNull(transactions.categoryId));
-      return rows;
+      return rows.map((r) => ({ ...r, chargedAmount: Number(r.chargedAmount) }));
     },
 
     async getPromptCategories(): Promise<PromptCategoryRow[]> {

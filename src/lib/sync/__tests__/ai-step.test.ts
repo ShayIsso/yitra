@@ -14,6 +14,8 @@ type StoredTxn = {
   bankType: "discount" | "max" | "visaCal";
   categoryId: string | null;
   categorySource: CategorySource | null;
+  /** Defaults to an outgoing charge; positive is an incoming credit. */
+  chargedAmount?: number;
 };
 type StoredCategory = { id: string; name: string; description: string | null };
 
@@ -69,7 +71,12 @@ function makeStores(seed: {
     async getUncategorizedTransactions() {
       return txns
         .filter((t) => t.categoryId === null)
-        .map((t) => ({ id: t.id, description: t.description, bankType: t.bankType }));
+        .map((t) => ({
+          id: t.id,
+          description: t.description,
+          bankType: t.bankType,
+          chargedAmount: t.chargedAmount ?? -100,
+        }));
     },
     async getPromptCategories() {
       return seed.categories.map((c) => ({ id: c.id, name: c.name, description: c.description }));
@@ -324,6 +331,67 @@ describe("runAiSyncStep", () => {
     );
 
     expect(provider.prompts).toHaveLength(0);
+    expect(events[0]).toMatchObject({ applied: 0, queued: 1, skipped: 0 });
+  });
+
+  it("leaves an unpaired transfer-shaped incoming credit uncategorized: not queued, not sent to the provider, counted as skipped", async () => {
+    const { aiStore, memoryStore, txns } = makeStores({
+      categories: CATS,
+      txns: [
+        {
+          id: "t-salary",
+          description: 'העברה מחברה לדוגמה בע"מ',
+          bankType: "discount",
+          categoryId: null,
+          categorySource: null,
+          chargedAmount: 12000,
+        },
+      ],
+    });
+    const provider = scriptedProvider([{ match: "העברה", category: "מסעדות וקפה", confidence: 7 }]);
+    const router = fakeRouter(["t-salary"]);
+
+    const events = await collect(
+      runAiSyncStep({
+        createProvider: async () => provider,
+        aiStore,
+        memoryStore,
+        transferRouter: router,
+      }),
+    );
+
+    expect(provider.prompts).toHaveLength(0);
+    expect(router.queued).toEqual([]);
+    expect(txns[0]).toMatchObject({ categoryId: null, categorySource: null });
+    expect(events[0]).toMatchObject({ applied: 0, queued: 0, skipped: 1 });
+  });
+
+  it("still routes an unpaired transfer-shaped outgoing debit to the inbox", async () => {
+    const { aiStore, memoryStore } = makeStores({
+      categories: CATS,
+      txns: [
+        {
+          id: "t-out",
+          description: "העברה לחשבון שלי",
+          bankType: "discount",
+          categoryId: null,
+          categorySource: null,
+          chargedAmount: -12000,
+        },
+      ],
+    });
+    const router = fakeRouter(["t-out"]);
+
+    const events = await collect(
+      runAiSyncStep({
+        createProvider: async () => scriptedProvider([]),
+        aiStore,
+        memoryStore,
+        transferRouter: router,
+      }),
+    );
+
+    expect(router.queued).toEqual(["t-out"]);
     expect(events[0]).toMatchObject({ applied: 0, queued: 1, skipped: 0 });
   });
 

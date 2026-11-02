@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, notExists, sql } from "drizzle-orm";
 import type { db } from "@/db";
 import { reconciliationRejections, transactions } from "@/db/schema";
 import { canonicalPair, type RejectedPair } from "./rejected-pairs";
@@ -27,7 +27,12 @@ export async function recordRejections(
   }
 }
 
-/** Of `txnIds`, the rows with no reconciliation group and no self-rejection. */
+/**
+ * Of `txnIds`, the debits with no reconciliation group and no self-rejection.
+ * A credit is never a `suspected transfer` (#303): the AI run already keeps
+ * guarded credits out of the candidates, and the router holds the invariant for
+ * any caller.
+ */
 export async function selectUnpairedNotRejected(
   executor: RejectionExecutor,
   txnIds: string[],
@@ -39,6 +44,7 @@ export async function selectUnpairedNotRejected(
     .where(
       and(
         inArray(transactions.id, txnIds),
+        lte(transactions.chargedAmount, "0"),
         isNull(transactions.reconciliationGroupId),
         notExists(
           executor

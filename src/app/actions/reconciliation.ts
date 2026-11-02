@@ -64,7 +64,7 @@ export async function rejectReconciliationAction(
 
 export async function approveReconciliationsAction(
   data: unknown,
-): Promise<{ approved?: number; error?: string }> {
+): Promise<{ approved?: number; skipped?: string[]; error?: string }> {
   const parsed = groupIdsSchema.safeParse(data);
   if (!parsed.success) return { error: formatZodError(parsed.error) };
 
@@ -72,7 +72,10 @@ export async function approveReconciliationsAction(
   if (result.error) return { error: result.error };
 
   revalidateAll();
-  return { approved: parsed.data.groupIds.length };
+  return {
+    approved: parsed.data.groupIds.length - result.skipped.length,
+    skipped: result.skipped,
+  };
 }
 
 export async function rejectReconciliationsAction(

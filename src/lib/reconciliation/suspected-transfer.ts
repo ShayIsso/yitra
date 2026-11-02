@@ -15,8 +15,9 @@ import { selectUnpairedNotRejected } from "./rejection-writes";
  */
 export interface SuspectedTransferRouter {
   /**
-   * Of the given ids, the ones with no reconciliation group yet (unpaired after P3)
-   * and not previously rejected as a suspected transfer (a rejected pair).
+   * Of the given ids, the debits with no reconciliation group yet (unpaired after
+   * P3) and not previously rejected as a suspected transfer (a rejected pair).
+   * Credits are dropped: a credit is never queued as a singleton (#303).
    */
   filterUnpaired(txnIds: string[]): Promise<string[]>;
   /** Queue a single row as a pending suspected-transfer inbox item. */

@@ -1,16 +1,16 @@
 import { db } from "@/db";
 import { bankAccounts, transactions, recurringExpenses } from "@/db/schema";
 import { eq, and, gte, lte, ilike, isNull, count, inArray } from "drizzle-orm";
-import { categorize, getRules } from "@/lib/categories/rules";
+import { getRules } from "@/lib/categories/rules";
 import { getGroupLeafIndex } from "@/lib/categories";
 import type { ScrapedAccount } from "@/lib/scraper/types";
-import type { Categorization } from "./import";
 import { importAccountTransactions } from "./account-import";
+import { createImportCategorizer } from "./categorizer";
 import { createDbStore, createDbPendingSweepStore } from "./store";
 import type { transactionFiltersSchema } from "./schemas";
 import type { z } from "zod";
 import { extractMerchant, amountsMatch } from "@/lib/transaction-matching";
-import { createMerchantMemoryStore, deriveMerchantKey, lookupMemory } from "@/lib/merchant-memory";
+import { createMerchantMemoryStore } from "@/lib/merchant-memory";
 import {
   createReviewStore,
   needsReviewSql,
@@ -40,23 +40,7 @@ export async function importScrapedAccounts(
   let skipped = 0;
   let swept = 0;
 
-  // Precedence at the import seam: rules (deliberately-authored law) → merchant
-  // memory (learned exact-key mappings). AI is a later slice (ADR-0010 §1).
-  // Rules are fetched once for the whole sync rather than per transaction.
-  const rules = await getRules();
-  const memoryStore = createMerchantMemoryStore();
-  const categorizer = async (description: string): Promise<Categorization> => {
-    const ruleCategoryId = categorize(description, rules);
-    if (ruleCategoryId) return { categoryId: ruleCategoryId, source: "rule" };
-
-    const key = deriveMerchantKey(description);
-    if (!key) return { categoryId: null, source: null };
-    const hit = (await lookupMemory([key], memoryStore)).get(key);
-    if (!hit) return { categoryId: null, source: null };
-    // Trust tier, not mechanism (ADR-0010 §2): a user-tier hit is `memory`, an
-    // ai-tier hit stays `ai` so a cached guess never launders into trusted.
-    return { categoryId: hit.categoryId, source: hit.source === "user" ? "memory" : "ai" };
-  };
+  const categorizer = createImportCategorizer(await getRules(), createMerchantMemoryStore());
 
   for (const account of scrapedAccounts) {
     // Upsert bank_account — insert or update balance on conflict

@@ -68,6 +68,7 @@ describe("ReconciliationInbox institution labels", () => {
       description: "Synthetic transfer",
       chargedAmount,
       categoryName: null,
+      categorySource: null,
       reconciliationRole: "transfer_pair" as const,
     };
   }

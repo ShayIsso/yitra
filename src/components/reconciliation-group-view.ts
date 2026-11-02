@@ -7,6 +7,7 @@ export type PendingMember = {
   description: string;
   chargedAmount: number;
   categoryName: string | null;
+  categorySource: "rule" | "memory" | "ai" | "user" | null;
   reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair";
 };
 
@@ -55,6 +56,27 @@ export function reconciliationGroupView(members: PendingMember[]): Reconciliatio
     return { kind: "suspected-transfer", title: "חשד להעברה בין חשבונות", row: pairs[0] };
   }
   return { kind: "group", title: "קבוצת תנועות", count: members.length };
+}
+
+/**
+ * Mirrors `approveGroup` (reconciliation inbox-ops): a row the user categorized
+ * after it was queued keeps that category on approve; otherwise it becomes an
+ * internal transfer and leaves the totals on its side of the ledger.
+ */
+export function suspectedTransferConsequence(row: PendingMember): string {
+  if ((row.categorySource === "user" || row.categorySource === "memory") && row.categoryName) {
+    return `התנועה כבר מסווגת כ״${row.categoryName}״. אישור ישאיר את הסיווג הזה.`;
+  }
+  const leaves = row.chargedAmount > 0 ? "בהכנסות" : "בהוצאות";
+  return `לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר ${leaves}.`;
+}
+
+/**
+ * Mirrors `approveGroups`, which skips an incoming suspected transfer on the
+ * server: such a row is approved one by one, never swept in with a selection.
+ */
+export function isBulkApprovable(view: ReconciliationGroupView): boolean {
+  return !(view.kind === "suspected-transfer" && view.row.chargedAmount > 0);
 }
 
 /** Zero reads as incoming, matching the money colours (`amountColorClass`). */

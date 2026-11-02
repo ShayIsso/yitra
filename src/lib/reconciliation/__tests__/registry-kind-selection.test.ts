@@ -92,6 +92,7 @@ function pairMember(overrides: Partial<InboxTransaction>): InboxTransaction {
     description: "העברה",
     chargedAmount: -300,
     categoryId: null,
+    categorySource: null,
     reconciliationGroupId: "group-1",
     reconciliationRole: "transfer_pair",
     reconciliationConfidence: 0.9,

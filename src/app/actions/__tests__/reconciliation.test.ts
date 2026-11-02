@@ -36,6 +36,7 @@ function makeTxn(overrides: Partial<InboxTransaction> = {}): InboxTransaction {
     description: "חיוב ויזה",
     chargedAmount: -300,
     categoryId: null,
+    categorySource: null,
     reconciliationGroupId: "group-1",
     reconciliationRole: "settlement_lump",
     reconciliationConfidence: 0.95,
@@ -87,10 +88,10 @@ describe("approveGroup — P1 settlement", () => {
 
     expect(result.error).toBeUndefined();
     expect(store.confirmGroup).toHaveBeenCalledOnce();
-    const [calledGroupId, , transferCatId] = vi.mocked(store.confirmGroup).mock.calls[0];
+    const [calledGroupId, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
     expect(calledGroupId).toBe("group-1");
     // P1: no transfer category flip needed
-    expect(transferCatId).toBeNull();
+    expect(flip).toBeNull();
   });
 });
 
@@ -108,8 +109,12 @@ describe("approveGroup — P2 transfer_pair", () => {
 
     expect(result.error).toBeUndefined();
     expect(store.confirmGroup).toHaveBeenCalledOnce();
-    const [, , transferCatId] = vi.mocked(store.confirmGroup).mock.calls[0];
-    expect(transferCatId).toBe("cat-transfer-id");
+    const [, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
+    expect(flip).toEqual({
+      txnId: "bank-1",
+      categoryId: "cat-transfer-id",
+      categorySource: "user",
+    });
   });
 });
 
@@ -133,9 +138,9 @@ describe("approveGroup — suspected transfer (singleton, AI-step routing #148)"
 
     expect(result.error).toBeUndefined();
     expect(store.confirmGroup).toHaveBeenCalledOnce();
-    const [groupId, , transferCatId] = vi.mocked(store.confirmGroup).mock.calls[0];
+    const [groupId, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
     expect(groupId).toBe("group-sus");
-    expect(transferCatId).toBe("cat-transfer-id");
+    expect(flip).toEqual({ txnId: "sus-1", categoryId: "cat-transfer-id", categorySource: "user" });
   });
 });
 

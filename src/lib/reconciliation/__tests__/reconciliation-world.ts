@@ -101,6 +101,7 @@ export function createWorld(seed: WorldRow[], options: { transferCategory?: bool
     description: r.description,
     chargedAmount: r.chargedAmount,
     categoryId: r.categoryId,
+    categorySource: null,
     reconciliationGroupId: r.reconciliationGroupId,
     reconciliationRole: r.role,
     reconciliationConfidence: r.confidence,
