@@ -175,6 +175,26 @@ describe("computeCategorySpend", () => {
   });
 });
 
+describe("computeCategorySpend — flagged settlement lump", () => {
+  const row = (
+    categoryId: string,
+    chargedAmount: number,
+    reconciliationRole: "settlement_lump" | "settlement_detail" | null = null,
+  ) => ({ categoryId, categoryType: "expense" as const, chargedAmount, reconciliationRole });
+
+  it("leaves a row reconciliation flagged as the settlement lump out of budget spend", () => {
+    const spend = computeCategorySpend([
+      row("cards", -2500, "settlement_lump"),
+      row("cards", -40),
+      row("grocery", -300, "settlement_detail"),
+    ]);
+    expect(spend).toEqual([
+      { categoryId: "cards", amount: 40 },
+      { categoryId: "grocery", amount: 300 },
+    ]);
+  });
+});
+
 describe("computeSubtreeSpend", () => {
   const cats = [
     { id: "food", parentId: null },

@@ -7,9 +7,9 @@
  * analytics uses, so budget numbers always agree with the Dashboard.
  */
 import { db } from "@/db";
-import { transactions, categories, monthlyTargets } from "@/db/schema";
-import { and, gte, lte, eq } from "drizzle-orm";
-import { computeMonthlySummary, type AnalyticsTransaction } from "@/lib/analytics";
+import { categories, monthlyTargets } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { getMonthlySummary, getMonthTransactionDetails } from "@/lib/analytics";
 import {
   createBudgetWithStore,
   updateBudgetWithStore,
@@ -98,36 +98,6 @@ export async function getBudgetForCategory(categoryId: string): Promise<StoredBu
   return drizzleBudgetStore.getByCategoryId(categoryId);
 }
 
-function monthDateRange(month: YearMonth): { from: string; to: string } {
-  const mm = String(month.month).padStart(2, "0");
-  const lastDay = new Date(month.year, month.month, 0).getDate();
-  return {
-    from: `${month.year}-${mm}-01`,
-    to: `${month.year}-${mm}-${String(lastDay).padStart(2, "0")}`,
-  };
-}
-
-async function loadMonthTransactions(
-  month: YearMonth,
-): Promise<(AnalyticsTransaction & { categoryId: string | null })[]> {
-  const { from, to } = monthDateRange(month);
-  const rows = await db
-    .select({
-      chargedAmount: transactions.chargedAmount,
-      categoryType: categories.type,
-      categoryId: transactions.categoryId,
-    })
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-  return rows.map((r) => ({
-    chargedAmount: Number(r.chargedAmount),
-    categoryType: r.categoryType ?? null,
-    categoryId: r.categoryId ?? null,
-  }));
-}
-
 const isoToday = (): string => new Date().toISOString().slice(0, 10);
 
 /**
@@ -146,7 +116,7 @@ export async function getBudgetStatuses(
 
   const ym: YearMonth = { year, month };
   const [txns, categoryRows] = await Promise.all([
-    loadMonthTransactions(ym),
+    getMonthTransactionDetails(year, month),
     db.select({ id: categories.id, parentId: categories.parentId }).from(categories),
   ]);
 
@@ -204,8 +174,7 @@ export async function getSavingsTargetStatus(
   if (savingsTarget == null) return null;
 
   const ym: YearMonth = { year, month };
-  const txns = await loadMonthTransactions(ym);
-  const netSavings = computeMonthlySummary(txns).netSavings;
+  const { netSavings } = await getMonthlySummary(year, month);
   const monthClosed = isMonthClosed(ym, today);
 
   return {
@@ -232,8 +201,7 @@ export async function getExpenseTargetPace(
   const { expenseTarget } = await getMonthlyTargets();
 
   const ym: YearMonth = { year, month };
-  const txns = await loadMonthTransactions(ym);
-  const monthExpenses = computeMonthlySummary(txns).expenses;
+  const { expenses: monthExpenses } = await getMonthlySummary(year, month);
   const elapsed = monthElapsed(ym, today);
 
   return evaluateExpenseTargetPace(expenseTarget, monthExpenses, elapsed);

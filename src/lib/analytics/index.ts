@@ -1,5 +1,11 @@
 import { db } from "@/db";
-import { transactions, categories, bankAccounts, bankCredentials } from "@/db/schema";
+import {
+  transactions,
+  categories,
+  bankAccounts,
+  bankCredentials,
+  type reconciliationRoleEnum,
+} from "@/db/schema";
 import { eq, and, gte, lte, gt, inArray, desc } from "drizzle-orm";
 import { monthDateRange } from "./month-window";
 import {
@@ -8,13 +14,51 @@ import {
   matchesTransferDescriptor,
 } from "@/lib/transaction-matching";
 import { bankKindOf } from "@/lib/bank-registry";
+import {
+  monthPosition,
+  previousMonth,
+  type InsightMonth,
+  type InsightFacts,
+  type BudgetFact,
+  type RecurringChargeFact,
+  type CardDebitFact,
+  type CategoryChangeFact,
+  type RecapFact,
+} from "./insights";
 
 export { monthDateRange } from "./month-window";
+export * from "./insights";
 
 export type AnalyticsTransaction = {
   chargedAmount: number;
   categoryType: "income" | "expense" | "investment" | "transfer" | "ignore" | null;
+  /**
+   * Only per-category and per-merchant figures read this (see
+   * {@link excludeSettlementLumps}); month totals ignore it. The reads that feed
+   * those figures must carry it (`toTransactionWithCategory` and the merchant
+   * read require it); absent means unflagged.
+   */
+  reconciliationRole?: ReconciliationRole | null;
 };
+
+export type ReconciliationRole = (typeof reconciliationRoleEnum.enumValues)[number];
+
+/**
+ * The card-settlement lump (CONTEXT.md "settlement charge") is excluded from
+ * every per-category and per-merchant figure — breakdowns, budget gauges,
+ * month-close verdicts, top merchants and insights — only when it is known to
+ * be one: typed `transfer` (already outside expense spend) or flagged
+ * `settlement_lump` by reconciliation (queued or confirmed) while it still
+ * carries an expense category. Never by description shape alone: P1's shape
+ * predicate is safe only paired with matching card totals; on its own it
+ * matches direct debits, card-brand words and any standalone 4-digit run, and
+ * would drop real expenses. Month totals stay type-driven.
+ */
+export function excludeSettlementLumps<
+  T extends { reconciliationRole?: ReconciliationRole | null },
+>(rows: readonly T[]): T[] {
+  return rows.filter((r) => r.reconciliationRole !== "settlement_lump");
+}
 
 export type TransactionWithCategory = AnalyticsTransaction & {
   categoryId: string | null;
@@ -153,12 +197,13 @@ function netOutflowsByKey<T extends { chargedAmount: number }, K>(
  * Per-category expense spend under the spend floor — the one leaf-grain read
  * the Dashboard breakdown, budget gauges and month-close all share, so they
  * cannot disagree on a category's figure. Uncategorized and non-expense rows
- * drop out; a category netting to ≤ 0 is absent.
+ * and flagged settlement lumps ({@link excludeSettlementLumps}) drop out; a
+ * category netting to ≤ 0 is absent.
  */
 export function computeCategoryNetSpend(
   transactions: readonly (AnalyticsTransaction & { categoryId: string | null })[],
 ): Map<string, number> {
-  return netOutflowsByKey(transactions, (t) =>
+  return netOutflowsByKey(excludeSettlementLumps(transactions), (t) =>
     t.categoryType === "expense" && t.categoryId ? t.categoryId : null,
   );
 }
@@ -224,6 +269,7 @@ export type MerchantTransaction = {
   description: string;
   chargedAmount: number;
   categoryType: AnalyticsTransaction["categoryType"];
+  reconciliationRole?: ReconciliationRole | null;
 };
 
 export type TopMerchant = {
@@ -274,12 +320,13 @@ function isCheckWithdrawalDescriptor(description: string): boolean {
  * `transfer` must still never masquerade as a top merchant. Same for a
  * check-withdrawal descriptor (`isCheckWithdrawalDescriptor`) — a bank
  * mechanism, not a merchant, but outside `matchesTransferDescriptor`'s kinds.
+ * A row flagged as the lump ({@link excludeSettlementLumps}) never ranks either.
  */
 export function computeTopMerchants(
   transactions: MerchantTransaction[],
   limit: number = DEFAULT_TOP_MERCHANTS_LIMIT,
 ): TopMerchant[] {
-  const totals = netOutflowsByKey(transactions, (t) => {
+  const totals = netOutflowsByKey(excludeSettlementLumps(transactions), (t) => {
     if (t.categoryType !== "expense") return null;
     if (matchesTransferDescriptor(t.description, ["card_settlement"])) return null;
     if (isCheckWithdrawalDescriptor(t.description)) return null;
@@ -456,6 +503,7 @@ export function toTransactionWithCategory(row: {
   categoryName: string | null;
   categoryColor: string | null;
   categoryIcon: string | null;
+  reconciliationRole: ReconciliationRole | null;
 }): TransactionWithCategory {
   return {
     chargedAmount: Number(row.chargedAmount),
@@ -464,6 +512,228 @@ export function toTransactionWithCategory(row: {
     categoryName: row.categoryName ?? "",
     categoryColor: row.categoryColor ?? "#888888",
     categoryIcon: row.categoryIcon ?? "MoreHorizontal",
+    reconciliationRole: row.reconciliationRole,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Insights aggregate (pure): read results → InsightFacts
+// ---------------------------------------------------------------------------
+
+/** One month row as the insights aggregate reads it ({@link getMonthTransactionDetails}). */
+export type InsightTransactionRow = {
+  id: string;
+  /** YYYY-MM-DD. */
+  date: string;
+  description: string;
+  customDescription: string | null;
+  chargedAmount: number;
+  categoryId: string | null;
+  categoryType: AnalyticsTransaction["categoryType"];
+  reconciliationRole: ReconciliationRole | null;
+};
+
+export type InsightSources = {
+  month: InsightMonth;
+  /** YYYY-MM-DD. */
+  today: string;
+  /** Rows of `month`, of the month before it, and of the month before that. */
+  rows: {
+    month: InsightTransactionRow[];
+    previous: InsightTransactionRow[];
+    beforePrevious: InsightTransactionRow[];
+  };
+  categories: RollupCategory[];
+  balances: AccountBalance[];
+  attention: InsightFacts["attention"];
+  budgets: Omit<BudgetFact, "categoryName">[];
+  upcoming: RecurringChargeFact[];
+  expenseTarget: number | null;
+};
+
+function cardDebitsFrom(balances: readonly AccountBalance[]): CardDebitFact[] {
+  return balances.flatMap((a) =>
+    a.nextDebitDate && a.balance !== null && a.balance < 0
+      ? [{ accountId: a.id, displayName: a.displayName, amount: -a.balance, date: a.nextDebitDate }]
+      : [],
+  );
+}
+
+function dayOfMonth(isoDate: string): number {
+  return Number(isoDate.slice(8, 10));
+}
+
+/** Top-level (group or root-leaf) spend under the spend floor, group-first like the Dashboard. */
+function topLevelSpend(
+  rows: readonly InsightTransactionRow[],
+  categories: readonly RollupCategory[],
+): CategorySpendingNode[] {
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const leaves = Array.from(computeCategoryNetSpend(rows)).flatMap(([categoryId, amount]) => {
+    const c = categoryById.get(categoryId);
+    return c ? [{ categoryId, categoryName: c.name, amount, color: c.color, icon: c.icon }] : [];
+  });
+  return rollUpSpendingByGroup(leaves, [...categories]);
+}
+
+function compareTopLevel(
+  current: CategorySpendingNode[],
+  previous: CategorySpendingNode[],
+): CategoryChangeFact[] {
+  const changes = new Map<string, CategoryChangeFact>();
+  const entry = (n: CategorySpendingNode): CategoryChangeFact =>
+    changes.get(n.categoryId) ?? {
+      categoryId: n.categoryId,
+      name: n.categoryName,
+      color: n.color,
+      icon: n.icon,
+      amount: 0,
+      previous: 0,
+    };
+  for (const n of current) changes.set(n.categoryId, { ...entry(n), amount: n.amount });
+  for (const n of previous) changes.set(n.categoryId, { ...entry(n), previous: n.amount });
+  return [...changes.values()].sort((a, b) => b.amount - a.amount || b.previous - a.previous);
+}
+
+/** The single expense charge with the largest outflow, or null when none spent. */
+function largestExpenseRow(rows: readonly InsightTransactionRow[]): InsightTransactionRow | null {
+  let largest: { row: InsightTransactionRow; outflow: number } | null = null;
+  for (const row of rows) {
+    const outflow = outflowContribution(row.chargedAmount);
+    if (row.categoryType !== "expense" || outflow <= 0) continue;
+    if (!largest || outflow > largest.outflow) largest = { row, outflow };
+  }
+  return largest?.row ?? null;
+}
+
+function biggestChangeOf(
+  current: CategorySpendingNode[],
+  previous: CategorySpendingNode[],
+): RecapFact["biggestChange"] {
+  if (previous.length === 0) return null;
+  let biggest: { fact: CategoryChangeFact; delta: number } | null = null;
+  for (const fact of compareTopLevel(current, previous)) {
+    const delta = toAgorot(Math.abs(fact.amount - fact.previous));
+    if (delta > 0 && (!biggest || delta > biggest.delta)) biggest = { fact, delta };
+  }
+  if (!biggest) return null;
+  const { categoryId, name, amount, previous: before } = biggest.fact;
+  return { categoryId, name, amount, previous: before };
+}
+
+function mostExpensiveDayOf(rows: readonly InsightTransactionRow[]): RecapFact["mostExpensiveDay"] {
+  const byDay = netOutflowsByKey(rows, (r) => (r.categoryType === "expense" ? r.date : null));
+  let peak: [string, number] | null = null;
+  for (const [date, amount] of byDay) if (!peak || amount > peak[1]) peak = [date, amount];
+  if (!peak) return null;
+  const [date, amount] = peak;
+  const top = largestExpenseRow(rows.filter((r) => r.date === date));
+  return { date, amount, topDescription: top ? (top.customDescription ?? top.description) : null };
+}
+
+/**
+ * The recap of one whole month against the month before it. Absent when the
+ * month has no income or expense to tell a story about.
+ */
+function recapFact(
+  month: InsightMonth,
+  allRows: readonly InsightTransactionRow[],
+  comparisonRows: readonly InsightTransactionRow[],
+  sources: InsightSources,
+): RecapFact | null {
+  if (!allRows.some((r) => r.categoryType === "income" || r.categoryType === "expense"))
+    return null;
+  const summary = computeMonthlySummary([...allRows]);
+  // Category spend filters lumps itself; the row-level day and biggest-expense
+  // reads below need the rows filtered here.
+  const rows = excludeSettlementLumps(allRows);
+  const nodes = topLevelSpend(rows, sources.categories);
+  const byCategoryTotal = nodes.reduce((sum, n) => sum + n.amount, 0);
+  const top = nodes[0];
+  const monthly = sources.upcoming.filter((c) => c.cadence === "monthly");
+  const target = sources.expenseTarget;
+  return {
+    month,
+    income: toAgorot(summary.income),
+    expenses: summary.expenses,
+    netSavings: toAgorot(summary.netSavings),
+    savingsRate: summary.income > 0 ? summary.savingsRate : null,
+    topCategory: top
+      ? {
+          categoryId: top.categoryId,
+          name: top.categoryName,
+          color: top.color,
+          amount: top.amount,
+          share: top.amount / byCategoryTotal,
+        }
+      : null,
+    biggestChange: biggestChangeOf(nodes, topLevelSpend(comparisonRows, sources.categories)),
+    mostExpensiveDay: mostExpensiveDayOf(rows),
+    recurring: {
+      count: monthly.length,
+      monthlyTotal: toAgorot(monthly.reduce((sum, c) => sum + c.amount, 0)),
+    },
+    verdict:
+      target === null
+        ? null
+        : {
+            target,
+            over: summary.expenses > target,
+            by: toAgorot(Math.abs(summary.expenses - target)),
+          },
+  };
+}
+
+/**
+ * Reduces the insights aggregate's reads to the compact {@link InsightFacts}
+ * that {@link selectInsights} chooses from. For the current month every
+ * comparison is month-to-date — this month through today against last month
+ * through the same day — and rows dated after today are not spent yet.
+ */
+export function buildInsightFacts(sources: InsightSources): InsightFacts {
+  const { month, today, categories } = sources;
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const position = monthPosition(month, today);
+  const started = position.phase !== "not-started";
+  const throughDay = position.phase === "current" ? position.day : 31;
+  // Lumps are filtered here for the row-level biggest-expense read; category
+  // spend would drop them on its own.
+  const spendToDate = (rows: readonly InsightTransactionRow[]) =>
+    started ? excludeSettlementLumps(rows).filter((r) => dayOfMonth(r.date) <= throughDay) : [];
+  const monthRows = spendToDate(sources.rows.month);
+  const previousRows = spendToDate(sources.rows.previous);
+  const biggest = largestExpenseRow(monthRows);
+
+  // A month still running has no story yet, so the recap tells last month's.
+  const recap = !started
+    ? null
+    : position.phase === "current"
+      ? recapFact(previousMonth(month), sources.rows.previous, sources.rows.beforePrevious, sources)
+      : recapFact(month, sources.rows.month, sources.rows.previous, sources);
+
+  return {
+    month: sources.month,
+    today: sources.today,
+    cardDebits: cardDebitsFrom(sources.balances),
+    attention: sources.attention,
+    budgets: sources.budgets.map((b) => ({
+      ...b,
+      categoryName: categoryById.get(b.categoryId)?.name ?? "",
+    })),
+    upcomingRecurring: sources.upcoming.map((c) => ({ ...c, amount: toAgorot(c.amount) })),
+    categoryChanges: compareTopLevel(
+      topLevelSpend(monthRows, categories),
+      topLevelSpend(previousRows, categories),
+    ),
+    biggestExpense: biggest && {
+      transactionId: biggest.id,
+      description: biggest.customDescription ?? biggest.description,
+      amount: outflowContribution(biggest.chargedAmount),
+      date: biggest.date,
+      categoryId: biggest.categoryId,
+      categoryName: (biggest.categoryId && categoryById.get(biggest.categoryId)?.name) ?? null,
+    },
+    recap,
   };
 }
 
@@ -472,33 +742,16 @@ export function toTransactionWithCategory(row: {
 // ---------------------------------------------------------------------------
 
 /**
- * The normalized month read every month-scoped analytics/report calculation
- * shares (issue #168): all transactions on `transactions.date` within the
- * calendar month, joined to category metadata and coalesced to the
- * `TransactionWithCategory` shape. Single owner of the select/join + null
- * coalescing — {@link getMonthlySummary}, {@link getSpendingByCategory}, and
- * the reports store all consume it, so their windows can never diverge.
+ * The month read in the `TransactionWithCategory` shape that totals and
+ * breakdowns use — {@link getMonthlySummary}, {@link getSpendingByCategory}
+ * and the reports store's monthly report — projected
+ * from {@link getMonthTransactionDetails} through `toTransactionWithCategory`.
  */
 export async function getMonthTransactions(
   year: number,
   month: number,
 ): Promise<TransactionWithCategory[]> {
-  const { from, to } = monthDateRange(year, month);
-
-  const rows = await db
-    .select({
-      chargedAmount: transactions.chargedAmount,
-      categoryType: categories.type,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categoryColor: categories.color,
-      categoryIcon: categories.icon,
-    })
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-  return rows.map(toTransactionWithCategory);
+  return (await getMonthTransactionDetails(year, month)).map(toTransactionWithCategory);
 }
 
 /** The category roll-up structure (ADR-0011 shape) — single owner for group-first breakdowns. */
@@ -526,30 +779,64 @@ export async function getSpendingByCategory(
 }
 
 /**
- * The month read {@link getTopMerchants} aggregates over: the raw `description`
- * alongside `chargedAmount`/category type, for the same calendar-month window
- * {@link getMonthTransactions} uses. Kept separate from that shared shape
- * because `description` is merchant-matching input, not part of the
- * type-driven totals reader's contract.
+ * The month read {@link getTopMerchants} aggregates over, projected from
+ * {@link getMonthTransactionDetails}: the raw `description` is merchant-matching
+ * input, so it is part of this shape and not of the totals shape.
  */
 export async function getMonthMerchantTransactions(
   year: number,
   month: number,
-): Promise<MerchantTransaction[]> {
+): Promise<Required<MerchantTransaction>[]> {
+  return (await getMonthTransactionDetails(year, month)).map((r) => ({
+    description: r.description,
+    chargedAmount: r.chargedAmount,
+    categoryType: r.categoryType,
+    reconciliationRole: r.reconciliationRole,
+  }));
+}
+
+/** A month row with everything any month-scoped reader projects from it. */
+export type MonthTransactionDetail = InsightTransactionRow & {
+  categoryName: string | null;
+  categoryColor: string | null;
+  categoryIcon: string | null;
+};
+
+/**
+ * The single-month query (issue #168): every transaction on `transactions.date`
+ * within the calendar month, with its category. {@link getMonthTransactions}
+ * (totals and breakdowns), {@link getMonthMerchantTransactions} (top
+ * merchants), the budgets reads and the insights aggregate all project from it,
+ * so their window and join cannot diverge. The reports store's multi-month
+ * range read is a separate query kept in step with this one (same window
+ * bucketing, same join, same `toTransactionWithCategory` coalescing).
+ */
+export async function getMonthTransactionDetails(
+  year: number,
+  month: number,
+): Promise<MonthTransactionDetail[]> {
   const { from, to } = monthDateRange(year, month);
 
   const rows = await db
     .select({
+      id: transactions.id,
+      date: transactions.date,
       description: transactions.description,
+      customDescription: transactions.customDescription,
       chargedAmount: transactions.chargedAmount,
+      categoryId: categories.id,
       categoryType: categories.type,
+      categoryName: categories.name,
+      categoryColor: categories.color,
+      categoryIcon: categories.icon,
+      reconciliationRole: transactions.reconciliationRole,
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(gte(transactions.date, from), lte(transactions.date, to)));
 
   return rows.map((r) => ({
-    description: r.description,
+    ...r,
     chargedAmount: Number(r.chargedAmount),
     categoryType: r.categoryType ?? null,
   }));

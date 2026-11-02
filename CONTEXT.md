@@ -83,6 +83,8 @@ A charge is reported first as `pending` **with no `externalId`**, later as `comp
 
 When a credit card settles on `יום החיוב`, the bank imports both the individual transactions (coffee, groceries, …) **and** the total monthly charge as a single deduction from the bank account. Without intervention, both get counted — doubling expense totals. Reconciliation (Phase 2) detects settlement-day lump charges by matching `sum(card cycle transactions) ≈ bank lump amount` and re-categorizes the lump as `transfer` so it disappears from totals.
 
+Until it is re-typed, a lump reconciliation has flagged (`reconciliation_role = 'settlement_lump'`, queued or confirmed) is left out of **every per-category and per-merchant figure** — breakdowns, budget gauges, month-close verdicts, top merchants, insights — while month totals stay type-driven. A row is the lump only when it is typed `transfer` or flagged; never by description shape alone, since the P1 shape (`card_settlement` descriptor on a bank account) is safe only paired with matching card totals and on its own also matches direct debits, card-brand words and any 4-digit number.
+
 Always say "settlement charge" or "The Paradox" — these names are used in BACKLOG.md, PRD-phase2.md, and the reconciliation module's identifiers.
 
 ### `rejected pair`
@@ -221,7 +223,7 @@ Active goals in user-set priority order, filled by a **stateless fold**: at any 
 
 An optional monthly spending cap on a single **expense-type** category (one budget per category; enforced in `src/lib/budgets`, backstopped by the DB `uq_budget_category` index). A budget is a **gauge, not an allocation**: it evaluates one calendar month in isolation on `transactions.date` — the same window analytics uses — and resets (see `goals accumulate, budgets reset monthly`). Deleting a category cascade-deletes its budget (`ON DELETE CASCADE`).
 
-**Budget spend = subtree spend**: the category's own expense spend plus its direct children's (each under the `spend floor`), over the one-level hierarchy — so it degenerates to self for a `root leaf`. A parent (group) budget and a child (leaf) budget may **coexist and evaluate independently**; there is no precedence or roll-up law between them.
+**Budget spend = subtree spend**: the category's own expense spend plus its direct children's (each under the `spend floor`, and without a flagged `settlement charge` lump), over the one-level hierarchy — so it degenerates to self for a `root leaf`. A parent (group) budget and a child (leaf) budget may **coexist and evaluate independently**; there is no precedence or roll-up law between them.
 
 ### `budget pace` — load-bearing
 
