@@ -1,3 +1,5 @@
+import type { CategorySource } from "@/lib/merchant-memory";
+
 /** One transaction of a pending reconciliation group, as the inbox page hands it over. */
 export type PendingMember = {
   id: string;
@@ -7,7 +9,7 @@ export type PendingMember = {
   description: string;
   chargedAmount: number;
   categoryName: string | null;
-  categorySource: "rule" | "memory" | "ai" | "user" | null;
+  categorySource: CategorySource | null;
   reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair";
 };
 
@@ -67,7 +69,7 @@ export function suspectedTransferConsequence(row: PendingMember): string {
   if ((row.categorySource === "user" || row.categorySource === "memory") && row.categoryName) {
     return `התנועה כבר מסווגת כ״${row.categoryName}״. אישור ישאיר את הסיווג הזה.`;
   }
-  const leaves = row.chargedAmount > 0 ? "בהכנסות" : "בהוצאות";
+  const leaves = row.chargedAmount < 0 ? "בהוצאות" : "בהכנסות";
   return `לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר ${leaves}.`;
 }
 

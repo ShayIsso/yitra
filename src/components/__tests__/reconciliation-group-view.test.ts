@@ -101,6 +101,10 @@ describe("what approving a suspected transfer will do, in words", () => {
     );
   });
 
+  it("reads a zero amount as incoming, as the card's direction does", () => {
+    expect(suspectedTransferConsequence(member("transfer_pair", 0))).toContain("בהכנסות");
+  });
+
   it("tells an outgoing row it leaves expenses", () => {
     expect(suspectedTransferConsequence(member("transfer_pair", -800))).toBe(
       "לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר בהוצאות.",

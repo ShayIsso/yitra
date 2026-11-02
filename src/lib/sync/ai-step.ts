@@ -38,8 +38,8 @@ export interface AiStepDeps {
  * The final post-sync stage: categorize NULL-category rows the rules and
  * merchant memory could not resolve, and route transfer-guarded-but-unpaired
  * debits into the reconciliation inbox (a guarded credit stays uncategorized,
- * #303). Wired after reconciliation P1–P3 and
- * recurring detection (see `post-import.ts`).
+ * #303). Wired after reconciliation P1–P3 and recurring detection (see
+ * `post-import.ts`).
  *
  * Failure isolation (recurring-detection idiom): provider construction, a thrown
  * run, rate-limit exhaustion, and routing errors are all swallowed and the sync

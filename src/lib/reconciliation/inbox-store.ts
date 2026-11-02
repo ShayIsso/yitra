@@ -11,7 +11,7 @@ import {
   bankCredentials,
   categoryRules,
 } from "@/db/schema";
-import { and, eq, isNull, inArray, asc } from "drizzle-orm";
+import { and, eq, isNull, inArray, notInArray, or, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { CategorySource } from "@/lib/merchant-memory";
 import type { InboxStore, InboxTransaction, TransferFlip } from "./inbox-ops";
@@ -202,13 +202,23 @@ export const drizzleInboxStore: InboxStore = {
         .set({ reconciliationConfirmedAt: now })
         .where(eq(transactions.reconciliationGroupId, groupId));
       if (!flip) return;
-      await tx
+      const flipped = await tx
         .update(transactions)
         .set({ categoryId: flip.categoryId, categorySource: flip.categorySource })
         .where(
-          and(eq(transactions.id, flip.txnId), eq(transactions.reconciliationGroupId, groupId)),
-        );
-      await supersedeOpenSuggestions([flip.txnId], tx);
+          and(
+            eq(transactions.id, flip.txnId),
+            eq(transactions.reconciliationGroupId, groupId),
+            flip.keepUserCategory
+              ? or(
+                  isNull(transactions.categorySource),
+                  notInArray(transactions.categorySource, ["user", "memory"]),
+                )
+              : undefined,
+          ),
+        )
+        .returning({ id: transactions.id });
+      if (flipped.length > 0) await supersedeOpenSuggestions([flip.txnId], tx);
     });
   },
 

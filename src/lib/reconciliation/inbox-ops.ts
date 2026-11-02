@@ -39,6 +39,12 @@ export type TransferFlip = {
   txnId: string;
   categoryId: string;
   categorySource: "user";
+  /**
+   * Skip the flip if the row is `user`/`memory`-sourced at write time. Set for
+   * a suspected transfer, so a category chosen after `approveGroup` read the
+   * members still wins; a pair flips regardless (see `transferFlipFor`).
+   */
+  keepUserCategory: boolean;
 };
 
 export type InboxStore = {
@@ -118,8 +124,9 @@ async function transferFlipFor(
   // A suspected transfer has no second leg to double-count against, so a
   // category the user chose (or user-tier memory applied) after it was queued
   // outranks the suspicion. A pair keeps its flip: without it both legs count.
+  const keepUserCategory = members.length === 1;
   if (
-    members.length === 1 &&
+    keepUserCategory &&
     (bankSide.categorySource === "user" || bankSide.categorySource === "memory")
   ) {
     return null;
@@ -127,7 +134,12 @@ async function transferFlipFor(
 
   const transferCategoryId = await store.getCategoryIdByName("העברה פנימית");
   if (!transferCategoryId) return null;
-  return { txnId: bankSide.id, categoryId: transferCategoryId, categorySource: "user" };
+  return {
+    txnId: bankSide.id,
+    categoryId: transferCategoryId,
+    categorySource: "user",
+    keepUserCategory,
+  };
 }
 
 async function approveMembers(

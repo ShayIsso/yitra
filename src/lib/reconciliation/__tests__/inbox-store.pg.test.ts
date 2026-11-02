@@ -106,6 +106,25 @@ describe.skipIf(!isThrowaway)("approving a suspected transfer on Postgres", () =
     expect(await db.select().from(schema.merchantMemory)).toEqual([]);
   });
 
+  it("keeps a category the user chose between the approve's read and its confirm", async () => {
+    await db
+      .update(schema.transactions)
+      .set({ categoryId: incomeCategoryId, categorySource: "memory" })
+      .where(eq(schema.transactions.id, ROW));
+
+    await drizzleInboxStore.confirmGroup(GROUP, new Date(), {
+      txnId: ROW,
+      categoryId: transferCategoryId,
+      categorySource: "user",
+      keepUserCategory: true,
+    });
+
+    const row = await stored();
+    expect(row.reconciliationConfirmedAt).not.toBeNull();
+    expect(row.categoryId).toBe(incomeCategoryId);
+    expect(row.categorySource).toBe("memory");
+  });
+
   it("keeps a category the user chose after the row was queued", async () => {
     await db
       .update(schema.transactions)

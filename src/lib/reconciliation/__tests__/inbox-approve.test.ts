@@ -89,7 +89,12 @@ describe("approving a suspected transfer", () => {
     expect(confirmed).toEqual([
       {
         groupId: "g",
-        flip: { txnId: "out", categoryId: TRANSFER_CATEGORY, categorySource: "user" },
+        flip: {
+          txnId: "out",
+          categoryId: TRANSFER_CATEGORY,
+          categorySource: "user",
+          keepUserCategory: true,
+        },
       },
     ]);
   });
@@ -104,6 +109,7 @@ describe("approving a suspected transfer", () => {
       txnId: "out",
       categoryId: TRANSFER_CATEGORY,
       categorySource: "user",
+      keepUserCategory: true,
     });
   });
 
@@ -137,7 +143,12 @@ describe("approving a two-leg transfer pair", () => {
     expect(confirmed).toEqual([
       {
         groupId: "pair",
-        flip: { txnId: "bank", categoryId: TRANSFER_CATEGORY, categorySource: "user" },
+        flip: {
+          txnId: "bank",
+          categoryId: TRANSFER_CATEGORY,
+          categorySource: "user",
+          keepUserCategory: false,
+        },
       },
     ]);
   });

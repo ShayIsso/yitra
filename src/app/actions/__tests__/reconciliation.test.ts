@@ -114,6 +114,7 @@ describe("approveGroup — P2 transfer_pair", () => {
       txnId: "bank-1",
       categoryId: "cat-transfer-id",
       categorySource: "user",
+      keepUserCategory: false,
     });
   });
 });
@@ -140,7 +141,12 @@ describe("approveGroup — suspected transfer (singleton, AI-step routing #148)"
     expect(store.confirmGroup).toHaveBeenCalledOnce();
     const [groupId, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
     expect(groupId).toBe("group-sus");
-    expect(flip).toEqual({ txnId: "sus-1", categoryId: "cat-transfer-id", categorySource: "user" });
+    expect(flip).toEqual({
+      txnId: "sus-1",
+      categoryId: "cat-transfer-id",
+      categorySource: "user",
+      keepUserCategory: true,
+    });
   });
 });
 
