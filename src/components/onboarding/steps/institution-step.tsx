@@ -39,7 +39,8 @@ import {
   type CredentialValues,
 } from "@/lib/credentials/form";
 import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
-import { InstitutionIdentity } from "../institution-identity";
+import { Callout } from "../callout";
+import { ConnectedList, InstitutionIdentity } from "../institution-identity";
 import { StepFooter } from "../step-footer";
 import type { SetupStepProps, StepMeta } from "../step-navigation";
 
@@ -154,30 +155,27 @@ export function ConnectedSummary({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-2">
-        <h2 className="text-muted-foreground text-caption font-medium">חשבונות מחוברים</h2>
-        <ul className="border-border divide-border flex flex-col divide-y rounded-xl border">
-          {connected.map((credential) => (
-            <li key={credential.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
-              <InstitutionIdentity
-                bankType={credential.bankType}
-                displayName={credential.displayName}
-              />
-              <Button
-                variant="ghost"
-                size="lg"
-                className="text-muted-foreground min-w-11 shrink-0"
-                onClick={() => openRemove(credential)}
-                disabled={navigation.pending}
-                aria-label={`הסרת ${credential.displayName}`}
-              >
-                <TrashIcon />
-                <span className="max-sm:sr-only">הסרה</span>
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <ConnectedList>
+        {connected.map((credential) => (
+          <li key={credential.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
+            <InstitutionIdentity
+              bankType={credential.bankType}
+              displayName={credential.displayName}
+            />
+            <Button
+              variant="ghost"
+              size="lg"
+              className="text-muted-foreground min-w-11 shrink-0"
+              onClick={() => openRemove(credential)}
+              disabled={navigation.pending}
+              aria-label={`הסרת ${credential.displayName}`}
+            >
+              <TrashIcon />
+              <span className="max-sm:sr-only">הסרה</span>
+            </Button>
+          </li>
+        ))}
+      </ConnectedList>
       <div>
         <Button variant="outline" size="lg" onClick={onAddAnother} disabled={navigation.pending}>
           <PlusIcon />
@@ -308,12 +306,9 @@ function InstitutionForm({ navigation }: SetupStepProps) {
 
           <FormRootError role="alert" />
 
-          <p className="bg-muted text-body flex items-start gap-3 rounded-lg p-4">
-            <ShieldCheckIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
-            <span className="text-pretty">
-              הפרטים נשמרים מוצפנים במסד הנתונים שלכם, ומשמשים רק למשיכת התנועות.
-            </span>
-          </p>
+          <Callout icon={<ShieldCheckIcon className="text-muted-foreground" />}>
+            הפרטים נשמרים מוצפנים במסד הנתונים שלכם, ומשמשים רק למשיכת התנועות.
+          </Callout>
         </div>
 
         <StepFooter

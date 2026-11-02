@@ -89,13 +89,21 @@ const PAIRS: [string, string][] = [
   ...FILL_PAIRS,
 ];
 
-type Tint = { text: string; tint: string; alphas: { light: number[]; dark: number[] } };
+type Tint = {
+  text: string;
+  tint: string;
+  alphas: { light: number[]; dark: number[] };
+  /** Defaults to every page surface; a hero-only tint is checked over the hero. */
+  surfaces?: string[];
+};
 
 /**
  * Text drawn on translucent token fills, with every alpha (rest and hover) the
  * components use in each theme: the destructive button and badge
  * (ui/button.tsx, ui/badge.tsx), the budget chips (budget-status-card.tsx),
- * the toast variants (ui/toast.tsx) and the amber count badges.
+ * the toast variants (ui/toast.tsx), the amber count badges, and on the hero
+ * the entry screens' sheen, current step and control hover
+ * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx).
  */
 const TINTS: Tint[] = [
   {
@@ -111,6 +119,12 @@ const TINTS: Tint[] = [
   { text: "--emerald", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
   { text: "--foreground", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
   { text: "--foreground", tint: "--warning", alphas: { light: [0.15], dark: [0.15] } },
+  ...["--hero-foreground", "--hero-muted"].map((text) => ({
+    text,
+    tint: "--hero-foreground",
+    alphas: { light: [0.1], dark: [0.1] },
+    surfaces: ["--hero"],
+  })),
 ];
 
 describe.each([
@@ -122,9 +136,9 @@ describe.each([
     expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 
-  const tinted = TINTS.flatMap(({ text, tint, alphas }) =>
+  const tinted = TINTS.flatMap(({ text, tint, alphas, surfaces = SURFACES }) =>
     alphas[theme].flatMap((alpha) =>
-      SURFACES.map((surface): [string, string, number, string] => [text, tint, alpha, surface]),
+      surfaces.map((surface): [string, string, number, string] => [text, tint, alpha, surface]),
     ),
   );
   it.each(tinted)("%s on %s/%s over %s meets WCAG AA (4.5:1)", (text, tint, alpha, surface) => {

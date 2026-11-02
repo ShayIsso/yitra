@@ -211,7 +211,7 @@ export function InstitutionPicker({
         </SelectTrigger>
         <SelectContent>
           {bankPickerOptions().map((option) => (
-            <SelectItem key={option.value} value={option.value}>
+            <SelectItem key={option.value} value={option.value} className="max-md:min-h-11">
               {option.label}
               <InstitutionTrustBadge trust={picker.trustOf(option.value)} />
             </SelectItem>

@@ -106,7 +106,6 @@ export function SetupFrame({ step, passwordDone, exitHref, children }: SetupFram
           description={meta.description}
           titleRef={titleRef}
         />
-        {/* Each step body grows to the frame's height, so its footer sits at the bottom. */}
         <div className="flex flex-1 flex-col *:flex-1">{children}</div>
       </section>
     </EntryFrame>

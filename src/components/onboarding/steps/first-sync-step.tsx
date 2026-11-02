@@ -21,7 +21,8 @@ import { OtpEntry, STATUS_TEXT } from "@/components/sync-bank-status";
 import { useSyncStream, type BankSyncState, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
 import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
-import { InstitutionIdentity } from "../institution-identity";
+import { Callout } from "../callout";
+import { ConnectedList, InstitutionIdentity } from "../institution-identity";
 import { StepFooter, type StepFooterPrimary } from "../step-footer";
 import type { SetupStepProps, StepMeta, StepNavigation } from "../step-navigation";
 import {
@@ -48,6 +49,8 @@ const INSTITUTION_STEP_HREF = "/setup?step=institution";
 const LEAVE_WARNING = "הסנכרון עדיין פועל, ויציאה מהדף תעצור אותו. לצאת בכל זאת?";
 
 const NOTHING_OBSERVED: ReadonlySet<string> = new Set();
+
+const SECONDARY_ACTION = { variant: "outline", size: "lg", className: "min-h-11 px-4" } as const;
 
 /**
  * The install's own sync evidence, so a resumed wizard does not caveat an
@@ -213,23 +216,6 @@ export function FirstSyncBody({
   );
 }
 
-function Callout({
-  icon,
-  role,
-  children,
-}: {
-  icon: React.ReactNode;
-  role?: "alert" | "status";
-  children: React.ReactNode;
-}) {
-  return (
-    <div role={role} className="bg-muted text-body flex items-start gap-3 rounded-lg p-4">
-      <span className="mt-0.5 shrink-0 [&_svg]:size-5">{icon}</span>
-      <div className="flex min-w-0 flex-col gap-1 leading-relaxed text-pretty">{children}</div>
-    </div>
-  );
-}
-
 function NothingToSync() {
   return (
     <div className="border-border flex flex-col items-start gap-4 rounded-xl border p-5">
@@ -242,10 +228,7 @@ function NothingToSync() {
           אפשר לחזור ולחבר חשבון עכשיו, או לסיים ולחבר אותו מאוחר יותר בהגדרות.
         </p>
       </div>
-      <Link
-        href={INSTITUTION_STEP_HREF}
-        className={buttonVariants({ variant: "outline", size: "lg", className: "min-h-11 px-4" })}
-      >
+      <Link href={INSTITUTION_STEP_HREF} className={buttonVariants(SECONDARY_ACTION)}>
         <PlusIcon />
         חיבור חשבון
       </Link>
@@ -288,69 +271,67 @@ function InstitutionList({
   onOtpSubmit: (bank: string) => void;
 }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-muted-foreground text-caption font-medium">חשבונות מחוברים</h2>
-      <ul className="border-border divide-border flex flex-col divide-y rounded-xl border">
-        {connected.map((institution) => {
-          const live = stream.bankStates[institution.bankType];
-          const trust = bankTrustOf(institution.bankType, observed);
-          const failureNote =
-            live?.status === "error" ? unverifiedFailureNote(institution.bankType, trust) : null;
-          const progress = syncStageProgress(live?.status);
-          return (
-            <li key={institution.id} className="flex flex-col gap-3 px-4 py-4">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <InstitutionIdentity
-                  bankType={institution.bankType}
-                  displayName={institution.displayName}
-                >
-                  <InstitutionTrustBadge trust={trust} />
-                </InstitutionIdentity>
-                <p aria-live="polite" className="text-body ms-auto flex items-center gap-1.5">
-                  <RowStatus state={live} running={running} />
-                </p>
-              </div>
-              {progress !== null && (
-                <div aria-hidden="true" className="bg-muted h-1.5 overflow-hidden rounded-full">
-                  <div
-                    className="bg-bar-strong h-full origin-right rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none"
-                    style={{ transform: `scaleX(${progress})` }}
-                  />
-                </div>
-              )}
-              {failureNote && (
-                <p className="text-muted-foreground text-body text-pretty">{failureNote}</p>
-              )}
-              {live?.screenshotFilename && (
-                <a
-                  href={`/api/screenshots/${live.screenshotFilename}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary text-body inline-flex min-h-11 items-center self-start underline-offset-4 hover:underline"
-                >
-                  צפה בצילום מסך
-                </a>
-              )}
-              {live?.status === "otp_required" && (
-                <OtpEntry
-                  code={stream.otpDrafts[institution.bankType] ?? ""}
-                  secondsLeft={stream.otp[institution.bankType]?.secondsLeft}
-                  onCodeChange={(code) => onOtpChange(institution.bankType, code)}
-                  onSubmit={() => onOtpSubmit(institution.bankType)}
+    <ConnectedList>
+      {connected.map((institution) => {
+        const live = stream.bankStates[institution.bankType];
+        const trust = bankTrustOf(institution.bankType, observed);
+        const failureNote =
+          live?.status === "error" ? unverifiedFailureNote(institution.bankType, trust) : null;
+        const progress = syncStageProgress(live?.status);
+        return (
+          <li key={institution.id} className="flex flex-col gap-3 px-4 py-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <InstitutionIdentity
+                bankType={institution.bankType}
+                displayName={institution.displayName}
+              >
+                <InstitutionTrustBadge trust={trust} />
+              </InstitutionIdentity>
+              <p className="text-body ms-auto flex items-center gap-1.5">
+                <RowStatus state={live} running={running} />
+              </p>
+            </div>
+            {progress !== null && (
+              <div aria-hidden="true" className="bg-muted h-1.5 overflow-hidden rounded-full">
+                <div
+                  className="bg-bar-strong h-full origin-right rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none"
+                  style={{ transform: `scaleX(${progress})` }}
                 />
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+              </div>
+            )}
+            {failureNote && (
+              <p className="text-muted-foreground text-body text-pretty">{failureNote}</p>
+            )}
+            {live?.screenshotFilename && (
+              <a
+                href={`/api/screenshots/${live.screenshotFilename}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary text-body inline-flex min-h-11 items-center self-start underline-offset-4 hover:underline"
+              >
+                צפה בצילום מסך
+              </a>
+            )}
+            {live?.status === "otp_required" && (
+              <OtpEntry
+                code={stream.otpDrafts[institution.bankType] ?? ""}
+                secondsLeft={stream.otp[institution.bankType]?.secondsLeft}
+                onCodeChange={(code) => onOtpChange(institution.bankType, code)}
+                onSubmit={() => onOtpSubmit(institution.bankType)}
+              />
+            )}
+          </li>
+        );
+      })}
+    </ConnectedList>
   );
 }
 
 /**
  * One institution's state in words beside an icon, so no outcome is told by
  * colour alone. A failure or a missed OTP is an attention state (ADR-0015:
- * coral means attention), never the red of negative money.
+ * coral means attention), never the red of negative money. Only those are
+ * announced: a live region per row would read out every stage of every run.
  */
 function RowStatus({ state, running }: { state: BankSyncState | undefined; running: boolean }) {
   if (!state || state.status === "idle") {
@@ -374,14 +355,14 @@ function RowStatus({ state, running }: { state: BankSyncState | undefined; runni
     case "otp_required":
     case "otp_timeout":
       return (
-        <span className="text-attention-text flex items-center gap-1.5 font-medium">
+        <span role="alert" className="text-attention-text flex items-center gap-1.5 font-medium">
           <WarningCircleIcon className="size-4 shrink-0" />
           {STATUS_TEXT[state.status]}
         </span>
       );
     case "error":
       return (
-        <span className="text-attention-text flex items-center gap-1.5 font-medium">
+        <span role="alert" className="text-attention-text flex items-center gap-1.5 font-medium">
           <WarningCircleIcon className="size-4 shrink-0" />
           {state.error ?? STATUS_TEXT.error}
         </span>
@@ -457,25 +438,12 @@ function Outcome({
           )}
           <div className="flex flex-wrap items-center gap-2">
             {view.failedInstitution && (
-              <Link
-                href={INSTITUTION_STEP_HREF}
-                className={buttonVariants({
-                  variant: "outline",
-                  size: "lg",
-                  className: "min-h-11 px-4",
-                })}
-              >
+              <Link href={INSTITUTION_STEP_HREF} className={buttonVariants(SECONDARY_ACTION)}>
                 חזרה לשלב החשבון
               </Link>
             )}
             {view.phase === "finished" && view.retryable && (
-              <Button
-                variant="outline"
-                size="lg"
-                className="min-h-11 px-4"
-                onClick={onRetry}
-                disabled={disabled}
-              >
+              <Button {...SECONDARY_ACTION} onClick={onRetry} disabled={disabled}>
                 <ArrowsClockwiseIcon />
                 ניסיון חוזר
               </Button>

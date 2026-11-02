@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 
 const WRONG_PASSWORD = "סיסמה שגויה. נסו שוב.";
 const UNREACHABLE = "לא הצלחנו להתחבר לשרת. נסו שוב.";
+const FAILED = "הכניסה נכשלה. נסו שוב.";
 
 export function LoginForm({ destination }: { destination: "/" | "/setup" }) {
   const router = useRouter();
@@ -51,7 +52,7 @@ export function LoginForm({ destination }: { destination: "/" | "/setup" }) {
       setPassword("");
       setError(WRONG_PASSWORD);
     } else {
-      setError(UNREACHABLE);
+      setError(FAILED);
     }
     setLoading(false);
   }

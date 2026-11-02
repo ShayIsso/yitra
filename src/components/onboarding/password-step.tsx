@@ -8,6 +8,7 @@ import type { PasswordSource } from "@/lib/auth";
 import type { FieldErrors } from "@/lib/api-utils";
 import { MIN_PASSWORD_LENGTH } from "@/lib/onboarding/schemas";
 import { cn } from "@/lib/utils";
+import { Callout } from "./callout";
 import { StepFooter } from "./step-footer";
 import type { StepNavigation } from "./step-navigation";
 
@@ -31,10 +32,9 @@ export function PasswordStep({ navigation, passwordSource, submitPassword }: Pas
   if (passwordSource !== "none") {
     return (
       <div className="flex flex-col gap-6">
-        <div className="bg-muted text-body flex items-start gap-3 rounded-lg p-4">
-          <CheckCircleIcon className="text-pos mt-0.5 size-5 shrink-0" />
+        <Callout icon={<CheckCircleIcon className="text-pos" />}>
           {passwordSource === "environment" ? (
-            <p className="leading-relaxed">
+            <p>
               הסיסמה מוגדרת במשתנה הסביבה{" "}
               <code dir="ltr" className="font-mono text-xs">
                 APP_PASSWORD
@@ -44,7 +44,7 @@ export function PasswordStep({ navigation, passwordSource, submitPassword }: Pas
           ) : (
             <p>הסיסמה כבר הוגדרה.</p>
           )}
-        </div>
+        </Callout>
         <StepFooter navigation={navigation} />
       </div>
     );

@@ -33,3 +33,15 @@ export function InstitutionIdentity({
     </div>
   );
 }
+
+/** The wizard's list of connected institutions, one row per child `<li>`. */
+export function ConnectedList({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-muted-foreground text-caption font-medium">חשבונות מחוברים</h2>
+      <ul className="border-border divide-border flex flex-col divide-y rounded-xl border">
+        {children}
+      </ul>
+    </section>
+  );
+}

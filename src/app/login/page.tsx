@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { InfoIcon } from "@/components/icons";
+import { Callout } from "@/components/onboarding/callout";
 import { EntryBrand, EntryFrame, EntryHeading } from "@/components/onboarding/entry-frame";
 import { loginDestination, readLoginView } from "@/lib/onboarding";
 import { LoginForm } from "./login-form";
@@ -24,9 +25,8 @@ export default async function LoginPage({
         {view.kind === "unconfigured" ? (
           <>
             <EntryHeading title="לא מוגדרת סיסמת כניסה" />
-            <div className="bg-muted text-body flex items-start gap-3 rounded-lg p-4">
-              <InfoIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
-              <p className="leading-relaxed">
+            <Callout icon={<InfoIcon className="text-muted-foreground" />}>
+              <p>
                 ההגדרה הראשונית כבר הושלמה, ולכן לא ניתן לבחור סיסמה מתוך האפליקציה. הגדירו את משתנה
                 הסביבה{" "}
                 <code dir="ltr" className="font-mono text-xs">
@@ -34,7 +34,7 @@ export default async function LoginPage({
                 </code>{" "}
                 והפעילו את השרת מחדש.
               </p>
-            </div>
+            </Callout>
           </>
         ) : (
           <>

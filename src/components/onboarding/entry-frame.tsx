@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * Every control inside an entry screen gets a 44px target (ADR-0015). The
- * forms mounted here are shared with Settings (credential fields, institution
- * picker, provider form), whose controls stay desktop-dense there, so the
- * entry screens raise them in one place instead of forking each form.
+ * shared primitives (input, select, button) are desktop-dense app-wide until
+ * the page slices resize them, so the entry screens raise every control they
+ * contain in one place instead of overriding each use.
  */
 const TOUCH_TARGETS =
   "[&_[data-slot=input]]:h-11 [&_[data-slot=select-trigger]]:h-11 [&_[data-slot=button]]:min-h-11";

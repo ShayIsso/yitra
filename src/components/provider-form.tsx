@@ -169,20 +169,20 @@ export function ProviderForm({
       )}
 
       <div className="flex flex-col gap-1.5">
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-body">
           בשימוש כעת:{" "}
           <span className="text-foreground font-medium">{OPTIONS[settings.effective].label}</span>
         </p>
         {!pinned && settings.hasStoredKey && selected !== "gemini" && (
-          <p className="text-muted-foreground text-sm">השמירה תמחק את מפתח ה-API השמור.</p>
+          <p className="text-muted-foreground text-body">השמירה תמחק את מפתח ה-API השמור.</p>
         )}
         {error && (
-          <p role="alert" className="text-destructive text-sm">
+          <p role="alert" className="text-destructive text-body">
             {error}
           </p>
         )}
         {announceSaved && saved && !error && (
-          <p role="status" className="text-muted-foreground text-sm">
+          <p role="status" className="text-muted-foreground text-body">
             ההגדרה נשמרה ותחול מהסנכרון הבא.
           </p>
         )}
@@ -232,8 +232,8 @@ function ProviderOption({
           )}
         />
         <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-sm font-medium">{option.label}</span>
-          <span className="text-muted-foreground text-xs leading-relaxed">
+          <span className="text-body font-medium">{option.label}</span>
+          <span className="text-muted-foreground text-caption leading-relaxed">
             {option.description}
           </span>
         </span>
@@ -267,7 +267,7 @@ function KeyField({
   if (settings.environmentHasKey) {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-muted-foreground flex items-start gap-2 text-sm">
+        <p className="text-muted-foreground text-body flex items-start gap-2">
           <KeyIcon className="mt-0.5 size-4 shrink-0" />
           <span>
             המפתח נלקח ממשתנה הסביבה{" "}
@@ -313,7 +313,7 @@ function KeyField({
         aria-invalid={error ? true : undefined}
         placeholder="הדביקו כאן את המפתח"
       />
-      <p className={error ? "text-destructive text-xs" : "text-muted-foreground text-xs"}>
+      <p className={error ? "text-destructive text-caption" : "text-muted-foreground text-caption"}>
         {error ?? "המפתח נשמר מוצפן במסד הנתונים שלכם ולא יוצג שוב."}
       </p>
     </div>
@@ -322,7 +322,7 @@ function KeyField({
 
 function EnvironmentPinned() {
   return (
-    <div className="bg-muted flex items-start gap-3 rounded-lg px-4 py-4 text-sm">
+    <div className="bg-muted text-body flex items-start gap-3 rounded-lg px-4 py-4">
       <InfoIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" />
       <p className="leading-relaxed">
         הספק נקבע במשתנה הסביבה{" "}
@@ -350,7 +350,7 @@ function StoredKeyActions({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="flex items-start gap-2 text-sm">
+      <p className="text-body flex items-start gap-2">
         <KeyIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         {note}
       </p>
@@ -364,7 +364,7 @@ function StoredKeyActions({
           מחיקת המפתח
         </Button>
       </div>
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground text-caption">
         מחיקת המפתח מחזירה גם את הבחירה השמורה למצב כבוי.
       </p>
     </div>
