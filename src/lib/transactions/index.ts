@@ -16,6 +16,9 @@ import {
   needsReviewSql,
   type PendingSuggestionRow,
 } from "@/lib/ai-categorization";
+import { originalCharge } from "./currency";
+
+export { canonicalCurrency, originalCharge, type ChargeAmounts } from "./currency";
 
 /** `getSyncStartDate` builds local-midnight dates, so format with local getters. */
 function toLocalIsoDate(d: Date): string {
@@ -289,6 +292,12 @@ export async function getTransactions(filters: z.infer<typeof transactionFilters
     const matched = activeRecurring.find(
       (re) => re.merchant === txnMerchant && amountsMatch(txnAmount, Number(re.expectedAmount)),
     );
+    const amounts = {
+      originalAmount: Number(r.originalAmount),
+      originalCurrency: r.originalCurrency,
+      chargedAmount: Number(r.chargedAmount),
+      chargedCurrency: r.chargedCurrency,
+    };
     return {
       id: r.id,
       bankAccountId: r.bankAccountId,
@@ -298,10 +307,8 @@ export async function getTransactions(filters: z.infer<typeof transactionFilters
       description: r.description,
       customDescription: r.customDescription,
       memo: r.memo,
-      originalAmount: Number(r.originalAmount),
-      originalCurrency: r.originalCurrency,
-      chargedAmount: Number(r.chargedAmount),
-      chargedCurrency: r.chargedCurrency,
+      ...amounts,
+      originalCharge: originalCharge(amounts),
       type: r.type,
       installmentNumber: r.installmentNumber,
       installmentTotal: r.installmentTotal,

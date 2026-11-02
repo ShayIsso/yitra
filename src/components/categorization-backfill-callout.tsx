@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bot, Loader2, X } from "lucide-react";
+import { RobotIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { requestBackfill, type BackfillOutcomeView } from "@/components/backfill-response";
@@ -35,9 +35,9 @@ export function CategorizationBackfillCallout({
   const summaryLines = result?.summary ? aiSummaryLines(result.summary) : [];
 
   return (
-    <div className="bg-muted/50 flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="bg-muted flex flex-col gap-3 rounded-xl px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-start gap-2.5">
-        <Bot className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.5} />
+        <RobotIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         <div className="min-w-0 space-y-0.5" aria-live="polite">
           {result?.summary ? (
             <>
@@ -67,24 +67,21 @@ export function CategorizationBackfillCallout({
       </div>
       {result?.summary ? (
         <Button
-          size="sm"
           variant="ghost"
           onClick={() => setResult(null)}
-          className="shrink-0 self-end sm:self-auto"
+          className="h-11 shrink-0 self-end sm:h-9 sm:self-auto"
           aria-label="סגור"
         >
-          <X className="size-4" strokeWidth={1.5} />
+          <XIcon className="size-4" />
           סגור
         </Button>
       ) : (
         <Button
-          size="sm"
           variant="outline"
           onClick={run}
           disabled={running}
-          className="shrink-0 self-end sm:self-auto"
+          className="bg-card h-11 shrink-0 self-end sm:h-9 sm:self-auto"
         >
-          {running && <Loader2 className="size-3.5 animate-spin" />}
           {running ? "מסווג..." : "סווג עם AI"}
         </Button>
       )}

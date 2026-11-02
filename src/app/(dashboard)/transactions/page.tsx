@@ -1,42 +1,28 @@
 export const dynamic = "force-dynamic";
 
+import { Suspense } from "react";
 import { getCategories, getCategoryTree } from "@/lib/categories";
 import { isProviderConfigured } from "@/lib/ai-categorization";
-import { TransactionsTable } from "@/components/transactions-table";
+import { TransactionsPage } from "@/components/transactions/transactions-page";
 
-export default async function TransactionsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ uncategorized?: string; needsReview?: string }>;
-}) {
-  const [categories, tree, params, categorizationAvailable] = await Promise.all([
+/**
+ * The view (filters, search, page) is read from the URL by the client
+ * component (`@/lib/transactions/view-params`), so deep links such as
+ * `?uncategorized=true` or `?categoryId=…&month=2026-10` open filtered.
+ */
+export default async function Page() {
+  const [categories, tree, categorizationAvailable] = await Promise.all([
     getCategories(),
     getCategoryTree(),
-    searchParams,
     isProviderConfigured(),
   ]);
-  // Deep-links from the dashboard's attention counters (#206) land here as
-  // `?uncategorized=true` / `?needsReview=true` — the same literal values
-  // `transactionFiltersSchema` (src/lib/transactions/schemas.ts) accepts.
-  // Mapped to the table's existing categoryId sentinels so both the manual
-  // "קטגוריה" dropdown and a deep link drive the identical filter path.
-  // needsReview wins if both are somehow present, matching resolveCategoryFilter's
-  // own precedence (src/lib/transactions/index.ts).
-  const initialCategoryFilter =
-    params.needsReview === "true"
-      ? "__needs_review__"
-      : params.uncategorized === "true"
-        ? "__uncategorized__"
-        : "";
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold tracking-tight">תנועות</h2>
-      <TransactionsTable
+    <Suspense>
+      <TransactionsPage
         categories={categories}
         tree={tree}
-        initialCategoryFilter={initialCategoryFilter}
         categorizationAvailable={categorizationAvailable}
       />
-    </div>
+    </Suspense>
   );
 }
