@@ -31,7 +31,7 @@ import type {
   SavingsTargetStatus,
 } from "@/lib/budgets";
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
-import { PaceHero } from "@/components/dashboard/pace-hero";
+import { PaceHero, PaceHeroSkeleton } from "@/components/dashboard/pace-hero";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
 import { OnboardingPath } from "@/components/dashboard/onboarding-path";
 import { SyncFreshnessPill } from "@/components/dashboard/sync-freshness-pill";
@@ -204,6 +204,10 @@ function formatDebitDateHint(isoDate: string): string {
   return `${day}.${month}`;
 }
 
+const SAVINGS_RATE_LABEL = "אחוז חיסכון";
+/** The KPI band's tile labels, in order; the loading skeleton renders the same tiles. */
+const KPI_LABELS = ["הכנסות", "הוצאות", "חיסכון נטו", SAVINGS_RATE_LABEL] as const;
+
 function KpiTile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Card>
@@ -329,7 +333,9 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
         {/* Header — month navigation + sync-freshness pill */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-2xl font-bold tracking-tight">לוח בקרה</h2>
-          <div className="flex items-center gap-3">
+          {/* Stacked on phones: the pill's text grows after mount, and side by side
+              it would wrap the row and shift the page below (CLS). */}
+          <div className="flex items-center gap-3 max-sm:flex-col max-sm:items-start">
             <SyncFreshnessPill runs={lastSyncRuns} />
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={nextMonth} aria-label="חודש הבא">
@@ -350,27 +356,15 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
 
       {loading ? (
         <div className="space-y-6">
-          {/* Pace hero skeleton */}
-          <Card>
-            <CardHeader className="pb-2">
-              <Skeleton className="h-4 w-32" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-3 w-full" />
-            </CardContent>
-          </Card>
-          {/* KPI band skeleton */}
+          {/* Pace hero + KPI band skeletons keep the loaded rows' heights, so
+              the swap to content does not shift the page (CLS). */}
+          <PaceHeroSkeleton />
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={`sk-kpi-${i}`}>
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-20" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-28" />
-                </CardContent>
-              </Card>
+            {KPI_LABELS.map((label) => (
+              <KpiTile key={label} label={label}>
+                <Skeleton className="h-8 w-28" />
+                {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
+              </KpiTile>
             ))}
           </div>
           {/* Breakdown skeleton */}
@@ -410,7 +404,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
           <PaceHero pace={budgetsSummary.expenseTargetPace} />
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiTile label="הכנסות">
+            <KpiTile label={KPI_LABELS[0]}>
               {summary ? (
                 <Amount amount={summary.income} fractionDigits={0} className="text-2xl font-bold" />
               ) : (
@@ -418,7 +412,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
               )}
             </KpiTile>
 
-            <KpiTile label="הוצאות">
+            <KpiTile label={KPI_LABELS[1]}>
               {summary ? (
                 // summary.expenses is net outflow, positive for money out (CONTEXT.md
                 // "net outflow"), so sign-driven colorize would read it as positive
@@ -435,7 +429,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
               )}
             </KpiTile>
 
-            <KpiTile label="חיסכון נטו">
+            <KpiTile label={KPI_LABELS[2]}>
               {summary ? (
                 <Amount
                   amount={summary.netSavings}
@@ -447,7 +441,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
               )}
             </KpiTile>
 
-            <KpiTile label="אחוז חיסכון">
+            <KpiTile label={SAVINGS_RATE_LABEL}>
               <p
                 className={`text-2xl font-bold ${
                   summary && summary.savingsRate >= 0 ? "text-pos" : "text-neg"

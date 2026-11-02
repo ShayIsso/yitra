@@ -4,6 +4,7 @@ import { Gauge } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { BudgetPace, BudgetVerdict } from "@/lib/budgets";
 
@@ -86,6 +87,43 @@ function clampLabelPosition(percent: number): number {
   return Math.min(94, Math.max(6, percent));
 }
 
+function PaceHeroHeader() {
+  return (
+    <CardHeader className="pb-2">
+      <CardTitle className="flex items-center gap-2 text-base">
+        <Gauge className="text-muted-foreground size-4" strokeWidth={1.5} />
+        קצב הוצאה חודשי
+      </CardTitle>
+    </CardHeader>
+  );
+}
+
+/**
+ * Loading state with the paced layout's exact row heights (amount line, label
+ * rows, bar, sentence), so the swap to content does not move what follows
+ * (CLS, ADR-0015 "Performance"). Keep it in step with the paced branch below.
+ * It matches the paced state only (a target is set, the sentence fits one
+ * line); the no-target empty state is a different height.
+ */
+export function PaceHeroSkeleton() {
+  return (
+    <Card>
+      <PaceHeroHeader />
+      <CardContent>
+        {/* No gap after the amount line: in the paced branch it is an inline
+            <span>, which space-y's block margin does not move. */}
+        <Skeleton className="h-7 w-48" />
+        <div className="space-y-1">
+          <div className="h-4" />
+          <Skeleton className="h-3 w-full" />
+          <div className="h-4" />
+        </div>
+        <Skeleton className="mt-3 h-5 w-56" />
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
  * A′ pace hero — the layout's emotional anchor ("am I on track this month?").
  * Both label rows anchor via `right` (not `insetInlineStart`): under the
@@ -101,12 +139,7 @@ export function PaceHero({ pace }: PaceHeroProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Gauge className="text-muted-foreground size-4" strokeWidth={1.5} />
-          קצב הוצאה חודשי
-        </CardTitle>
-      </CardHeader>
+      <PaceHeroHeader />
       <CardContent>
         {!pace || !vm ? (
           <EmptyState

@@ -401,6 +401,24 @@
   }
 
   /**
+   * .page-enter — the shell's page transition (#315): fade + 6px rise, once
+   * per navigation (the shell keys it by pathname). Fill mode `backwards`, not
+   * `both`: a transform left on the page wrapper after the animation would make
+   * it the containing block of every position:fixed descendant. Own keyframe
+   * name because tw-animate-css also defines `enter`.
+   */
+  .page-enter {
+    animation: page-enter 200ms var(--ease-enter) backwards;
+  }
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  /**
    * .hover-tint — 130ms background/edge tint on hover (#202).
    */
   .hover-tint {
@@ -431,6 +449,7 @@
   @media (prefers-reduced-motion: reduce) {
     .enter,
     .view-wash,
+    .page-enter,
     .stagger > * {
       animation-name: fade-in;
       animation-duration: 150ms;
