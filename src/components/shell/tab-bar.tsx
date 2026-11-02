@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { DotsThreeOutlineIcon, MoonIcon, SunIcon } from "@/components/icons";
-import { useTheme } from "@/components/theme";
+import { DotsThreeOutlineIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +18,7 @@ import {
   badgeText,
   isActive,
 } from "./nav";
-import { FOCUS_RING, NavIcon, NavPill, PendingLabel, navLabelClass } from "./parts";
+import { FOCUS_RING, NavIcon, NavPill, PendingLabel, navLabelClass, useThemeToggle } from "./parts";
 
 const TAB = cn(
   "group flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-lg",
@@ -36,7 +35,7 @@ const SHEET_TILE = "grid size-9 shrink-0 place-items-center rounded-lg [&_svg]:s
 /**
  * Phone (< md) navigation: four tabs plus "more", which opens a bottom sheet
  * holding the remaining destinations and the theme toggle. While the sheet is
- * open, "more" is the one active tab.
+ * open, "more" is the one highlighted tab; aria-current stays on the real page.
  */
 export function TabBar({
   pathname,
@@ -59,15 +58,16 @@ export function TabBar({
   return (
     <nav
       aria-label="ניווט ראשי"
-      className="bg-card ring-foreground/10 fixed inset-x-3 bottom-3 z-40 rounded-xl shadow-md ring-1 md:hidden"
+      className="bg-card ring-foreground/10 fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 rounded-xl shadow-[var(--card-shadow)] ring-1 md:hidden"
     >
       <ul className="flex h-16 items-stretch px-1">
         {TAB_DESTINATIONS.map((d) => {
-          const active = !moreOpen && isActive(d.href, pathname);
+          const current = isActive(d.href, pathname);
+          const active = current && !moreOpen;
           const itemBadge = d.href === RECONCILIATION_HREF ? badge : null;
           return (
             <li key={d.href} className="flex flex-1">
-              <Link href={d.href} aria-current={active ? "page" : undefined} className={TAB}>
+              <Link href={d.href} aria-current={current ? "page" : undefined} className={TAB}>
                 <NavPill active={active} badge={itemBadge}>
                   <NavIcon icon={d.icon} active={active} />
                 </NavPill>
@@ -101,8 +101,7 @@ function MoreSheet({
   pathname: string;
   active: boolean;
 }) {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const theme = useThemeToggle();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -143,14 +142,12 @@ function MoreSheet({
           <li>
             <button
               type="button"
-              onClick={toggleTheme}
-              aria-label={isDark ? "מעבר למצב בהיר" : "מעבר למצב כהה"}
+              onClick={theme.toggleTheme}
+              aria-label={theme.ariaLabel}
               className={SHEET_ROW}
             >
-              <span className={cn(SHEET_TILE, "bg-muted text-foreground")}>
-                {isDark ? <SunIcon /> : <MoonIcon />}
-              </span>
-              {isDark ? "מצב בהיר" : "מצב כהה"}
+              <span className={cn(SHEET_TILE, "bg-muted text-foreground")}>{theme.icon}</span>
+              {theme.label}
             </button>
           </li>
         </ul>

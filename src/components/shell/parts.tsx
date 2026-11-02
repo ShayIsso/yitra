@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
+import { MoonIcon, SunIcon } from "@/components/icons";
+import { useTheme } from "@/components/theme";
 import { cn } from "@/lib/utils";
 import type { NavGlyph } from "./nav";
 
@@ -57,6 +59,18 @@ export function navLabelClass(active: boolean) {
 export function PendingLabel({ badge }: { badge: string | null }) {
   if (!badge) return null;
   return <span className="sr-only">{`, ${badge} ממתינות`}</span>;
+}
+
+/** The theme toggle names the theme it switches TO, as the old sidebar toggle did. */
+export function useThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+  return {
+    toggleTheme,
+    icon: isDark ? <SunIcon /> : <MoonIcon />,
+    label: isDark ? "מצב בהיר" : "מצב כהה",
+    ariaLabel: isDark ? "מעבר למצב בהיר" : "מעבר למצב כהה",
+  };
 }
 
 export function BrandLink({ stacked = false }: { stacked?: boolean }) {

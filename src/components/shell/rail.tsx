@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { MoonIcon, SunIcon } from "@/components/icons";
-import { useTheme } from "@/components/theme";
 import { cn } from "@/lib/utils";
 import { ALL_DESTINATIONS, RECONCILIATION_HREF, badgeText, isActive } from "./nav";
-import { BrandLink, FOCUS_RING, NavIcon, NavPill, PendingLabel, navLabelClass } from "./parts";
+import {
+  BrandLink,
+  FOCUS_RING,
+  NavIcon,
+  NavPill,
+  PendingLabel,
+  navLabelClass,
+  useThemeToggle,
+} from "./parts";
 
 const RAIL_ITEM = cn(
   "group flex min-h-14 w-18 flex-col items-center justify-center gap-1 rounded-lg py-1",
@@ -20,8 +26,7 @@ export function Rail({
   pathname: string;
   pendingReconCount: number;
 }) {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const theme = useThemeToggle();
   const badge = badgeText(pendingReconCount);
 
   return (
@@ -49,12 +54,12 @@ export function Rail({
       </ul>
       <button
         type="button"
-        onClick={toggleTheme}
-        aria-label={isDark ? "מעבר למצב בהיר" : "מעבר למצב כהה"}
+        onClick={theme.toggleTheme}
+        aria-label={theme.ariaLabel}
         className={cn(RAIL_ITEM, "mt-auto")}
       >
-        <NavPill active={false}>{isDark ? <SunIcon /> : <MoonIcon />}</NavPill>
-        <span className={navLabelClass(false)}>{isDark ? "מצב בהיר" : "מצב כהה"}</span>
+        <NavPill active={false}>{theme.icon}</NavPill>
+        <span className={navLabelClass(false)}>{theme.label}</span>
       </button>
     </nav>
   );

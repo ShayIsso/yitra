@@ -23,7 +23,7 @@ export function AppShell({
     <div className="flex min-h-screen flex-col">
       <a
         href="#main-content"
-        className="bg-card ring-ring sr-only z-50 rounded-lg px-4 py-3 ring-2 focus:not-sr-only focus:fixed focus:start-3 focus:top-3"
+        className="bg-card text-foreground ring-ring fixed start-3 top-3 z-50 -translate-y-24 rounded-lg px-4 py-3 font-medium ring-2 outline-none focus:translate-y-0"
       >
         דילוג לתוכן
       </a>

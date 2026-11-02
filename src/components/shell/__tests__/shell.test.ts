@@ -10,14 +10,14 @@ import {
   HouseIcon,
 } from "@/components/icons";
 
-const svg = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el);
+const markup = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el);
 
 function rail(pathname: string, pendingReconCount = 0) {
-  return svg(createElement(Rail, { pathname, pendingReconCount }));
+  return markup(createElement(Rail, { pathname, pendingReconCount }));
 }
 
 function tabBar(pathname: string, pendingReconCount = 0) {
-  return svg(createElement(TabBar, { pathname, pendingReconCount }));
+  return markup(createElement(TabBar, { pathname, pendingReconCount }));
 }
 
 /** The destination list's `<a …>…</a>` linking to `href` (the brand link also goes home). */
@@ -40,10 +40,10 @@ describe("the desktop rail", () => {
     const html = rail("/transactions");
     const current = linkTo(html, "/transactions");
     expect(current).toContain('aria-current="page"');
-    expect(current).toContain(svg(createElement(ArrowsLeftRightIcon, { weight: "fill" })));
+    expect(current).toContain(markup(createElement(ArrowsLeftRightIcon, { weight: "fill" })));
     const home = linkTo(html, "/");
     expect(home).not.toContain("aria-current");
-    expect(home).toContain(svg(createElement(HouseIcon, { weight: "regular" })));
+    expect(home).toContain(markup(createElement(HouseIcon, { weight: "regular" })));
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
   });
 
@@ -85,13 +85,13 @@ describe("the phone tab bar", () => {
   it("makes 'more' the active tab on a page that lives behind it", () => {
     const html = tabBar("/settings");
     expect(html).not.toContain('aria-current="page"');
-    expect(html).toContain(svg(createElement(DotsThreeOutlineIcon, { weight: "fill" })));
-    expect(html).not.toContain(svg(createElement(GearSixIcon, { weight: "fill" })));
+    expect(html).toContain(markup(createElement(DotsThreeOutlineIcon, { weight: "fill" })));
+    expect(html).not.toContain(markup(createElement(GearSixIcon, { weight: "fill" })));
   });
 
   it("leaves 'more' inactive on a page that has its own tab", () => {
     const html = tabBar("/reports");
     expect(linkTo(html, "/reports")).toContain('aria-current="page"');
-    expect(html).toContain(svg(createElement(DotsThreeOutlineIcon, { weight: "regular" })));
+    expect(html).toContain(markup(createElement(DotsThreeOutlineIcon, { weight: "regular" })));
   });
 });

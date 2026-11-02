@@ -449,6 +449,7 @@
   @media (prefers-reduced-motion: reduce) {
     .enter,
     .view-wash,
+    .page-enter,
     .stagger > * {
       animation-name: fade-in;
       animation-duration: 150ms;
@@ -458,9 +459,6 @@
     .press:active {
       transition: none;
       transform: none;
-    }
-    .page-enter {
-      animation-name: fade-in;
     }
   }
 }
