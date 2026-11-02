@@ -45,7 +45,11 @@ export type RecurringChargeFact = {
   name: string;
   /** Positive expected charge. */
   amount: number;
-  /** Projected YYYY-MM-DD; before `today` when the series is late but still live. */
+  /**
+   * YYYY-MM-DD. In facts, the recurring module's projection; in an
+   * `upcoming-recurring` insight, the calendar due date. Before `today` when the
+   * series is late but still live.
+   */
   date: string;
   /** YYYY-MM-DD of the series' last observed charge. */
   lastChargeDate: string;
@@ -212,13 +216,28 @@ function budgetRiskInsight(budgets: BudgetFact[]): Insight | null {
   return { kind: "budget-risk", budgets: atRisk };
 }
 
+const CADENCE_MONTHS: Record<Cadence, number> = { monthly: 1, quarterly: 3, annual: 12 };
+
+/** `isoDate` plus whole calendar months, the day clamped to the target month's length. */
+function addCalendarMonths(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const index = y * 12 + (m - 1) + months;
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  const { to } = monthDateRange(year, month);
+  const day = Math.min(d, Number(to.slice(8, 10)));
+  return `${to.slice(0, 8)}${String(day).padStart(2, "0")}`;
+}
+
 /**
- * A series is still due this month when it has not charged in it yet and either
- * its projection lands by month end — a late but live projection, dated before
- * today, is still owed — or it is monthly. The projection is last charge + 30
- * days, so it can land just past a short month (a charge on Jan 31 projects to
- * Mar 2) although the bill is February's, and a charge on the 1st of a 31-day
- * month projects onto the 31st although it is already paid.
+ * Which month a bill belongs to is a calendar fact: the next charge is the last
+ * one plus the cadence in calendar months. The recurring module's projection
+ * (last charge + 30/91/365 days) drifts across month ends: a charge on the 1st
+ * of a 31-day month projects onto the 31st although it is already paid, one on
+ * Jan 31 projects to Mar 2 although it is February's bill. A series is due this
+ * month when it has not charged in it yet and its calendar due date is no later
+ * than month end — earlier means late but still live, so still owed. The card
+ * shows that calendar due date.
  */
 function upcomingRecurringInsight(
   month: InsightMonth,
@@ -226,7 +245,9 @@ function upcomingRecurringInsight(
 ): Insight | null {
   const { from, to } = monthDateRange(month.year, month.month);
   const due = charges
-    .filter((c) => c.lastChargeDate < from && (c.date <= to || c.cadence === "monthly"))
+    .filter((c) => c.lastChargeDate < from)
+    .map((c) => ({ ...c, date: addCalendarMonths(c.lastChargeDate, CADENCE_MONTHS[c.cadence]) }))
+    .filter((c) => c.date <= to)
     .sort((a, b) => a.date.localeCompare(b.date));
   if (due.length === 0) return null;
   return {

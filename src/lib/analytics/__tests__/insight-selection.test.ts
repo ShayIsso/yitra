@@ -22,12 +22,13 @@ const recap: InsightFacts["recap"] = {
 
 const groceries = { categoryId: "c1", name: "מזון", color: "#111111", icon: "Apple" };
 
+/** `date` is the recurring module's day-count projection; selection dates a charge by calendar. */
 function charge(
   id: string,
   amount: number,
-  date: string,
   lastChargeDate: string,
   cadence: "monthly" | "quarterly" | "annual" = "monthly",
+  date = "2099-01-01",
 ) {
   return { id, name: `מנוי ${id}`, amount, date, lastChargeDate, cadence };
 }
@@ -46,7 +47,7 @@ function everything(): Partial<InsightFacts> {
         limit: 500,
       },
     ],
-    upcomingRecurring: [charge("r1", 50, "2026-03-18", "2026-02-16")],
+    upcomingRecurring: [charge("r1", 50, "2026-02-16")],
     categoryChanges: [{ ...groceries, amount: 900, previous: 400 }],
     biggestExpense: {
       transactionId: "t1",
@@ -192,61 +193,68 @@ describe("selectInsights", () => {
   });
 
   describe("upcoming recurring", () => {
-    it("lists charges still due this month, late ones included, earliest first", () => {
-      const insight = selectInsights(
-        facts({
-          upcomingRecurring: [
-            charge("r3", 200, "2026-03-28", "2025-12-28", "quarterly"),
-            charge("r4", 300, "2026-04-02", "2025-04-02", "annual"),
-            charge("r1", 50, "2026-03-12", "2026-02-10"),
-            charge("r2", 150, "2026-03-15", "2026-02-13"),
-          ],
-        }),
-      );
-      expect(insight).toEqual([
-        {
-          kind: "upcoming-recurring",
-          total: 400,
-          charges: [
-            charge("r1", 50, "2026-03-12", "2026-02-10"),
-            charge("r2", 150, "2026-03-15", "2026-02-13"),
-            charge("r3", 200, "2026-03-28", "2025-12-28", "quarterly"),
-          ],
-        },
+    const dueCharges = (overrides: Partial<InsightFacts>) => {
+      const [insight] = selectInsights(facts(overrides));
+      return insight?.kind === "upcoming-recurring"
+        ? insight.charges.map((c) => [c.id, c.date])
+        : [];
+    };
+
+    it("lists charges still due this month by calendar date, late ones included, earliest first", () => {
+      const upcomingRecurring = [
+        charge("r3", 200, "2025-12-28", "quarterly"),
+        charge("r4", 300, "2025-04-02", "annual"),
+        charge("r1", 50, "2026-02-10"),
+        charge("r2", 150, "2026-02-15"),
+        charge("r5", 30, "2026-01-20"),
+      ];
+      expect(selectInsights(facts({ upcomingRecurring }))).toMatchObject([
+        { kind: "upcoming-recurring", total: 430 },
+      ]);
+      expect(dueCharges({ upcomingRecurring })).toEqual([
+        ["r5", "2026-02-20"],
+        ["r1", "2026-03-10"],
+        ["r2", "2026-03-15"],
+        ["r3", "2026-03-28"],
       ]);
     });
 
-    it("leaves out a series already charged this month, though its projection lands in it", () => {
-      const insights = selectInsights(
-        facts({ upcomingRecurring: [charge("r1", 50, "2026-03-31", "2026-03-01")] }),
-      );
-      expect(insights).toEqual([]);
+    it("leaves out a series already charged this month", () => {
+      expect(dueCharges({ upcomingRecurring: [charge("r1", 50, "2026-03-01")] })).toEqual([]);
     });
 
-    it("counts a monthly series not yet charged this month even when its projection falls just after it", () => {
-      const insights = selectInsights(
-        facts({
+    it("dates a monthly bill last charged on the 31st to the end of a short month", () => {
+      expect(
+        dueCharges({
           month: { year: 2026, month: 2 },
           today: "2026-02-10",
-          upcomingRecurring: [charge("r1", 50, "2026-03-02", "2026-01-31")],
+          upcomingRecurring: [charge("r1", 50, "2026-01-31", "monthly", "2026-03-02")],
         }),
-      );
-      expect(insights).toEqual([
-        {
-          kind: "upcoming-recurring",
-          total: 50,
-          charges: [charge("r1", 50, "2026-03-02", "2026-01-31")],
-        },
-      ]);
+      ).toEqual([["r1", "2026-02-28"]]);
     });
 
-    it("leaves out a longer-cadence series projected after the month", () => {
-      const insights = selectInsights(
-        facts({
-          upcomingRecurring: [charge("r1", 300, "2026-04-02", "2026-01-02", "quarterly")],
+    it("dates a quarterly bill last charged on Dec 31 to the end of March", () => {
+      expect(
+        dueCharges({
+          upcomingRecurring: [charge("r1", 300, "2025-12-31", "quarterly", "2026-04-01")],
         }),
-      );
-      expect(insights).toEqual([]);
+      ).toEqual([["r1", "2026-03-31"]]);
+    });
+
+    it("keeps an annual bill in its own month across a leap year", () => {
+      expect(
+        dueCharges({
+          month: { year: 2028, month: 2 },
+          today: "2028-02-10",
+          upcomingRecurring: [charge("r1", 900, "2027-03-01", "annual", "2028-02-29")],
+        }),
+      ).toEqual([]);
+    });
+
+    it("leaves out a longer-cadence series due after the month", () => {
+      expect(
+        dueCharges({ upcomingRecurring: [charge("r1", 300, "2026-01-02", "quarterly")] }),
+      ).toEqual([]);
     });
   });
 
@@ -308,7 +316,7 @@ describe("selectInsights", () => {
       facts({
         today: "2026-04-03",
         cardDebits: [{ accountId: "a1", displayName: "כרטיס א", amount: 800, date: "2026-04-10" }],
-        upcomingRecurring: [charge("r1", 50, "2026-04-05", "2026-03-06")],
+        upcomingRecurring: [charge("r1", 50, "2026-02-20")],
         budgets: [
           {
             budgetId: "b1",

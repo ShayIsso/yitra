@@ -1,5 +1,11 @@
 import { db } from "@/db";
-import { transactions, categories, bankAccounts, bankCredentials } from "@/db/schema";
+import {
+  transactions,
+  categories,
+  bankAccounts,
+  bankCredentials,
+  type reconciliationRoleEnum,
+} from "@/db/schema";
 import { eq, and, gte, lte, gt, inArray, desc } from "drizzle-orm";
 import { monthDateRange } from "./month-window";
 import {
@@ -496,7 +502,7 @@ export type InsightTransactionRow = {
   reconciliationRole: ReconciliationRole | null;
 };
 
-export type ReconciliationRole = "settlement_lump" | "settlement_detail" | "transfer_pair";
+export type ReconciliationRole = (typeof reconciliationRoleEnum.enumValues)[number];
 
 /**
  * Per-category spend without the card-settlement lump (CONTEXT.md "settlement
@@ -790,8 +796,8 @@ export type MonthTransactionDetail = InsightTransactionRow & {
  * The single owner of the month read (issue #168): every transaction on
  * `transactions.date` within the calendar month, with its category.
  * {@link getMonthTransactions} (totals and breakdowns),
- * {@link getMonthMerchantTransactions} (top merchants), budget gauges and the
- * insights aggregate all project from this one query, so their windows and
+ * {@link getMonthMerchantTransactions} (top merchants), every budgets read and
+ * the insights aggregate all project from this one query, so their windows and
  * joins can never diverge.
  */
 export async function getMonthTransactionDetails(

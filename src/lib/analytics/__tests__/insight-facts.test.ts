@@ -198,6 +198,23 @@ describe("buildInsightFacts", () => {
       expect(facts.categoryChanges.map((c) => [c.categoryId, c.amount])).toEqual([["car", 120]]);
     });
 
+    it("leaves out a flagged settlement lump already typed transfer", () => {
+      const facts = buildInsightFacts(
+        sources({
+          rows: {
+            month: [
+              row("2026-03-02", -3000, "moves", { reconciliationRole: "settlement_lump" }),
+              row("2026-03-03", -120, "car"),
+            ],
+            previous: [],
+            beforePrevious: [],
+          },
+        }),
+      );
+      expect(facts.categoryChanges.map((c) => [c.categoryId, c.amount])).toEqual([["car", 120]]);
+      expect(facts.biggestExpense?.amount).toBe(120);
+    });
+
     it("counts ordinary expenses whose description merely looks like a settlement", () => {
       const facts = buildInsightFacts(
         sources({
