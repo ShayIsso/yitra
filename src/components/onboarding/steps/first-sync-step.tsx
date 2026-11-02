@@ -20,6 +20,7 @@ import { observedFromResponse } from "@/components/institution-picker";
 import { OtpEntry, STATUS_TEXT } from "@/components/sync-bank-status";
 import { useSyncStream, type BankSyncState, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
+import { cn } from "@/lib/utils";
 import { fetchConnectedInstitutions, type ConnectedInstitution } from "../connected-institutions";
 import { Callout } from "../callout";
 import { ConnectedList, InstitutionIdentity } from "../institution-identity";
@@ -51,6 +52,13 @@ const LEAVE_WARNING = "הסנכרון עדיין פועל, ויציאה מהדף
 const NOTHING_OBSERVED: ReadonlySet<string> = new Set();
 
 const SECONDARY_ACTION = { variant: "outline", size: "lg", className: "min-h-11 px-4" } as const;
+
+/**
+ * A link styled as the secondary button. Merged through `cn` as `<Button>`
+ * does: the variant's `border-border` and the base's `border-transparent`
+ * are both emitted, and the stylesheet order would otherwise erase the border.
+ */
+const SECONDARY_LINK = cn(buttonVariants(SECONDARY_ACTION));
 
 /**
  * The install's own sync evidence, so a resumed wizard does not caveat an
@@ -228,7 +236,7 @@ function NothingToSync() {
           אפשר לחזור ולחבר חשבון עכשיו, או לסיים ולחבר אותו מאוחר יותר בהגדרות.
         </p>
       </div>
-      <Link href={INSTITUTION_STEP_HREF} className={buttonVariants(SECONDARY_ACTION)}>
+      <Link href={INSTITUTION_STEP_HREF} className={SECONDARY_LINK}>
         <PlusIcon />
         חיבור חשבון
       </Link>
@@ -438,7 +446,7 @@ function Outcome({
           )}
           <div className="flex flex-wrap items-center gap-2">
             {view.failedInstitution && (
-              <Link href={INSTITUTION_STEP_HREF} className={buttonVariants(SECONDARY_ACTION)}>
+              <Link href={INSTITUTION_STEP_HREF} className={SECONDARY_LINK}>
                 חזרה לשלב החשבון
               </Link>
             )}
