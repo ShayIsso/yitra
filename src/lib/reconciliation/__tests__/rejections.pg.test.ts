@@ -128,4 +128,15 @@ describe.skipIf(!isThrowaway)("reconciliation rejections on Postgres", () => {
 
     expect(kept.sort()).toEqual([T2, T3]);
   });
+
+  it("filterUnpaired keeps only debits: an incoming credit is never a suspected transfer", async () => {
+    await db
+      .update(schema.transactions)
+      .set({ chargedAmount: "12000.00", originalAmount: "12000.00" })
+      .where(sql`id = ${T2}`);
+
+    const kept = await selectUnpairedNotRejected(executor, [T1, T2, T3]);
+
+    expect(kept.sort()).toEqual([T1, T3]);
+  });
 });

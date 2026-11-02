@@ -87,6 +87,14 @@ Until it is re-typed, a lump reconciliation has flagged (`reconciliation_role = 
 
 Always say "settlement charge" or "The Paradox" — these names are used in BACKLOG.md, PRD-phase2.md, and the reconciliation module's identifiers.
 
+### `suspected transfer`
+
+A single **outgoing** row the AI step's transfer guard matched (its description has a transfer shape such as `העברה`) that is still unpaired after P1–P3. The guard keeps it from the provider and the sync step queues it in the reconciliation inbox as a singleton `transfer_pair` group at confidence 0.5. It is never auto-confirmed.
+
+**A credit is never queued as a suspected transfer** (#303). `העברה מ…` is also how salaries and third-party payments arrive, and the descriptor carries no direction or counterparty, so a guarded credit gets neither the inbox nor the provider: it stays uncategorized and waits for a manual label, which writes user-tier `merchant memory` so later months resolve at import. An incoming leg of a genuine own-account transfer still pairs through P3. Singleton credits queued before this rule stay in the inbox, but bulk approve skips them; they are approved one by one.
+
+Approving a suspected transfer records the user's decision: the row becomes `העברה פנימית` with `category_source = 'user'`. If the user already categorized it after it was queued (`user` or `memory` source), approving confirms the group and keeps that category. Approving never writes merchant memory, because an entry mapping a `העברה מ…` key to a transfer would swallow every later credit with that descriptor. Approving a two-leg pair also records its flip as `user`, but flips the bank side whatever its source. The reason is P2-specific: a mirror is one charge seen from two accounts, so without the flip it would count twice.
+
 ### `rejected pair`
 
 A pair of transactions the user declined (דחה) in the reconciliation inbox — or **undid** after it was auto-applied or approved: undo is a rejection — persisted in `reconciliation_rejections` so no sync proposes it again. Rejection is **per pair**, never per row: each row stays free to pair with a different genuine counterpart. The pair is stored lowest id first; deleting either transaction (including the pending sweep) cascades its rejection away.

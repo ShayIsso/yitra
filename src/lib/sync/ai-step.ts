@@ -37,8 +37,9 @@ export interface AiStepDeps {
 /**
  * The final post-sync stage: categorize NULL-category rows the rules and
  * merchant memory could not resolve, and route transfer-guarded-but-unpaired
- * rows into the reconciliation inbox. Wired after reconciliation P1–P3 and
- * recurring detection (see `post-import.ts`).
+ * debits into the reconciliation inbox (a guarded credit stays uncategorized,
+ * #303). Wired after reconciliation P1–P3 and recurring detection (see
+ * `post-import.ts`).
  *
  * Failure isolation (recurring-detection idiom): provider construction, a thrown
  * run, rate-limit exhaustion, and routing errors are all swallowed and the sync
@@ -73,7 +74,7 @@ export async function* runAiSyncStep(deps: AiStepDeps): AsyncGenerator<AiStepEve
 
   let routed = 0;
   try {
-    const unpaired = await deps.transferRouter.filterUnpaired([...summary.transferSkippedIds]);
+    const unpaired = await deps.transferRouter.filterUnpaired([...summary.suspectedTransferIds]);
     for (const id of unpaired) {
       await deps.transferRouter.queueSuspectedTransfer(id);
       routed++;

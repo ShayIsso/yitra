@@ -17,6 +17,8 @@ type StoredTxn = {
   bankType: "discount" | "max" | "visaCal";
   categoryId: string | null;
   categorySource: CategorySource | null;
+  /** Defaults to an outgoing charge; positive is an incoming credit. */
+  chargedAmount?: number;
 };
 type StoredEntry = MemoryEntry & { hitCount: number };
 type StoredSuggestion = {
@@ -130,7 +132,12 @@ function createFake(seed: {
       const served = seed.servedIds
         ? txns.filter((t) => seed.servedIds!.includes(t.id))
         : txns.filter((t) => t.categoryId === null);
-      return served.map((t) => ({ id: t.id, description: t.description, bankType: t.bankType }));
+      return served.map((t) => ({
+        id: t.id,
+        description: t.description,
+        bankType: t.bankType,
+        chargedAmount: t.chargedAmount ?? -100,
+      }));
     },
     async getPromptCategories() {
       // Mirrors the real store's ADR-0011 §6 filtering: the prompt's answer
@@ -631,7 +638,70 @@ describe("runAiCategorization — full pipeline", () => {
     });
 
     expect(summary.transferSkipped).toBe(1);
-    expect(summary.transferSkippedIds).toEqual(["t-xfer"]);
+    expect(summary.suspectedTransferIds).toEqual(["t-xfer"]);
+  });
+
+  it("never offers a transfer-shaped incoming credit for inbox routing, nor sends it to the provider", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [
+        {
+          id: "t-salary",
+          description: 'העברה מחברה לדוגמה בע"מ',
+          bankType: "discount",
+          categoryId: null,
+          categorySource: null,
+          chargedAmount: 12000,
+        },
+        {
+          id: "t-out",
+          description: "העברה לחשבון שלי",
+          bankType: "discount",
+          categoryId: null,
+          categorySource: null,
+          chargedAmount: -12000,
+        },
+      ],
+    });
+    const provider = scriptedProvider([{ match: "העברה", category: "מסעדות וקפה", confidence: 7 }]);
+
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider,
+    });
+
+    expect(provider.prompts).toHaveLength(0);
+    expect(summary.transferSkipped).toBe(2);
+    expect(summary.suspectedTransferIds).toEqual(["t-out"]);
+    expect(fake.txns.find((t) => t.id === "t-salary")).toMatchObject({
+      categoryId: null,
+      categorySource: null,
+    });
+  });
+
+  it("offers a transfer-shaped zero-amount row for routing: zero is not a credit", async () => {
+    const fake = createFake({
+      categories: CATS,
+      txns: [
+        {
+          id: "t-zero",
+          description: "העברה לחשבון שלי",
+          bankType: "discount",
+          categoryId: null,
+          categorySource: null,
+          chargedAmount: 0,
+        },
+      ],
+    });
+
+    const summary = await runAiCategorization({
+      aiStore: fake.aiStore,
+      memoryStore: fake.memoryStore,
+      provider: scriptedProvider([]),
+    });
+
+    expect(summary.suspectedTransferIds).toEqual(["t-zero"]);
   });
 
   it("spaces batches by the pacing policy's inter-batch delay (injected sleep, no real timers)", async () => {

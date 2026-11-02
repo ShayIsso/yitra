@@ -73,13 +73,18 @@ async function guardedIds(txns: UncategorizedTxn[]) {
     ...storesServing(txns),
     provider,
   });
-  return { guarded: summary.transferSkippedIds, prompts: provider.prompts };
+  return { guarded: summary.suspectedTransferIds, prompts: provider.prompts };
 }
 
 describe("runAiCategorization — transfer-guard kind scoping follows registry kind", () => {
   it("guards a settlement-shaped description from a bank institution added to the registry", async () => {
     const { guarded, prompts } = await guardedIds([
-      { id: "t-bank", description: SETTLEMENT_SHAPED, bankType: HYPOTHETICAL_BANK },
+      {
+        id: "t-bank",
+        description: SETTLEMENT_SHAPED,
+        bankType: HYPOTHETICAL_BANK,
+        chargedAmount: -100,
+      },
     ]);
 
     expect(guarded).toEqual(["t-bank"]);
@@ -88,7 +93,12 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("sends a settlement-shaped description from a card institution added to the registry to the provider", async () => {
     const { guarded, prompts } = await guardedIds([
-      { id: "t-card", description: SETTLEMENT_SHAPED, bankType: HYPOTHETICAL_CARD },
+      {
+        id: "t-card",
+        description: SETTLEMENT_SHAPED,
+        bankType: HYPOTHETICAL_CARD,
+        chargedAmount: -100,
+      },
     ]);
 
     expect(guarded).toEqual([]);
@@ -97,7 +107,12 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("still guards a cross-account description from a card institution added to the registry", async () => {
     const { guarded } = await guardedIds([
-      { id: "t-card", description: INTER_ACCOUNT_SHAPED, bankType: HYPOTHETICAL_CARD },
+      {
+        id: "t-card",
+        description: INTER_ACCOUNT_SHAPED,
+        bankType: HYPOTHETICAL_CARD,
+        chargedAmount: -100,
+      },
     ]);
 
     expect(guarded).toEqual(["t-card"]);
@@ -105,7 +120,12 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("sends a settlement-shaped description from a prepaid institution added to the registry to the provider", async () => {
     const { guarded, prompts } = await guardedIds([
-      { id: "t-prepaid", description: SETTLEMENT_SHAPED, bankType: HYPOTHETICAL_PREPAID },
+      {
+        id: "t-prepaid",
+        description: SETTLEMENT_SHAPED,
+        bankType: HYPOTHETICAL_PREPAID,
+        chargedAmount: -100,
+      },
     ]);
 
     expect(guarded).toEqual([]);
@@ -114,7 +134,12 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("still guards a cross-account description from a prepaid institution added to the registry", async () => {
     const { guarded } = await guardedIds([
-      { id: "t-prepaid", description: INTER_ACCOUNT_SHAPED, bankType: HYPOTHETICAL_PREPAID },
+      {
+        id: "t-prepaid",
+        description: INTER_ACCOUNT_SHAPED,
+        bankType: HYPOTHETICAL_PREPAID,
+        chargedAmount: -100,
+      },
     ]);
 
     expect(guarded).toEqual(["t-prepaid"]);
@@ -122,8 +147,18 @@ describe("runAiCategorization — transfer-guard kind scoping follows registry k
 
   it("scopes an institution of unknown kind like a card, never widening its guard", async () => {
     const { guarded } = await guardedIds([
-      { id: "t-settle", description: SETTLEMENT_SHAPED, bankType: UNREGISTERED },
-      { id: "t-xfer", description: INTER_ACCOUNT_SHAPED, bankType: UNREGISTERED },
+      {
+        id: "t-settle",
+        description: SETTLEMENT_SHAPED,
+        bankType: UNREGISTERED,
+        chargedAmount: -100,
+      },
+      {
+        id: "t-xfer",
+        description: INTER_ACCOUNT_SHAPED,
+        bankType: UNREGISTERED,
+        chargedAmount: -100,
+      },
     ]);
 
     expect(guarded).toEqual(["t-xfer"]);

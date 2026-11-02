@@ -11,9 +11,10 @@ import {
   bankCredentials,
   categoryRules,
 } from "@/db/schema";
-import { eq, isNull, isNotNull, inArray, asc } from "drizzle-orm";
+import { and, eq, isNull, inArray, notInArray, or, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
-import type { InboxStore, InboxTransaction } from "./inbox-ops";
+import type { CategorySource } from "@/lib/merchant-memory";
+import type { InboxStore, InboxTransaction, TransferFlip } from "./inbox-ops";
 import type { RejectedPair } from "./rejected-pairs";
 import { recordRejections } from "./rejection-writes";
 import type { CategoryRule } from "@/lib/categories/rules";
@@ -31,6 +32,7 @@ export type InboxRow = {
   chargedAmount: number;
   categoryId: string | null;
   categoryName: string | null;
+  categorySource: CategorySource | null;
   reconciliationGroupId: string;
   reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair";
   reconciliationConfidence: number;
@@ -58,6 +60,7 @@ export async function getPendingInboxRows(): Promise<InboxRow[]> {
       chargedAmount: transactions.chargedAmount,
       categoryId: transactions.categoryId,
       categoryName: categories.name,
+      categorySource: transactions.categorySource,
       reconciliationGroupId: transactions.reconciliationGroupId,
       reconciliationRole: transactions.reconciliationRole,
       reconciliationConfidence: transactions.reconciliationConfidence,
@@ -85,6 +88,7 @@ export async function getPendingInboxRows(): Promise<InboxRow[]> {
       chargedAmount: Number(r.chargedAmount),
       categoryId: r.categoryId,
       categoryName: r.categoryName ?? null,
+      categorySource: r.categorySource,
       reconciliationGroupId: r.reconciliationGroupId!,
       reconciliationRole: r.reconciliationRole as
         | "settlement_lump"
@@ -112,6 +116,22 @@ export async function getPendingGroupCount(): Promise<number> {
 
 // ── InboxStore (Drizzle) ──────────────────────────────────────────────────────
 
+const memberColumns = {
+  id: transactions.id,
+  bankAccountId: transactions.bankAccountId,
+  bankType: bankCredentials.bankType,
+  date: transactions.date,
+  description: transactions.description,
+  chargedAmount: transactions.chargedAmount,
+  categoryId: transactions.categoryId,
+  categorySource: transactions.categorySource,
+  reconciliationGroupId: transactions.reconciliationGroupId,
+  reconciliationRole: transactions.reconciliationRole,
+  reconciliationConfidence: transactions.reconciliationConfidence,
+  reconciliationConfirmedAt: transactions.reconciliationConfirmedAt,
+  createdAt: transactions.createdAt,
+};
+
 function rowToInboxTxn(r: {
   id: string;
   bankAccountId: string;
@@ -120,6 +140,7 @@ function rowToInboxTxn(r: {
   description: string;
   chargedAmount: unknown;
   categoryId: string | null;
+  categorySource: CategorySource | null;
   reconciliationGroupId: string | null;
   reconciliationRole: string | null;
   reconciliationConfidence: number | null;
@@ -134,6 +155,7 @@ function rowToInboxTxn(r: {
     description: r.description,
     chargedAmount: Number(r.chargedAmount),
     categoryId: r.categoryId,
+    categorySource: r.categorySource,
     reconciliationGroupId: r.reconciliationGroupId,
     reconciliationRole: r.reconciliationRole as InboxTransaction["reconciliationRole"],
     reconciliationConfidence: r.reconciliationConfidence,
@@ -145,20 +167,7 @@ function rowToInboxTxn(r: {
 export const drizzleInboxStore: InboxStore = {
   async getGroupMembers(groupId: string): Promise<InboxTransaction[]> {
     const rows = await db
-      .select({
-        id: transactions.id,
-        bankAccountId: transactions.bankAccountId,
-        bankType: bankCredentials.bankType,
-        date: transactions.date,
-        description: transactions.description,
-        chargedAmount: transactions.chargedAmount,
-        categoryId: transactions.categoryId,
-        reconciliationGroupId: transactions.reconciliationGroupId,
-        reconciliationRole: transactions.reconciliationRole,
-        reconciliationConfidence: transactions.reconciliationConfidence,
-        reconciliationConfirmedAt: transactions.reconciliationConfirmedAt,
-        createdAt: transactions.createdAt,
-      })
+      .select(memberColumns)
       .from(transactions)
       .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
       .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
@@ -169,20 +178,7 @@ export const drizzleInboxStore: InboxStore = {
   async getGroupMembersByIds(groupIds: string[]): Promise<Map<string, InboxTransaction[]>> {
     if (groupIds.length === 0) return new Map();
     const rows = await db
-      .select({
-        id: transactions.id,
-        bankAccountId: transactions.bankAccountId,
-        bankType: bankCredentials.bankType,
-        date: transactions.date,
-        description: transactions.description,
-        chargedAmount: transactions.chargedAmount,
-        categoryId: transactions.categoryId,
-        reconciliationGroupId: transactions.reconciliationGroupId,
-        reconciliationRole: transactions.reconciliationRole,
-        reconciliationConfidence: transactions.reconciliationConfidence,
-        reconciliationConfirmedAt: transactions.reconciliationConfirmedAt,
-        createdAt: transactions.createdAt,
-      })
+      .select(memberColumns)
       .from(transactions)
       .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
       .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
@@ -199,73 +195,30 @@ export const drizzleInboxStore: InboxStore = {
     return map;
   },
 
-  async confirmGroup(groupId: string, now: Date, transferCategoryId: string | null): Promise<void> {
+  async confirmGroup(groupId: string, now: Date, flip: TransferFlip | null): Promise<void> {
     await db.transaction(async (tx) => {
-      // For transfer_pair groups with a known bankSide category flip,
-      // we need the members to determine which is bankSide.
-      // Re-fetch members inside the transaction for consistency.
-      const members = await tx
-        .select({
-          id: transactions.id,
-          bankType: bankCredentials.bankType,
-          description: transactions.description,
-          reconciliationRole: transactions.reconciliationRole,
-          createdAt: transactions.createdAt,
-        })
-        .from(transactions)
-        .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
-        .innerJoin(bankCredentials, eq(bankAccounts.credentialId, bankCredentials.id))
+      await tx
+        .update(transactions)
+        .set({ reconciliationConfirmedAt: now })
         .where(eq(transactions.reconciliationGroupId, groupId));
-
-      const hasSettlementLump = members.some((m) => m.reconciliationRole === "settlement_lump");
-
-      if (hasSettlementLump || !transferCategoryId) {
-        // P1: confirm all, no category changes
-        await tx
-          .update(transactions)
-          .set({ reconciliationConfirmedAt: now })
-          .where(eq(transactions.reconciliationGroupId, groupId));
-      } else {
-        // P2 transfer_pair: identify bankSide, flip its category
-        const { identifyBankSide } = await import("./inbox-ops");
-        const bankSide = identifyBankSide(
-          members.map((m) => ({
-            id: m.id,
-            bankAccountId: "",
-            bankType: m.bankType,
-            date: "",
-            description: m.description,
-            chargedAmount: 0,
-            categoryId: null,
-            reconciliationGroupId: groupId,
-            reconciliationRole: m.reconciliationRole as InboxTransaction["reconciliationRole"],
-            reconciliationConfidence: null,
-            reconciliationConfirmedAt: null,
-            createdAt: m.createdAt,
-          })),
-        );
-
-        for (const member of members) {
-          if (bankSide && member.id === bankSide.id) {
-            await tx
-              .update(transactions)
-              .set({
-                reconciliationConfirmedAt: now,
-                categoryId: transferCategoryId,
-                // System-assigned transfer category — provenance keeps it out of
-                // automation's overwrite reach (ADR-0010 overwrite law).
-                categorySource: "rule",
-              })
-              .where(eq(transactions.id, member.id));
-            await supersedeOpenSuggestions([member.id], tx);
-          } else {
-            await tx
-              .update(transactions)
-              .set({ reconciliationConfirmedAt: now })
-              .where(eq(transactions.id, member.id));
-          }
-        }
-      }
+      if (!flip) return;
+      const flipped = await tx
+        .update(transactions)
+        .set({ categoryId: flip.categoryId, categorySource: flip.categorySource })
+        .where(
+          and(
+            eq(transactions.id, flip.txnId),
+            eq(transactions.reconciliationGroupId, groupId),
+            flip.keepUserCategory
+              ? or(
+                  isNull(transactions.categorySource),
+                  notInArray(transactions.categorySource, ["user", "memory"]),
+                )
+              : undefined,
+          ),
+        )
+        .returning({ id: transactions.id });
+      if (flipped.length > 0) await supersedeOpenSuggestions([flip.txnId], tx);
     });
   },
 

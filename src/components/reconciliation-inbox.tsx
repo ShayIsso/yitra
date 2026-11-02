@@ -23,7 +23,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   confidenceText,
   directionText,
+  isBulkApprovable,
   reconciliationGroupView,
+  suspectedTransferConsequence,
   type PendingGroup,
   type PendingMember,
   type ReconciliationGroupView,
@@ -221,8 +223,7 @@ function GroupCard({
 
         {view.kind === "suspected-transfer" && (
           <p className="text-muted-foreground text-body mx-4 mb-3 text-pretty">
-            לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר בהכנסות או
-            בהוצאות.
+            {suspectedTransferConsequence(view.row)}
           </p>
         )}
 
@@ -233,10 +234,16 @@ function GroupCard({
         </ul>
 
         <div className="flex flex-wrap items-center gap-2 p-4">
-          <label className="text-body me-auto flex min-h-11 cursor-pointer items-center gap-3 pe-2">
-            <Checkbox checked={selected} onCheckedChange={onToggle} aria-label="בחר קבוצה" />
-            <span aria-hidden="true">בחר</span>
-          </label>
+          {isBulkApprovable(view) ? (
+            <label className="text-body me-auto flex min-h-11 cursor-pointer items-center gap-3 pe-2">
+              <Checkbox checked={selected} onCheckedChange={onToggle} aria-label="בחר קבוצה" />
+              <span aria-hidden="true">בחר</span>
+            </label>
+          ) : (
+            <p className="text-muted-foreground text-caption min-w-0 flex-1 pe-2 text-pretty">
+              זיכוי נכנס מאשרים בנפרד, לא בבחירה מרובה.
+            </p>
+          )}
           <Button
             className={ACTION_BUTTON}
             onClick={() => decide("approve")}
@@ -328,8 +335,9 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
   const [bulkFailed, setBulkFailed] = React.useState<Decision | null>(null);
 
   const visible = groups.filter((g) => !resolved.has(g.groupId));
-  const selectedIds = visible.filter((g) => selected.has(g.groupId)).map((g) => g.groupId);
-  const allSelected = visible.length > 0 && selectedIds.length === visible.length;
+  const selectable = visible.filter((g) => isBulkApprovable(reconciliationGroupView(g.members)));
+  const selectedIds = selectable.filter((g) => selected.has(g.groupId)).map((g) => g.groupId);
+  const allSelected = selectable.length > 0 && selectedIds.length === selectable.length;
 
   function markResolved(groupIds: string[]) {
     setResolved((prev) => new Set([...prev, ...groupIds]));
@@ -337,7 +345,7 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
   }
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(visible.map((g) => g.groupId)));
+    setSelected(allSelected ? new Set() : new Set(selectable.map((g) => g.groupId)));
   }
 
   function toggleOne(groupId: string) {
@@ -364,14 +372,16 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
     const groupIds = selectedIds;
     setBulkPending(decision);
     setBulkFailed(null);
-    const ok = await succeeded(() =>
-      decision === "approve"
-        ? approveReconciliationsAction({ groupIds })
-        : rejectReconciliationsAction({ groupIds }),
-    );
+    let skipped: string[] = [];
+    const ok = await succeeded(async () => {
+      if (decision === "reject") return rejectReconciliationsAction({ groupIds });
+      const result = await approveReconciliationsAction({ groupIds });
+      skipped = result.skipped ?? [];
+      return result;
+    });
     setBulkPending(null);
     if (ok) {
-      markResolved(groupIds);
+      markResolved(groupIds.filter((id) => !skipped.includes(id)));
     } else {
       // The batch stops at its first failing group, so some may have gone
       // through; a failed action does not revalidate, so refresh to show
@@ -394,37 +404,43 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
       ) : (
         <>
           <div className="flex flex-col gap-2">
-            <div
-              role="toolbar"
-              aria-label="פעולות על קבוצות נבחרות"
-              className="bg-card sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]"
-            >
-              <label className="text-body flex min-h-11 cursor-pointer items-center gap-3 px-2">
-                <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="בחר הכל" />
-                <span aria-hidden="true" className="tabular-nums">
-                  {selectedIds.length > 0 ? `${selectedIds.length} נבחרו` : "בחר הכל"}
-                </span>
-              </label>
-              <div className="flex w-full gap-2 sm:ms-auto sm:w-auto">
-                <Button
-                  className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
-                  onClick={() => decideSelected("approve")}
-                  disabled={bulkDisabled}
-                >
-                  <CheckIcon />
-                  אשר נבחרים
-                </Button>
-                <Button
-                  variant="outline"
-                  className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
-                  onClick={() => decideSelected("reject")}
-                  disabled={bulkDisabled}
-                >
-                  <XIcon />
-                  דחה נבחרים
-                </Button>
+            {selectable.length > 0 && (
+              <div
+                role="toolbar"
+                aria-label="פעולות על קבוצות נבחרות"
+                className="bg-card sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]"
+              >
+                <label className="text-body flex min-h-11 cursor-pointer items-center gap-3 px-2">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="בחר הכל"
+                  />
+                  <span aria-hidden="true" className="tabular-nums">
+                    {selectedIds.length > 0 ? `${selectedIds.length} נבחרו` : "בחר הכל"}
+                  </span>
+                </label>
+                <div className="flex w-full gap-2 sm:ms-auto sm:w-auto">
+                  <Button
+                    className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
+                    onClick={() => decideSelected("approve")}
+                    disabled={bulkDisabled}
+                  >
+                    <CheckIcon />
+                    אשר נבחרים
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={cn(ACTION_BUTTON, "flex-1 sm:flex-none")}
+                    onClick={() => decideSelected("reject")}
+                    disabled={bulkDisabled}
+                  >
+                    <XIcon />
+                    דחה נבחרים
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
             {bulkFailed && (
               <div

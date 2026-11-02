@@ -9,6 +9,13 @@ describe("classifyTransferDescriptor", () => {
     });
   });
 
+  it("classifies an incoming 'העברה מ…' as inter_account: direction belongs to routing, not the descriptor", () => {
+    expect(classifyTransferDescriptor('העברה מחברה לדוגמה בע"מ')).toEqual({
+      kind: "inter_account",
+      token: "העברה",
+    });
+  });
+
   it("classifies Latin transfer as inter_account (case-insensitive)", () => {
     expect(classifyTransferDescriptor("Bank TRANSFER out")).toEqual({
       kind: "inter_account",

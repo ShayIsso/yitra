@@ -1,3 +1,5 @@
+import type { CategorySource } from "@/lib/merchant-memory";
+
 /** One transaction of a pending reconciliation group, as the inbox page hands it over. */
 export type PendingMember = {
   id: string;
@@ -7,6 +9,7 @@ export type PendingMember = {
   description: string;
   chargedAmount: number;
   categoryName: string | null;
+  categorySource: CategorySource | null;
   reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair";
 };
 
@@ -55,6 +58,40 @@ export function reconciliationGroupView(members: PendingMember[]): Reconciliatio
     return { kind: "suspected-transfer", title: "חשד להעברה בין חשבונות", row: pairs[0] };
   }
   return { kind: "group", title: "קבוצת תנועות", count: members.length };
+}
+
+/**
+ * A credit is a positive amount; zero is not one. Routing, the router's write
+ * and bulk approve on the server draw the same line (#303). `directionText`
+ * deliberately differs: it follows the money colours, which read zero as
+ * incoming.
+ */
+function isCredit(chargedAmount: number): boolean {
+  return chargedAmount > 0;
+}
+
+/**
+ * Mirrors `approveGroup` (reconciliation inbox-ops), which decides from the
+ * source alone: a `user`/`memory` row keeps whatever it has, even NULL after its
+ * category was deleted; any other row becomes an internal transfer and leaves
+ * the totals on its side of the ledger.
+ */
+export function suspectedTransferConsequence(row: PendingMember): string {
+  if (row.categorySource === "user" || row.categorySource === "memory") {
+    return row.categoryName
+      ? `התנועה כבר מסווגת כ״${row.categoryName}״. אישור ישאיר את הסיווג הזה.`
+      : "התנועה סווגה בעבר באופן ידני. אישור לא ישנה את הסיווג שלה.";
+  }
+  const leaves = isCredit(row.chargedAmount) ? "בהכנסות" : "בהוצאות";
+  return `לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר ${leaves}.`;
+}
+
+/**
+ * Mirrors `approveGroups`, which skips an incoming suspected transfer on the
+ * server: such a row is approved one by one, never swept in with a selection.
+ */
+export function isBulkApprovable(view: ReconciliationGroupView): boolean {
+  return !(view.kind === "suspected-transfer" && isCredit(view.row.chargedAmount));
 }
 
 /** Zero reads as incoming, matching the money colours (`amountColorClass`). */

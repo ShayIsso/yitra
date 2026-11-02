@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   confidenceText,
   directionText,
+  isBulkApprovable,
   reconciliationGroupView,
+  suspectedTransferConsequence,
   type PendingMember,
 } from "@/components/reconciliation-group-view";
 
@@ -19,6 +21,7 @@ function member(
     description: "Synthetic row",
     chargedAmount,
     categoryName: null,
+    categorySource: null,
     reconciliationRole: role,
   };
 }
@@ -88,5 +91,59 @@ describe("the match confidence, in words", () => {
   it("rounds the score to a whole percentage", () => {
     expect(confidenceText(0.954)).toBe("ביטחון 95%");
     expect(confidenceText(0.5)).toBe("ביטחון 50%");
+  });
+});
+
+describe("what approving a suspected transfer will do, in words", () => {
+  it("tells an incoming row it leaves income", () => {
+    expect(suspectedTransferConsequence(member("transfer_pair", 12000))).toBe(
+      "לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר בהכנסות.",
+    );
+  });
+
+  it("treats a zero amount as not a credit, as routing and bulk approve do", () => {
+    expect(suspectedTransferConsequence(member("transfer_pair", 0))).toContain("בהוצאות");
+  });
+
+  it("tells a user-sourced row whose category was deleted that approving leaves it as it is", () => {
+    const row = { ...member("transfer_pair", 12000), categorySource: "user" as const };
+    expect(suspectedTransferConsequence(row)).toBe(
+      "התנועה סווגה בעבר באופן ידני. אישור לא ישנה את הסיווג שלה.",
+    );
+  });
+
+  it("tells an outgoing row it leaves expenses", () => {
+    expect(suspectedTransferConsequence(member("transfer_pair", -800))).toBe(
+      "לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר בהוצאות.",
+    );
+  });
+
+  it.each(["user", "memory"] as const)(
+    "tells a row categorized by the user (%s) that approving keeps its category",
+    (categorySource) => {
+      const row = { ...member("transfer_pair", 12000), categoryName: "משכורת", categorySource };
+      expect(suspectedTransferConsequence(row)).toBe(
+        "התנועה כבר מסווגת כ״משכורת״. אישור ישאיר את הסיווג הזה.",
+      );
+    },
+  );
+});
+
+describe("which groups bulk approve may sweep in", () => {
+  it("leaves out a suspected transfer that is incoming", () => {
+    expect(isBulkApprovable(reconciliationGroupView([member("transfer_pair", 12000)]))).toBe(false);
+  });
+
+  it("includes a zero-amount suspected transfer, which is not a credit", () => {
+    expect(isBulkApprovable(reconciliationGroupView([member("transfer_pair", 0)]))).toBe(true);
+  });
+
+  it("includes an outgoing suspected transfer and every two-sided match", () => {
+    expect(isBulkApprovable(reconciliationGroupView([member("transfer_pair", -800)]))).toBe(true);
+    expect(
+      isBulkApprovable(
+        reconciliationGroupView([member("transfer_pair", -800), member("transfer_pair", 800)]),
+      ),
+    ).toBe(true);
   });
 });

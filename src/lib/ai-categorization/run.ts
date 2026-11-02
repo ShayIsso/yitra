@@ -19,6 +19,7 @@ export interface UncategorizedTxn {
   readonly id: string;
   readonly description: string;
   readonly bankType: string;
+  readonly chargedAmount: number;
 }
 
 /** A category as the store hands it out: id for applying, name+description for the prompt. */
@@ -100,11 +101,13 @@ export interface AiCategorizationSummary {
   readonly memoryApplied: number;
   readonly transferSkipped: number;
   /**
-   * Ids of the transfer-guarded transactions (the `transferSkipped` population).
-   * The sync step routes those still unpaired after reconciliation P3 into the
-   * suspected-transfer inbox; the AI step itself never writes transfer semantics.
+   * The transfer-guarded debits, the candidates for a `suspected transfer`. The
+   * sync step routes those still unpaired after reconciliation P3 into the inbox;
+   * the AI step itself never writes transfer semantics. A guarded credit is never
+   * a candidate (#303): "העברה מ…" is how salaries and third-party payments
+   * arrive, so it stays uncategorized for a manual label instead.
    */
-  readonly transferSkippedIds: readonly string[];
+  readonly suspectedTransferIds: readonly string[];
   readonly autoApplied: number;
   readonly queuedForReview: number;
   /** Uncategorized rows that already hold an open suggestion — kept out of the provider so the run never re-asks (or re-suggests) while a decision is pending. */
@@ -246,11 +249,11 @@ export async function runAiCategorization(
 
   // ── Step 2: transfer guard (never sent to a provider) ──
   const guarded: UncategorizedTxn[] = [];
-  const transferSkippedIds: string[] = [];
+  const suspectedTransferIds: string[] = [];
   for (const txn of afterMemory) {
     if (matchesTransferDescriptor(txn.description, transferKindsFor(txn.bankType))) {
       transferSkipped++;
-      transferSkippedIds.push(txn.id);
+      if (txn.chargedAmount <= 0) suspectedTransferIds.push(txn.id);
     } else {
       guarded.push(txn);
     }
@@ -371,7 +374,7 @@ export async function runAiCategorization(
     totalUncategorized: all.length,
     memoryApplied,
     transferSkipped,
-    transferSkippedIds,
+    suspectedTransferIds,
     autoApplied,
     queuedForReview,
     awaitingReview,

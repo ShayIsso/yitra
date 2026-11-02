@@ -6,6 +6,7 @@
 
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
 import { bankKindOf } from "@/lib/bank-registry";
+import type { CategorySource } from "@/lib/merchant-memory";
 import { pairsToRecordOnReject, pairsToRecordOnUndo, type RejectedPair } from "./rejected-pairs";
 
 export type InboxTransaction = {
@@ -16,6 +17,7 @@ export type InboxTransaction = {
   description: string;
   chargedAmount: number;
   categoryId: string | null;
+  categorySource: CategorySource | null;
   reconciliationGroupId: string | null;
   reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair" | null;
   reconciliationConfidence: number | null;
@@ -28,10 +30,28 @@ export type InboxGroup = {
   members: InboxTransaction[];
 };
 
+/**
+ * The one category write an approval makes: the transfer side of a
+ * `transfer_pair` group becomes an internal transfer. The approval is the
+ * user's decision, so it is recorded as `user` provenance, never `rule`.
+ */
+export type TransferFlip = {
+  txnId: string;
+  categoryId: string;
+  categorySource: "user";
+  /**
+   * Skip the flip if the row is `user`/`memory`-sourced at write time. Set for
+   * a suspected transfer, so a category chosen after `approveGroup` read the
+   * members still wins; a pair flips regardless (see `transferFlipFor`).
+   */
+  keepUserCategory: boolean;
+};
+
 export type InboxStore = {
   getGroupMembers(groupId: string): Promise<InboxTransaction[]>;
   getGroupMembersByIds(groupIds: string[]): Promise<Map<string, InboxTransaction[]>>;
-  confirmGroup(groupId: string, now: Date, transferCategoryId: string | null): Promise<void>;
+  /** Confirms every member of the group and applies `flip`, if any, in one transaction. */
+  confirmGroup(groupId: string, now: Date, flip: TransferFlip | null): Promise<void>;
   /** Clears the groups and persists `rejections` in the same transaction. */
   clearGroup(groupIds: string[], rejections?: RejectedPair[]): Promise<void>;
   /** Clears the rows and persists `rejections` in the same transaction. */
@@ -80,42 +100,86 @@ export function identifyBankSide(members: InboxTransaction[]): InboxTransaction 
   return a.createdAt <= b.createdAt ? a : b;
 }
 
+/**
+ * A suspected transfer whose only row is incoming. New ones are never queued
+ * (#303); ones queued before that are left for a one-by-one decision.
+ */
+function isSingletonCredit(members: InboxTransaction[]): boolean {
+  return (
+    members.length === 1 &&
+    members[0].reconciliationRole === "transfer_pair" &&
+    members[0].chargedAmount > 0
+  );
+}
+
+async function transferFlipFor(
+  members: InboxTransaction[],
+  store: InboxStore,
+): Promise<TransferFlip | null> {
+  // P1 settlement group: the lump already carries the settlement category.
+  if (members.some((m) => m.reconciliationRole === "settlement_lump")) return null;
+
+  const bankSide = identifyBankSide(members);
+  if (!bankSide) return null;
+  // A suspected transfer has no second leg to double-count against, so a
+  // category the user chose (or user-tier memory applied) after it was queued
+  // outranks the suspicion. A pair keeps its flip: a P2 mirror is one charge
+  // seen from two accounts, so without it the charge counts twice.
+  const keepUserCategory = members.length === 1;
+  if (
+    keepUserCategory &&
+    (bankSide.categorySource === "user" || bankSide.categorySource === "memory")
+  ) {
+    return null;
+  }
+
+  const transferCategoryId = await store.getCategoryIdByName("העברה פנימית");
+  if (!transferCategoryId) return null;
+  return {
+    txnId: bankSide.id,
+    categoryId: transferCategoryId,
+    categorySource: "user",
+    keepUserCategory,
+  };
+}
+
+async function approveMembers(
+  groupId: string,
+  members: InboxTransaction[],
+  store: InboxStore,
+): Promise<void> {
+  // Approving never writes merchant memory: a memory entry mapping a
+  // "העברה מ…" key to an internal transfer would swallow every later credit
+  // with that descriptor, salaries included (#303).
+  await store.confirmGroup(groupId, new Date(), await transferFlipFor(members, store));
+}
+
 export async function approveGroup(
   groupId: string,
   store: InboxStore,
 ): Promise<{ error?: string }> {
   const members = await store.getGroupMembers(groupId);
   if (members.length === 0) return { error: "קבוצת ההתאמה לא נמצאה" };
-
-  const transferCategoryId = await store.getCategoryIdByName("העברה פנימית");
-
-  const hasSettlementLump = members.some((m) => m.reconciliationRole === "settlement_lump");
-
-  if (hasSettlementLump) {
-    // P1 settlement group: confirm all members; lump already has settlement category
-    await store.confirmGroup(groupId, new Date(), null);
-  } else {
-    // P2 transfer_pair group: confirm all; flip bankSide to transfer category
-    const bankSide = identifyBankSide(members);
-    if (bankSide && transferCategoryId) {
-      await store.confirmGroup(groupId, new Date(), transferCategoryId);
-    } else {
-      await store.confirmGroup(groupId, new Date(), null);
-    }
-  }
-
+  await approveMembers(groupId, members, store);
   return {};
 }
 
+/** Approves each group in turn; a singleton credit is skipped, never swept in by bulk. */
 export async function approveGroups(
   groupIds: string[],
   store: InboxStore,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; skipped: string[] }> {
+  const skipped: string[] = [];
   for (const groupId of groupIds) {
-    const result = await approveGroup(groupId, store);
-    if (result.error) return result;
+    const members = await store.getGroupMembers(groupId);
+    if (members.length === 0) return { error: "קבוצת ההתאמה לא נמצאה", skipped };
+    if (isSingletonCredit(members)) {
+      skipped.push(groupId);
+      continue;
+    }
+    await approveMembers(groupId, members, store);
   }
-  return {};
+  return { skipped };
 }
 
 export async function rejectGroup(groupId: string, store: InboxStore): Promise<{ error?: string }> {
