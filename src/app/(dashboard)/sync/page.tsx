@@ -9,12 +9,6 @@ import {
 } from "@/lib/sync/runs";
 import { runsOfCurrentInstitutions } from "@/lib/sync/current-runs";
 
-/**
- * Deliberately no streaming skeleton (route `loading.tsx` or in-page
- * Suspense): with either, the post-sync `router.refresh()` raced the shell's
- * Link prefetches and left the pending-reconciliation badge stale in 4 of 10
- * headless runs on the production build, against 0 of 8 without (#324).
- */
 export default async function SyncPage() {
   // Persisted fallback for SyncPanel's live SSE state (#223) — the same
   // per-bank read the dashboard's SyncFreshnessPill already uses, so a

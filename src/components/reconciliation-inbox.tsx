@@ -20,6 +20,7 @@ import { BankBadge } from "@/components/bank-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   confidenceText,
   directionText,
@@ -323,9 +324,7 @@ function InboxHeader({ children }: { children: React.ReactNode }) {
 /**
  * Approved and rejected groups leave the list at once; the server re-renders
  * the route (the actions' `revalidatePath`), so the shell's pending badge and
- * the `groups` prop follow without a reload. No `router.refresh()` on top: a
- * second refresh racing the action's own re-render left the badge stale in
- * about one run in three (measured headless on the production build).
+ * the `groups` prop follow without a reload or an extra `router.refresh()`.
  */
 export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
   const router = useRouter();
@@ -481,6 +480,81 @@ export function ReconciliationInbox({ groups }: { groups: PendingGroup[] }) {
           </ul>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+
+function GroupCardSkeleton() {
+  return (
+    <li>
+      <Card className="gap-0 py-0">
+        <div className="flex items-start gap-3 p-4 pb-3">
+          <Skeleton className="size-10 shrink-0 rounded-full" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-[1.375rem] w-64 max-w-full" />
+          </div>
+        </div>
+        <div className="divide-border mx-4 divide-y rounded-lg border">
+          {[0, 1].map((i) => (
+            <div key={i} className="flex items-start justify-between gap-3 px-3 py-2.5">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <Skeleton className="h-[1.375rem] w-40 max-w-full" />
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                <Skeleton className="h-[1.375rem] w-16" />
+                <Skeleton className="h-4 w-10" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 p-4">
+          <div className="me-auto flex min-h-11 items-center gap-3 pe-2">
+            <Skeleton className="size-4 rounded-[4px]" />
+            <Skeleton className="h-4 w-8" />
+          </div>
+          <Skeleton className={cn(ACTION_BUTTON, "w-20 rounded-lg")} />
+          <Skeleton className={cn(ACTION_BUTTON, "w-20 rounded-lg")} />
+        </div>
+      </Card>
+    </li>
+  );
+}
+
+/** The inbox while its groups load, laid out like the populated list. */
+export function ReconciliationInboxSkeleton() {
+  return (
+    <div aria-busy="true" className="flex max-w-3xl flex-col gap-6">
+      <span role="status" className="sr-only">
+        טוען את תיבת ההתאמות
+      </span>
+      <InboxHeader>
+        <Skeleton className="h-[1.375rem] w-44" />
+      </InboxHeader>
+      <div className="bg-card flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--card-border)] p-2 shadow-[var(--card-shadow)]">
+        <div className="flex min-h-11 items-center gap-3 px-2">
+          <Skeleton className="size-4 rounded-[4px]" />
+          <Skeleton className="h-4 w-14" />
+        </div>
+        <div className="flex w-full gap-2 sm:ms-auto sm:w-auto">
+          <Skeleton className={cn(ACTION_BUTTON, "flex-1 rounded-lg sm:w-28 sm:flex-none")} />
+          <Skeleton className={cn(ACTION_BUTTON, "flex-1 rounded-lg sm:w-28 sm:flex-none")} />
+        </div>
+      </div>
+      <ul className="flex flex-col gap-4">
+        {[0, 1, 2].map((i) => (
+          <GroupCardSkeleton key={i} />
+        ))}
+      </ul>
     </div>
   );
 }

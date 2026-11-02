@@ -3,12 +3,6 @@ export const dynamic = "force-dynamic";
 import { getPendingInboxRows } from "@/lib/reconciliation/inbox-store";
 import { ReconciliationInbox } from "@/components/reconciliation-inbox";
 
-/**
- * Deliberately no streaming skeleton (route `loading.tsx` or in-page
- * Suspense): with either, an approve's re-render raced the shell's Link
- * prefetches and left the pending-reconciliation badge stale in roughly one
- * run in eight on the production build, against none in 31 without (#324).
- */
 export default async function ReconciliationPage() {
   const rows = await getPendingInboxRows();
 

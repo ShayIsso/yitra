@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
+  SyncPanelSkeleton,
   resolveBankDisplay,
   formatRelativeAge,
   takeFrames,
@@ -139,5 +142,15 @@ describe("hasSyncComplete", () => {
       { type: "sync_complete", summary: { total: 3, byBank: { max: 3 } } },
     ];
     expect(hasSyncComplete(events)).toBe(true);
+  });
+});
+
+describe("SyncPanelSkeleton", () => {
+  it("keeps the page heading and announces that the page is loading", () => {
+    const html = renderToStaticMarkup(createElement(SyncPanelSkeleton));
+
+    expect(html).toMatch(/<h1[^>]*>סנכרון<\/h1>/);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toMatch(/role="status"[^>]*>טוען את עמוד הסנכרון</);
   });
 });

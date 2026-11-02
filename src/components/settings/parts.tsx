@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { ArrowsClockwiseIcon, PlusIcon, WarningCircleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -220,11 +221,11 @@ export function SectionEmpty({
 }
 
 /**
- * An inline error for one section, with a retry. `onRetry` defaults to
- * reloading the page, which re-reads every section's data and keeps the
- * `?section=` it is on. Not `router.refresh()`: in the production build
- * (headless, #325) a refresh of this page fetched fresh data but never
- * committed it, leaving the error on screen.
+ * An inline error for one section, with a retry. `onRetry` defaults to a soft
+ * `router.refresh()`, which re-reads every section's data and keeps the
+ * `?section=` it is on. That needs Next >= 16.3 (#339): the React DOM bundled
+ * before it dropped a refresh that suspended under this page's visible
+ * Suspense boundary, leaving the error on screen.
  */
 export function SectionError({
   message = "לא הצלחנו לטעון את הנתונים של החלק הזה.",
@@ -233,15 +234,15 @@ export function SectionError({
   message?: string;
   onRetry?: () => void;
 }) {
-  const [pending, setPending] = React.useState(false);
+  const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
 
   function retry() {
     if (onRetry) {
       onRetry();
       return;
     }
-    setPending(true);
-    window.location.reload();
+    startTransition(() => router.refresh());
   }
 
   return (
