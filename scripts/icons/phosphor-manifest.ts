@@ -40,7 +40,6 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   Key: ["regular"],
   Flask: ["regular"],
   Funnel: ["regular"],
-  DownloadSimple: ["regular"],
   ListChecks: ["regular"],
   ArrowCounterClockwise: ["regular"],
   LinkSimple: ["regular"],
