@@ -18,7 +18,7 @@ import {
   outflowContribution,
   type AnalyticsTransaction,
 } from "@/lib/analytics";
-import { isBankLumpCandidate } from "@/lib/reconciliation";
+import { isSettlementChargeShape } from "@/lib/reconciliation";
 import { pendingWithCompletedTwin } from "@/lib/transactions";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 
@@ -126,9 +126,13 @@ export type MonthOutlook =
   | {
       state: "no-target";
       spent: number;
-      usualMonth: number;
+      /**
+       * Nullable per the #312 contract; `monthOutlook` itself answers thin
+       * history with `thin-history`, so it returns these non-null.
+       */
+      usualMonth: number | null;
       /** Only ever a suggestion: confirming it goes through the monthly-targets write path. */
-      suggestedTarget: number;
+      suggestedTarget: number | null;
       asOf: Date;
       stale: boolean;
     }
@@ -192,8 +196,14 @@ function countedRows(rows: readonly OutlookRow[], month: YearMonth, throughDate:
       r.date.startsWith(prefix) &&
       r.date <= throughDate &&
       !superseded.has(r.id) &&
-      !(r.categoryType === "expense" && isBankLumpCandidate(r)),
+      !(r.categoryType === "expense" && isSettlementChargeShape(r)),
   );
+}
+
+/** A whole month by the outlook's rules. */
+function wholeMonthSummary(rows: readonly OutlookRow[], month: YearMonth) {
+  const { daysInMonth } = monthElapsed(month, isoDay(month, 1));
+  return computeMonthlySummary(countedRows(rows, month, isoDay(month, daysInMonth)));
 }
 
 /**
@@ -201,21 +211,21 @@ function countedRows(rows: readonly OutlookRow[], month: YearMonth, throughDate:
  * prior month's history, so the usual month and this month's spend agree.
  */
 export function outlookMonthExpenses(rows: readonly OutlookRow[], month: YearMonth): number {
-  const lastDay = new Date(month.year, month.month, 0).getDate();
-  return computeMonthlySummary(countedRows(rows, month, isoDay(month, lastDay))).expenses;
+  return wholeMonthSummary(rows, month).expenses;
 }
 
 function isComplete(month: YearMonth, dataSince: string | null): boolean {
   return dataSince !== null && dataSince <= isoDay(month, 1);
 }
 
+const ordinal = (month: YearMonth): number => month.year * 12 + month.month;
+
 /** Mean of the latest complete prior months with expense data, or null when history is thin. */
 function usualMonthOf(input: MonthOutlookInput): number | null {
-  const current = input.month.year * 12 + input.month.month;
   const full = input.history
-    .filter((h) => h.month.year * 12 + h.month.month < current)
+    .filter((h) => ordinal(h.month) < ordinal(input.month))
     .filter((h) => h.expenses > 0 && isComplete(h.month, input.dataSince))
-    .sort((a, b) => b.month.year * 12 + b.month.month - (a.month.year * 12 + a.month.month));
+    .sort((a, b) => ordinal(b.month) - ordinal(a.month));
   if (full.length < THIN_HISTORY_MIN_FULL_MONTHS) return null;
   const used = full.slice(0, USUAL_MONTH_SPAN);
   return toAgorot(used.reduce((sum, h) => sum + h.expenses, 0) / used.length);
@@ -304,8 +314,7 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
   const { month, today, target } = input;
 
   if (isMonthClosed(month, today)) {
-    const lastDay = new Date(month.year, month.month, 0).getDate();
-    const summary = computeMonthlySummary(countedRows(input.rows, month, isoDay(month, lastDay)));
+    const summary = wholeMonthSummary(input.rows, month);
     return {
       state: "closed",
       income: toAgorot(summary.income),

@@ -60,18 +60,9 @@ export {
   monthOutlook,
   STALE_SYNC_AFTER_MS,
   THIN_HISTORY_MIN_FULL_MONTHS,
-  USUAL_MONTH_SPAN,
-  HISTORY_WEIGHT_DECAY_DAYS,
-  SUGGESTED_TARGET_STEPS,
   type MonthOutlook,
   type MonthOutlookInput,
   type OutlookRow,
-  type OutlookRecurringCharge,
-  type PriorMonthExpenses,
-  type SyncProgress,
-  type DueRecurringCharge,
-  type Projection,
-  type ProjectionBasis,
 } from "./outlook";
 export {
   getMonthOutlookWithStore,

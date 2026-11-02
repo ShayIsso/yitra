@@ -4,14 +4,13 @@
  * `transactions.date` through analytics' `monthDateRange`, the window every
  * Dashboard and budget figure uses, so the outlook's spend agrees with them.
  */
-import { and, eq, gte, isNotNull, lte, max, min } from "drizzle-orm";
+import { and, eq, gte, lte, min } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bankAccounts,
   bankCredentials,
   categories,
   monthlyTargets,
-  syncRuns,
   transactions,
 } from "@/db/schema";
 import { monthDateRange } from "@/lib/analytics";
@@ -22,7 +21,13 @@ import {
   type PersistedRecurringPattern,
 } from "@/lib/recurring-detection";
 import { runsOfCurrentInstitutions } from "@/lib/sync/current-runs";
-import { drizzleSyncRunStore, getLastRunPerBank, type SyncRunSummary } from "@/lib/sync/runs";
+import {
+  drizzleSyncRunStore,
+  getLastRecordedSuccessPerBank,
+  getLastRunPerBank,
+  type SyncRunSummary,
+} from "@/lib/sync/runs";
+import { pendingWithCompletedTwin } from "@/lib/transactions";
 import {
   monthOutlook,
   outlookMonthExpenses,
@@ -134,8 +139,12 @@ export async function getMonthOutlookWithStore(
       store.isSyncRunning(),
     ]);
 
+  // Twins pair across the whole read, not per month: a pending row on the 31st
+  // whose posted version is dated the 1st must not count in both months.
+  const superseded = pendingWithCompletedTwin(rows);
   const rowsByMonth = new Map<string, OutlookRow[]>();
   for (const row of rows) {
+    if (superseded.has(row.id)) continue;
     const key = row.date.slice(0, 7);
     const bucket = rowsByMonth.get(key);
     if (bucket) bucket.push(row);
@@ -225,14 +234,8 @@ export const drizzleMonthOutlookStore: MonthOutlookStore = {
     return getLastRunPerBank(drizzleSyncRunStore);
   },
 
-  // The SQL form of `isRecordedSuccess`: an optimistic in-flight `success` row has no finish yet.
-  async lastRecordedSuccessPerBank() {
-    const rows = await db
-      .select({ bank: syncRuns.bank, finishedAt: max(syncRuns.finishedAt) })
-      .from(syncRuns)
-      .where(and(eq(syncRuns.status, "success"), isNotNull(syncRuns.finishedAt)))
-      .groupBy(syncRuns.bank);
-    return rows.flatMap((r) => (r.finishedAt ? [{ bank: r.bank, finishedAt: r.finishedAt }] : []));
+  lastRecordedSuccessPerBank() {
+    return getLastRecordedSuccessPerBank();
   },
 
   async isSyncRunning() {

@@ -13,7 +13,7 @@ const MIN_CONFIDENCE = 0.7;
  * a bank-kind row whose description is card_settlement-shaped. P1 pairs it
  * with card evidence; the month outlook keeps an unreconciled one out of spend.
  */
-export function isBankLumpCandidate(
+export function isSettlementChargeShape(
   tx: Pick<ReconciliationTransaction, "bankType" | "description">,
 ): boolean {
   if (bankKindOf(tx.bankType) !== "bank") return false;
@@ -32,7 +32,7 @@ export function detectP1Settlement(
 ): ReconciliationCandidate[] {
   const unreconciled = transactions.filter((tx) => tx.reconciliationGroupId === null);
 
-  const bankLumps = unreconciled.filter(isBankLumpCandidate);
+  const bankLumps = unreconciled.filter(isSettlementChargeShape);
   const cardTxns = unreconciled.filter((tx) => bankKindOf(tx.bankType) === "card");
 
   if (bankLumps.length === 0 || cardTxns.length === 0) return [];

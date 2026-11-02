@@ -145,6 +145,20 @@ describe("getMonthOutlookWithStore", () => {
     expect(s.windows).toEqual([["2025-06-01", "2026-06-30"]]);
   });
 
+  it("counts a pending charge once when its posted version lands in the next month", async () => {
+    const pending = { ...spend("2026-05-31", 300), status: "pending" as const };
+    const posted = { ...spend("2026-06-01", 300), description: pending.description };
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        target: null,
+        rows: [spend("2026-04-10", 1000), spend("2026-05-10", 1000), pending, posted],
+      }),
+    );
+    expect(outlook).toMatchObject({ spent: 300, usualMonth: 1000 });
+  });
+
   it("judges recurring charges by liveness evidence: arrived, late, paused and dead", async () => {
     const outlook = await getMonthOutlookWithStore(
       JUNE,
