@@ -313,7 +313,7 @@ export function CredentialsSection() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="md:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? "ערוך חשבון בנק" : "הוסף חשבון בנק"}</DialogTitle>
           </DialogHeader>

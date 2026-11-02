@@ -329,7 +329,9 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
         {/* Header — month navigation + sync-freshness pill */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-2xl font-bold tracking-tight">לוח בקרה</h2>
-          <div className="flex items-center gap-3">
+          {/* Stacked on phones: the pill's text grows after mount, and side by side
+              it would wrap the row and shift the page below (CLS). */}
+          <div className="flex items-center gap-3 max-sm:flex-col max-sm:items-start">
             <SyncFreshnessPill runs={lastSyncRuns} />
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={nextMonth} aria-label="חודש הבא">
