@@ -5,7 +5,7 @@ import { useTheme } from "@/components/theme";
 import { cn } from "@/lib/utils";
 import type { NavGlyph } from "./nav";
 
-export const FOCUS_RING = "outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+export const FOCUS_RING = "outline-none focus-visible:ring-3 focus-visible:ring-ring";
 
 /**
  * The icon "pill" shared by the rail and the tab bar: filled teal when active,

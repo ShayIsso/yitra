@@ -15,10 +15,7 @@ export type NavGlyph = ComponentType<GlyphProps<"regular" | "fill">>;
 
 export type Destination = {
   href: string;
-  /** Rail and "more" sheet label. */
   label: string;
-  /** Phone tab-bar label, where width is tight. */
-  short: string;
   icon: NavGlyph;
 };
 
@@ -26,16 +23,16 @@ export const RECONCILIATION_HREF = "/reconciliation";
 
 /** The phone tab bar's own tabs; a fifth "more" tab opens MORE_DESTINATIONS. */
 export const TAB_DESTINATIONS: readonly Destination[] = [
-  { href: "/", label: "לוח בקרה", short: "בית", icon: HouseIcon },
-  { href: "/transactions", label: "תנועות", short: "תנועות", icon: ArrowsLeftRightIcon },
-  { href: "/reports", label: "דוחות", short: "דוחות", icon: ChartPieSliceIcon },
-  { href: RECONCILIATION_HREF, label: "התאמות", short: "התאמות", icon: TrayIcon },
+  { href: "/", label: "בית", icon: HouseIcon },
+  { href: "/transactions", label: "תנועות", icon: ArrowsLeftRightIcon },
+  { href: "/reports", label: "דוחות", icon: ChartPieSliceIcon },
+  { href: RECONCILIATION_HREF, label: "התאמות", icon: TrayIcon },
 ];
 
 export const MORE_DESTINATIONS: readonly Destination[] = [
-  { href: "/subscriptions", label: "מנויים", short: "מנויים", icon: RepeatIcon },
-  { href: "/sync", label: "סנכרון", short: "סנכרון", icon: ArrowsClockwiseIcon },
-  { href: "/settings", label: "הגדרות", short: "הגדרות", icon: GearSixIcon },
+  { href: "/subscriptions", label: "מנויים", icon: RepeatIcon },
+  { href: "/sync", label: "סנכרון", icon: ArrowsClockwiseIcon },
+  { href: "/settings", label: "הגדרות", icon: GearSixIcon },
 ];
 
 /** The desktop rail lists every destination. */

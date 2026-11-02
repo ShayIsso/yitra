@@ -53,7 +53,8 @@ export function TabBar({
   }
 
   const badge = badgeText(pendingReconCount);
-  const moreActive = moreOpen || MORE_DESTINATIONS.some((d) => isActive(d.href, pathname));
+  const currentBehindMore = MORE_DESTINATIONS.find((d) => isActive(d.href, pathname)) ?? null;
+  const moreActive = moreOpen || currentBehindMore !== null;
 
   return (
     <nav
@@ -71,7 +72,7 @@ export function TabBar({
                 <NavPill active={active} badge={itemBadge}>
                   <NavIcon icon={d.icon} active={active} />
                 </NavPill>
-                <span className={navLabelClass(active)}>{d.short}</span>
+                <span className={navLabelClass(active)}>{d.label}</span>
                 <PendingLabel badge={itemBadge} />
               </Link>
             </li>
@@ -83,6 +84,7 @@ export function TabBar({
             onOpenChange={setMoreOpen}
             pathname={pathname}
             active={moreActive}
+            currentPage={currentBehindMore?.label ?? null}
           />
         </li>
       </ul>
@@ -95,21 +97,25 @@ function MoreSheet({
   onOpenChange,
   pathname,
   active,
+  currentPage,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pathname: string;
   active: boolean;
+  /** The current page's label when it lives behind "more", so the trigger can announce it. */
+  currentPage: string | null;
 }) {
   const theme = useThemeToggle();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger className={TAB}>
+      <DialogTrigger className={TAB} aria-current={currentPage ? "page" : undefined}>
         <NavPill active={active}>
           <NavIcon icon={DotsThreeOutlineIcon} active={active} />
         </NavPill>
         <span className={navLabelClass(active)}>עוד</span>
+        {currentPage && <span className="sr-only">{`, ${currentPage}`}</span>}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

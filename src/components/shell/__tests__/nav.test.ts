@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MORE_DESTINATIONS, TAB_DESTINATIONS, badgeText, isActive } from "@/components/shell/nav";
+import { MORE_DESTINATIONS, TAB_DESTINATIONS, badgeText, isActive } from "@/components/shell";
 
 describe("the shell's destinations", () => {
   it("gives the phone tab bar home, transactions, reports and reconciliation, in that order", () => {

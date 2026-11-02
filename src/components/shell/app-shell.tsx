@@ -9,6 +9,11 @@ import { TabBar } from "./tab-bar";
  * The dashboard's frame (#315): a labelled icon rail from `md` up, a bottom tab
  * bar below it. DOM order is the focus order: skip link, rail (desktop) or
  * brand header (phone), page, tab bar.
+ *
+ * `<main>` clips sideways overflow so a too-wide page can never widen the
+ * layout viewport and push the fixed tab bar off-screen. `clip`, not `hidden`
+ * or `auto`: it does not make `<main>` a scroll container, so `position:
+ * sticky` inside pages keeps sticking to the window.
  */
 export function AppShell({
   pendingReconCount,
@@ -34,7 +39,7 @@ export function AppShell({
       <main
         id="main-content"
         tabIndex={-1}
-        className="min-w-0 flex-1 px-4 pt-2 pb-28 outline-none sm:px-6 md:ms-22 md:p-8"
+        className="min-w-0 flex-1 overflow-x-clip px-4 pt-2 pb-28 outline-none sm:px-6 md:ms-22 md:p-8"
       >
         {/* Keyed by pathname so the entrance replays per page, not per search-param change. */}
         <div key={pathname} className="page-enter">

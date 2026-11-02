@@ -10,9 +10,9 @@ import { XIcon } from "@/components/icons";
 /**
  * The app's one dialog primitive, responsive by construction (#315, spec #312
  * story 54): below `md` the content is a bottom sheet (full width, anchored to
- * the bottom edge, top corners rounded, slides up, footer buttons stacked at a
- * 44px tap height); from `md` up it is a centred dialog. The switch is pure
- * CSS, so there is no viewport hook and no hydration mismatch.
+ * the bottom edge, top corners rounded, slides up); from `md` up it is a
+ * centred dialog. The switch is pure CSS, so there is no viewport hook and no
+ * hydration mismatch.
  *
  * Composition:
  *
@@ -22,14 +22,24 @@ import { XIcon } from "@/components/icons";
  *         <DialogTitle>…</DialogTitle>                 // required: names the dialog
  *         <DialogDescription>…</DialogDescription>     // optional
  *       </DialogHeader>
- *       …body…
- *       <DialogFooter>…actions…</DialogFooter>         // primary action last
+ *       …body…                                         // a <form> may wrap body + footer
+ *       <DialogFooter>                                 // last; its direct children are the actions
+ *         <Button variant="outline">ביטול</Button>
+ *         <Button>שמור</Button>                        // primary action last
+ *       </DialogFooter>
  *     </DialogContent>
  *   </Dialog>
  *
  * - Width: the centred dialog is `md:max-w-sm`; widen it with a `md:max-w-*`
  *   className on DialogContent. The sheet is always full width.
- * - Height: content taller than the viewport scrolls inside the popup.
+ * - Height: content taller than the viewport scrolls inside the popup while
+ *   DialogFooter stays pinned to its bottom edge, so the primary action is
+ *   never below the fold of a long phone form.
+ * - Footer: actions sit side by side (end-aligned) from `md`; in the sheet
+ *   they stack full width, primary on top, each at least 44px tall. Only the
+ *   footer's direct children are sized, so put the actions there directly.
+ * - Close button: a 44px X in the top end corner unless `showCloseButton` is
+ *   false; DialogHeader reserves end padding for it only when it is shown.
  * - Focus: Base UI traps focus while open, closes on Escape and on a backdrop
  *   press, and returns focus to the trigger.
  * - Motion: the sheet slides up, the dialog zooms in; under reduced motion both
@@ -83,6 +93,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-close-button={showCloseButton ? "" : undefined}
         className={cn(
           "bg-popover text-popover-foreground ring-foreground/10 fixed z-50 grid max-h-[calc(100dvh-2rem)] w-full gap-4 overflow-y-auto overscroll-contain p-4 text-sm ring-1 outline-none",
           // Sheet (< md)
@@ -115,7 +126,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex min-h-6 flex-col justify-center gap-2 pe-9", className)}
+      className={cn(
+        "flex min-h-6 flex-col justify-center gap-2 in-data-[close-button]:pe-9",
+        className,
+      )}
       {...props}
     />
   );
@@ -133,8 +147,14 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "bg-muted/50 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t p-4 md:flex-row md:justify-end md:rounded-b-xl",
-        "max-md:[&_button]:min-h-11",
+        "-mx-4 -mb-4 flex flex-col-reverse gap-2 border-t p-4 md:flex-row md:justify-end md:rounded-b-xl",
+        // Pinned to the popup's bottom edge. The sticky inset is measured from
+        // the popup's content box (inside its p-4), hence -bottom-4 to match
+        // -mb-4; bottom-0 would float it 1rem up over the last field.
+        "sticky -bottom-4",
+        // muted/50 made opaque: content scrolls beneath the pinned footer.
+        "bg-[color-mix(in_oklab,var(--muted)_50%,var(--popover))]",
+        "max-md:*:min-h-11",
         className,
       )}
       {...props}

@@ -31,7 +31,7 @@ import type {
   SavingsTargetStatus,
 } from "@/lib/budgets";
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
-import { PaceHero } from "@/components/dashboard/pace-hero";
+import { PaceHero, PaceHeroSkeleton } from "@/components/dashboard/pace-hero";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
 import { OnboardingPath } from "@/components/dashboard/onboarding-path";
 import { SyncFreshnessPill } from "@/components/dashboard/sync-freshness-pill";
@@ -204,6 +204,10 @@ function formatDebitDateHint(isoDate: string): string {
   return `${day}.${month}`;
 }
 
+const SAVINGS_RATE_LABEL = "אחוז חיסכון";
+/** The KPI band's tiles in render order; the loading skeleton reuses them. */
+const KPI_LABELS = ["הכנסות", "הוצאות", "חיסכון נטו", SAVINGS_RATE_LABEL] as const;
+
 function KpiTile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Card>
@@ -352,27 +356,15 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
 
       {loading ? (
         <div className="space-y-6">
-          {/* Pace hero skeleton */}
-          <Card>
-            <CardHeader className="pb-2">
-              <Skeleton className="h-4 w-32" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-3 w-full" />
-            </CardContent>
-          </Card>
-          {/* KPI band skeleton */}
+          {/* Pace hero + KPI band skeletons keep the loaded rows' heights, so
+              the swap to content does not shift the page (CLS). */}
+          <PaceHeroSkeleton />
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={`sk-kpi-${i}`}>
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-20" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-28" />
-                </CardContent>
-              </Card>
+            {KPI_LABELS.map((label) => (
+              <KpiTile key={label} label={label}>
+                <Skeleton className="h-8 w-28" />
+                {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
+              </KpiTile>
             ))}
           </div>
           {/* Breakdown skeleton */}
@@ -449,7 +441,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
               )}
             </KpiTile>
 
-            <KpiTile label="אחוז חיסכון">
+            <KpiTile label={SAVINGS_RATE_LABEL}>
               <p
                 className={`text-2xl font-bold ${
                   summary && summary.savingsRate >= 0 ? "text-pos" : "text-neg"
