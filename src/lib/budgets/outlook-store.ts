@@ -29,8 +29,8 @@ const HISTORY_MONTHS = 12;
 export type MonthOutlookStore = {
   /** Every transaction dated in the calendar month. */
   loadMonth(month: YearMonth): Promise<OutlookRow[]>;
-  /** YYYY-MM-DD of each bank account's earliest stored transaction. */
-  accountHistoryStarts(): Promise<string[]>;
+  /** Each bank account's earliest stored transaction (YYYY-MM-DD), with its credential. */
+  accountHistoryStarts(): Promise<{ credentialId: string; earliest: string }[]>;
   expenseTarget(): Promise<number | null>;
   /** Non-canceled series and the money-out evidence that judges their liveness (ADR-0012). */
   recurring(): Promise<{
@@ -63,8 +63,8 @@ function addMonths(month: YearMonth, delta: number): YearMonth {
 /**
  * Each live, active series' charge for the month. Its latest charge has
  * arrived only when that row is in the month up to today AND counts as spend
- * — an uncategorized posting adds nothing to spent, so it stays due rather
- * than vanishing from both. A charge the bank lists later in the month is due
+ * — an uncategorized posting adds nothing to spent, so it stays due (awaiting
+ * a category, not late) rather than vanishing from both. A charge the bank lists later in the month is due
  * on that date; any other is due on its projected date, which may be in the
  * past (late but live).
  */
@@ -96,14 +96,40 @@ function recurringCharges(
         spendIds.has(t.id) &&
         sameMerchant(merchantKey(t.description), pattern.merchant),
     );
+    const posted = inMonth && lastCharge <= today;
     charges.push({
       id: pattern.id,
       amount: seen.observedAmount,
       expectedDate: inMonth ? lastCharge : seen.projectedDate.toISOString().slice(0, 10),
-      arrived: inMonth && lastCharge <= today && lastChargeIsSpend,
+      arrived: posted && lastChargeIsSpend,
+      awaitingCategory: posted && !lastChargeIsSpend,
+      cadence: pattern.cadence,
     });
   });
   return charges;
+}
+
+/**
+ * From when every connected credential's history is present: each credential
+ * reaches back to its earliest transaction on any of its accounts, and the
+ * install to the latest of those. Per credential, not per account: a
+ * replacement card under the same login starts a new account without leaving
+ * a gap, while a newly connected credential does leave one until a full month
+ * of it is stored.
+ */
+function historyCompleteSince(
+  accountStarts: { credentialId: string; earliest: string }[],
+): string | null {
+  const credentialStart = new Map<string, string>();
+  for (const { credentialId, earliest } of accountStarts) {
+    const known = credentialStart.get(credentialId);
+    if (known === undefined || earliest < known) credentialStart.set(credentialId, earliest);
+  }
+  let latest: string | null = null;
+  for (const start of credentialStart.values()) {
+    if (latest === null || start > latest) latest = start;
+  }
+  return latest;
 }
 
 /**
@@ -194,10 +220,7 @@ export async function getMonthOutlookWithStore(
       clock.today,
     ),
     history,
-    historyCompleteSince: accountStarts.reduce<string | null>(
-      (latest, start) => (latest === null || start > latest ? start : latest),
-      null,
-    ),
+    historyCompleteSince: historyCompleteSince(accountStarts),
     lastSuccessfulSyncAt: lastSuccessfulSyncAt(successes, bankTypes, firstSuccess, runningSince),
     credentialCount: bankTypes.length,
     sync: {

@@ -21,9 +21,11 @@ import {
   computeMonthlySummary,
   excludeSettlementLumps,
   outflowContribution,
+  toAgorot,
   type AnalyticsTransaction,
   type ReconciliationRole,
 } from "@/lib/analytics";
+import { israelCalendarDay } from "@/lib/calendar";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 
 /**
@@ -51,6 +53,12 @@ export const USUAL_MONTH_SPAN = 3;
 export const HISTORY_WEIGHT_DECAY_DAYS = 14;
 
 /**
+ * This month's pace is spread over at least this many days, so one large
+ * purchase in the first days reads as a purchase, not a daily rate.
+ */
+export const PACE_MIN_DAYS = 7;
+
+/**
  * Friendly rounding for the suggested target: the usual month rounded UP to
  * the first step whose ceiling it is under, so a usual month never reads as
  * over its own suggestion.
@@ -76,9 +84,16 @@ export type OutlookRecurringCharge = {
   id: string;
   /** Expected charge, positive shekels. */
   amount: number;
-  /** YYYY-MM-DD: the projected date, or the observed one once it arrived. */
+  /** YYYY-MM-DD: the projected date, or the observed one once it posted. */
   expectedDate: string;
+  /** Posted this month as a row counted in spent. */
   arrived: boolean;
+  /**
+   * Posted this month, but as a row spent doesn't count yet (uncategorized):
+   * still due, never late — the bill came, it just isn't categorized.
+   */
+  awaitingCategory: boolean;
+  cadence: "monthly" | "quarterly" | "annual";
 };
 
 /** A prior month's expenses, computed by the same spend rules as the outlook month. */
@@ -110,7 +125,7 @@ export type MonthOutlookInput = {
 export type SyncProgress = { running: boolean; banksDone: number; banksTotal: number };
 
 export type DueRecurringCharge = OutlookRecurringCharge & {
-  /** Its expected date has passed and it hasn't arrived: still owed, any day. */
+  /** Its expected date has passed and it hasn't posted: still owed, any day. */
   late: boolean;
 };
 
@@ -163,7 +178,10 @@ export type MonthOutlook =
        * it doesn't, and null whenever `overBy` is set.
        */
       crossingDate: string | null;
-      /** Which side of the blend dominates; null with no projection. */
+      /**
+       * Which side contributes more to the projected variable spend — the usual
+       * month's rate or this month's pace; null with no projection.
+       */
       projectionBasis: ProjectionBasis | null;
       asOf: Date;
       stale: boolean;
@@ -177,31 +195,12 @@ export type MonthOutlook =
       overBy: number | null;
     };
 
-const israelDay = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Jerusalem",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
 /**
- * The outlook's "today": the calendar day in Israel, where the owner and the
- * banks are. A UTC day would still be yesterday for the first two or three
- * hours of each local day, and on the 1st would refuse the month that just
- * began. The older budgets reads (`getExpenseTargetPace`, budget statuses)
- * still take the UTC day.
+ * Whether `month` has begun on the home calendar day (`israelCalendarDay`) —
+ * the outlook's precondition.
  */
-export function outlookToday(now: Date): string {
-  return israelDay.format(now);
-}
-
-/** Whether `month` has begun on the outlook's calendar day — the outlook's precondition. */
 export function hasOutlookMonthStarted(month: YearMonth, now: Date): boolean {
-  return monthElapsed(month, outlookToday(now)).dayOfMonth > 0;
-}
-
-function toAgorot(amount: number): number {
-  return Math.round(amount * 100) / 100 || 0;
+  return monthElapsed(month, israelCalendarDay(now)).dayOfMonth > 0;
 }
 
 const dayOf = (isoDate: string): number => Number(isoDate.slice(8, 10));
@@ -299,13 +298,23 @@ function project(args: {
   const actual = dailyNetExpense(counted, day).map((amount) => toAgorot((cum += amount)));
 
   // Recurring charges are placed on their own dates, so both rates are of
-  // variable spend only — rent on day 1 must not be extrapolated across the month.
+  // variable spend only — rent on day 1 must not be extrapolated across the
+  // month. A usual month holds every monthly series once but a quarterly or
+  // annual one only now and then, so history sheds monthly charges only.
   const arrived = recurring.filter((c) => c.arrived).reduce((sum, c) => sum + c.amount, 0);
-  const recurringMonth = recurring.reduce((sum, c) => sum + c.amount, 0);
-  const paceRate = Math.max(0, spent - arrived) / day;
-  const historyRate = Math.max(0, usualMonth - recurringMonth) / daysInMonth;
+  const monthlyRecurring = recurring
+    .filter((c) => c.cadence === "monthly")
+    .reduce((sum, c) => sum + c.amount, 0);
+  const paceRate = Math.max(0, spent - arrived) / Math.max(day, PACE_MIN_DAYS);
+  const historyRate = Math.max(0, usualMonth - monthlyRecurring) / daysInMonth;
   const historyWeight = Math.max(0, 1 - day / HISTORY_WEIGHT_DECAY_DAYS);
-  const rate = historyWeight * historyRate + (1 - historyWeight) * paceRate;
+  const historyPart = historyWeight * historyRate;
+  const pacePart = (1 - historyWeight) * paceRate;
+  const rate = historyPart + pacePart;
+  const basis: ProjectionBasis =
+    pacePart > historyPart || (pacePart === historyPart && historyWeight <= 0.5)
+      ? "this-month-pace"
+      : "usual-month";
 
   // A charge expected today or earlier — late, possibly since last month —
   // lands on the next day; on the month's last day there is no next day, so it
@@ -327,7 +336,7 @@ function project(args: {
 
   return {
     projection: { total: projected[projected.length - 1], actual, projected },
-    basis: historyWeight > 0.5 ? "usual-month" : "this-month-pace",
+    basis,
   };
 }
 
@@ -398,7 +407,7 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
   const monthEnd = isoDay(month, elapsed.daysInMonth);
   const dueCharges = input.recurring
     .filter((c) => !c.arrived && c.expectedDate <= monthEnd)
-    .map((c) => ({ ...c, late: c.expectedDate < today }));
+    .map((c) => ({ ...c, late: !c.awaitingCategory && c.expectedDate < today }));
   const dueRecurring = toAgorot(dueCharges.reduce((sum, c) => sum + c.amount, 0));
 
   const remaining = toAgorot(target - spent - dueRecurring);

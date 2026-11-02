@@ -81,7 +81,7 @@ function run(bank: string, finishedAt: Date | null, startedAt?: Date): SyncRunSu
 function store(
   over: Partial<{
     rows: OutlookRow[];
-    accountStarts: string[];
+    accountStarts: { credentialId: string; earliest: string }[];
     target: number | null;
     patterns: PersistedRecurringPattern[];
     detection: DetectionTransaction[];
@@ -95,7 +95,10 @@ function store(
 ): MonthOutlookStore & { monthsRead: string[] } {
   const data = {
     rows: [],
-    accountStarts: ["2025-01-01", "2025-01-03"],
+    accountStarts: [
+      { credentialId: "cred-bank", earliest: "2025-01-01" },
+      { credentialId: "cred-card", earliest: "2025-01-03" },
+    ],
     target: 6000,
     patterns: [],
     detection: [],
@@ -210,18 +213,38 @@ describe("getMonthOutlookWithStore", () => {
     expect(outlook).toMatchObject({ spent: 360 });
   });
 
-  it("is thin history until every account's data reaches back to a prior month's first day", async () => {
-    // The bank goes back a year; the card only three weeks — prior months hold bank spend only.
+  it("is thin history until every credential's data reaches back to a prior month's first day", async () => {
+    // The bank goes back a year; the card credential only three weeks — prior months hold bank spend only.
     const outlook = await getMonthOutlookWithStore(
       JUNE,
       CLOCK,
       store({
         target: null,
-        accountStarts: ["2025-06-01", "2026-05-20"],
+        accountStarts: [
+          { credentialId: "cred-bank", earliest: "2025-06-01" },
+          { credentialId: "cred-card", earliest: "2026-05-20" },
+        ],
         rows: [spend("2026-04-10", 800), spend("2026-05-10", 900)],
       }),
     );
     expect(outlook.state).toBe("thin-history");
+  });
+
+  it("is not thin because a credential's replacement card started recently", async () => {
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        target: null,
+        accountStarts: [
+          { credentialId: "cred-bank", earliest: "2025-01-01" },
+          { credentialId: "cred-card", earliest: "2025-01-03" },
+          { credentialId: "cred-card", earliest: "2026-06-03" },
+        ],
+        rows: [spend("2026-05-10", 900)],
+      }),
+    );
+    expect(outlook).toMatchObject({ state: "no-target", usualMonth: 900 });
   });
 
   it("judges recurring charges by liveness evidence: arrived, late, paused and dead", async () => {
@@ -270,7 +293,15 @@ describe("getMonthOutlookWithStore", () => {
       spent: 0,
       dueRecurring: 150,
       remaining: 5850,
-      dueCharges: [{ amount: 150, arrived: false }],
+      dueCharges: [
+        {
+          amount: 150,
+          expectedDate: "2026-06-02",
+          arrived: false,
+          awaitingCategory: true,
+          late: false,
+        },
+      ],
     });
   });
 

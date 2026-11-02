@@ -70,9 +70,21 @@ describe("monthOutlook — connection states", () => {
   });
 });
 
-const due = (expectedDate: string, amount: number, arrived = false) => {
+const due = (
+  expectedDate: string,
+  amount: number,
+  arrived = false,
+  cadence: "monthly" | "quarterly" | "annual" = "monthly",
+) => {
   nextId += 1;
-  return { id: `series-${nextId}`, expectedDate, amount, arrived };
+  return {
+    id: `series-${nextId}`,
+    expectedDate,
+    amount,
+    arrived,
+    awaitingCategory: false,
+    cadence,
+  };
 };
 
 describe("monthOutlook — what's left", () => {
@@ -172,6 +184,16 @@ describe("monthOutlook — what counts as spent", () => {
       spend("2026-06-10", 120, { description }),
     ];
     expect(spentOf(rows)).toBe(240);
+  });
+
+  it("counts a charge once after its posted version superseded the pending row in place", () => {
+    // The importer's takeover rewrites the pending row into the posted one: one
+    // stored row, so one charge — the outlook only ever sees the result.
+    const posted = spend("2026-06-10", 120, {
+      id: "row-taken-over",
+      description: "Invented Bakery",
+    });
+    expect(spentOf([posted])).toBe(120);
   });
 
   it("counts three same-looking rows within a week as three purchases", () => {
@@ -327,13 +349,60 @@ describe("monthOutlook — projection", () => {
     });
   });
 
-  it("leans on the usual month early and on this month's pace from day 7", () => {
-    const basisOn = (today: string) =>
-      (monthOutlook(input({ today })) as { projectionBasis: string }).projectionBasis;
-    expect(basisOn("2026-06-01")).toBe("usual-month");
-    expect(basisOn("2026-06-06")).toBe("usual-month");
-    expect(basisOn("2026-06-07")).toBe("this-month-pace");
-    expect(basisOn("2026-06-29")).toBe("this-month-pace");
+  it("reports as basis whichever side contributes more to the projected spend", () => {
+    // Usual month 3000 → 100/day. Steady 150/day this month.
+    const basisOn = (day: number) =>
+      (
+        monthOutlook(
+          input({
+            today: `2026-06-${String(day).padStart(2, "0")}`,
+            history: flatHistory(3000),
+            rows: [spend("2026-06-01", 150 * day)],
+          }),
+        ) as { projectionBasis: string }
+      ).projectionBasis;
+    expect(basisOn(3)).toBe("usual-month");
+    expect(basisOn(10)).toBe("this-month-pace");
+    expect(basisOn(20)).toBe("this-month-pace");
+  });
+
+  it("does not let one large first-day purchase drive the projection", () => {
+    // Day 1: a 2000 purchase is not a 2000/day pace. The usual month (100/day) dominates.
+    const outlook = monthOutlook(
+      input({
+        today: "2026-06-01",
+        target: 6000,
+        history: flatHistory(3000),
+        rows: [spend("2026-06-01", 2000)],
+      }),
+    );
+    const active = outlook as Extract<typeof outlook, { state: "active" }>;
+    expect(active.projectionBasis).toBe("usual-month");
+    expect(active.crossingDate).toBeNull();
+    expect(active.projection!.total).toBeLessThan(6000);
+  });
+
+  it("takes only monthly recurring charges out of the usual month's variable rate", () => {
+    // Usual month 3000 holds one monthly 300 rent, so 2700 variable → 90/day; the
+    // quarterly 900 due this month is not in a usual month. Day 7 blends 90/day
+    // history with 0 variable pace: 45/day × 23 days, plus the 900 on the 25th.
+    const outlook = monthOutlook(
+      input({
+        today: "2026-06-07",
+        history: flatHistory(3000),
+        rows: [spend("2026-06-01", 300)],
+        recurring: [due("2026-06-01", 300, true), due("2026-06-25", 900, false, "quarterly")],
+      }),
+    );
+    expect(outlook).toMatchObject({ projection: { total: 2235 } });
+  });
+
+  it("states no crossing date when the projection lands exactly on the target", () => {
+    // Pace 2000 ÷ 20 = 100/day × 10 days → exactly 3000.
+    const outlook = monthOutlook(
+      input({ today: "2026-06-20", target: 3000, rows: [spend("2026-06-12", 2000)] }),
+    );
+    expect(outlook).toMatchObject({ projection: { total: 3000 }, crossingDate: null });
   });
 
   it("blends history and pace half-and-half on day 7", () => {

@@ -1,10 +1,11 @@
-import { min } from "drizzle-orm";
+import { eq, min } from "drizzle-orm";
 import { db } from "@/db";
-import { bankCredentials, transactions } from "@/db/schema";
+import { bankAccounts, bankCredentials, transactions } from "@/db/schema";
 import { getMonthTransactionDetails } from "@/lib/analytics";
 import { drizzleRecurringStore } from "@/lib/recurring-detection";
-// Deep import, as the other server readers of sync runs do: the sync barrel
+// Deep imports, as the other server readers of sync runs do: the sync barrel
 // loads the scraper.
+import { syncClaimHeldSince } from "@/lib/sync/process-claim";
 import {
   drizzleSyncRunStore,
   getFirstRecordedSuccessAt,
@@ -26,10 +27,13 @@ export function makeDrizzleMonthOutlookStore(
     // so every account grouped here is a current one.
     async accountHistoryStarts() {
       const rows = await db
-        .select({ earliest: min(transactions.date) })
+        .select({ credentialId: bankAccounts.credentialId, earliest: min(transactions.date) })
         .from(transactions)
-        .groupBy(transactions.bankAccountId);
-      return rows.flatMap((r) => (r.earliest ? [r.earliest] : []));
+        .innerJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
+        .groupBy(bankAccounts.id, bankAccounts.credentialId);
+      return rows.flatMap((r) =>
+        r.earliest ? [{ credentialId: r.credentialId, earliest: r.earliest }] : [],
+      );
     },
 
     expenseTarget,
@@ -60,7 +64,6 @@ export function makeDrizzleMonthOutlookStore(
     },
 
     async syncRunningSince() {
-      const { syncClaimHeldSince } = await import("@/lib/sync");
       return syncClaimHeldSince();
     },
   };
