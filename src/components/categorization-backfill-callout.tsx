@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CircleNotchIcon, RobotIcon, XIcon } from "@/components/icons";
+import { RobotIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { requestBackfill, type BackfillOutcomeView } from "@/components/backfill-response";
@@ -82,7 +82,6 @@ export function CategorizationBackfillCallout({
           disabled={running}
           className="bg-card h-11 shrink-0 self-end sm:h-9 sm:self-auto"
         >
-          {running && <CircleNotchIcon className="size-3.5 animate-spin" />}
           {running ? "מסווג..." : "סווג עם AI"}
         </Button>
       )}

@@ -16,10 +16,10 @@ import { FilterCategorySelectItems } from "@/components/grouped-category-select-
 import type { Category, CategoryTreeNode } from "@/lib/categories";
 import { NEEDS_REVIEW, UNCATEGORIZED, type TransactionsView } from "@/lib/transactions/view-params";
 import { cn } from "@/lib/utils";
+import { shortDay } from "./days";
+import { STATUS_LABELS } from "./row-parts";
 
 type Navigate = (patch: Partial<TransactionsView>, opts?: { replace?: boolean }) => void;
-
-const STATUS_LABELS: Record<string, string> = { completed: "הושלם", pending: "ממתין" };
 
 export function categoryFilterLabel(
   categoryId: string,
@@ -28,16 +28,6 @@ export function categoryFilterLabel(
   if (categoryId === UNCATEGORIZED) return "ללא קטגוריה";
   if (categoryId === NEEDS_REVIEW) return "ממתין לסקירה";
   return categoryById.get(categoryId)?.name ?? "קטגוריה";
-}
-
-const shortDate = new Intl.DateTimeFormat("he-IL", {
-  day: "numeric",
-  month: "numeric",
-  year: "2-digit",
-});
-function formatDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  return shortDate.format(new Date(y, m - 1, d));
 }
 
 /** The free-text search; typing settles into the URL after a short pause. */
@@ -84,13 +74,14 @@ function FilterFields({
   tree: CategoryTreeNode<Category>[];
   stacked: boolean;
 }) {
+  const id = React.useId();
   const control = stacked ? "h-11 w-full" : "h-9";
   const field = cn("flex flex-col gap-1.5", stacked && "w-full");
   const label = "text-caption text-muted-foreground font-medium";
   return (
     <>
       <div className={field}>
-        <span className={label} id={`cat-${stacked}`}>
+        <span className={label} id={`${id}-category`}>
           קטגוריה
         </span>
         <Select
@@ -98,7 +89,7 @@ function FilterFields({
           onValueChange={(v) => navigate({ categoryId: !v || v === "__all__" ? "" : v })}
         >
           <SelectTrigger
-            aria-labelledby={`cat-${stacked}`}
+            aria-labelledby={`${id}-category`}
             className={cn(control, !stacked && "w-48")}
           >
             <span className="truncate">
@@ -114,7 +105,7 @@ function FilterFields({
         </Select>
       </div>
       <div className={field}>
-        <span className={label} id={`status-${stacked}`}>
+        <span className={label} id={`${id}-status`}>
           סטטוס
         </span>
         <Select
@@ -122,7 +113,7 @@ function FilterFields({
           onValueChange={(v) => navigate({ status: !v || v === "__all__" ? "" : v })}
         >
           <SelectTrigger
-            aria-labelledby={`status-${stacked}`}
+            aria-labelledby={`${id}-status`}
             className={cn(control, !stacked && "w-32")}
           >
             <span>{STATUS_LABELS[view.status] ?? "הכל"}</span>
@@ -141,7 +132,7 @@ function FilterFields({
             type="date"
             value={view.dateFrom}
             max={view.dateTo || undefined}
-            onChange={(e) => navigate({ dateFrom: e.target.value })}
+            onChange={(e) => navigate({ dateFrom: e.target.value }, { replace: true })}
             className={cn(control, !stacked && "w-36")}
           />
         </label>
@@ -151,7 +142,7 @@ function FilterFields({
             type="date"
             value={view.dateTo}
             min={view.dateFrom || undefined}
-            onChange={(e) => navigate({ dateTo: e.target.value })}
+            onChange={(e) => navigate({ dateTo: e.target.value }, { replace: true })}
             className={cn(control, !stacked && "w-36")}
           />
         </label>
@@ -251,10 +242,10 @@ export function ActiveFilterChips({
   if (view.dateFrom || view.dateTo) {
     const label =
       view.dateFrom && view.dateTo
-        ? `${formatDay(view.dateFrom)} – ${formatDay(view.dateTo)}`
+        ? `${shortDay(view.dateFrom)} – ${shortDay(view.dateTo)}`
         : view.dateFrom
-          ? `מ־${formatDay(view.dateFrom)}`
-          : `עד ${formatDay(view.dateTo)}`;
+          ? `מ־${shortDay(view.dateFrom)}`
+          : `עד ${shortDay(view.dateTo)}`;
     chips.push({ key: "dates", label, clear: { dateFrom: "", dateTo: "" } });
   }
   if (view.search) chips.push({ key: "search", label: `”${view.search}“`, clear: { search: "" } });
@@ -268,7 +259,7 @@ export function ActiveFilterChips({
             type="button"
             onClick={() => navigate(chip.clear)}
             aria-label={`הסרת הסינון: ${chip.label}`}
-            className="bg-muted hover:bg-accent text-body focus-visible:ring-ring/50 inline-flex h-11 max-w-[16rem] items-center gap-1.5 rounded-full ps-3.5 pe-2.5 outline-none focus-visible:ring-3 lg:h-8"
+            className="bg-muted hover:bg-accent text-body focus-visible:ring-ring/50 inline-flex h-11 max-w-[16rem] items-center gap-1.5 rounded-lg ps-3.5 pe-2.5 outline-none focus-visible:ring-3 lg:h-8"
           >
             <span className="truncate">{chip.label}</span>
             <XIcon className="text-muted-foreground size-3.5 shrink-0" />

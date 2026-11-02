@@ -20,21 +20,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
-import { CADENCE_LABELS, CategoryPicker, PendingMark, displayName } from "./row-parts";
+import { cn } from "@/lib/utils";
+import { longDay } from "./days";
+import {
+  CADENCE_LABELS,
+  CategoryPicker,
+  PendingMark,
+  STATUS_LABELS,
+  displayName,
+  isOutsideTotals,
+  useBusy,
+} from "./row-parts";
 import type { TransactionActions } from "./use-transaction-actions";
 import type { Transaction } from "./types";
-
-const longDate = new Intl.DateTimeFormat("he-IL", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-
-function formatDay(day: string): string {
-  const [y, m, d] = day.slice(0, 10).split("-").map(Number);
-  return longDate.format(new Date(y, m - 1, d));
-}
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -99,27 +97,17 @@ function SheetBody({
   onClose: () => void;
 }) {
   const [draft, setDraft] = React.useState(tx.customDescription ?? "");
-  const [saving, setSaving] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
+  const [saving, runSave] = useBusy();
+  const [busy, run] = useBusy();
   const next = draft.trim() === "" ? null : draft.trim();
   const changed = next !== tx.customDescription;
 
-  async function run(fn: () => Promise<unknown>) {
-    setBusy(true);
-    try {
-      await fn();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function save(e: React.FormEvent) {
+  function save(e: React.FormEvent) {
     e.preventDefault();
     if (!changed) return onClose();
-    setSaving(true);
-    const ok = await actions.saveDescription(tx.id, next);
-    setSaving(false);
-    if (ok) onClose();
+    return runSave(async () => {
+      if (await actions.saveDescription(tx.id, next)) onClose();
+    });
   }
 
   const suggestion = tx.pendingSuggestion;
@@ -131,7 +119,7 @@ function SheetBody({
           {displayName(tx)}
         </DialogTitle>
         <DialogDescription>
-          {formatDay(tx.date)}
+          {longDay(tx.date)}
           {tx.status === "pending" && (
             <>
               {" · "}
@@ -146,7 +134,8 @@ function SheetBody({
           <Amount
             amount={tx.chargedAmount}
             currency={tx.chargedCurrency ?? "ILS"}
-            colorize={tx.chargedAmount > 0}
+            colorize={!isOutsideTotals(category) && tx.chargedAmount > 0}
+            className={cn(isOutsideTotals(category) && "text-muted-foreground")}
             size="headline"
             figure
           />
@@ -173,6 +162,7 @@ function SheetBody({
               tree={tree}
               category={category}
               onAssign={(id, categoryId) => run(() => actions.assignCategory(id, categoryId))}
+              disabled={busy}
               triggerClassName="h-11 w-full min-w-0 flex-1"
             />
           </div>
@@ -249,9 +239,9 @@ function SheetBody({
 
         <dl className="divide-border text-body divide-y">
           {tx.processedDate && tx.processedDate.slice(0, 10) !== tx.date.slice(0, 10) && (
-            <Fact label="תאריך חיוב">{formatDay(tx.processedDate)}</Fact>
+            <Fact label="תאריך חיוב">{longDay(tx.processedDate)}</Fact>
           )}
-          <Fact label="סטטוס">{tx.status === "pending" ? "ממתין" : "הושלם"}</Fact>
+          <Fact label="סטטוס">{STATUS_LABELS[tx.status]}</Fact>
           {tx.type === "installments" &&
             tx.installmentNumber != null &&
             tx.installmentTotal != null && (
@@ -288,7 +278,7 @@ function SheetBody({
         </dl>
 
         {actions.error && (
-          <p role="alert" className="text-body text-destructive">
+          <p role="alert" className="text-body text-attention-text">
             {actions.error}
           </p>
         )}

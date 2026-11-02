@@ -38,8 +38,10 @@ export function recurringLabel(re: NonNullable<Transaction["recurringExpense"]>)
   return `הוצאה חוזרת: ${re.merchant} (${CADENCE_LABELS[re.cadence]})`;
 }
 
+export const STATUS_LABELS: Record<string, string> = { completed: "הושלם", pending: "ממתין" };
+
 /** Transfers and ignored rows are outside every total (CONTEXT.md), so their amount recedes. */
-function isOutsideTotals(category: Category | undefined): boolean {
+export function isOutsideTotals(category: Category | undefined): boolean {
   return category?.type === "transfer" || category?.type === "ignore";
 }
 
@@ -140,6 +142,7 @@ export function CategoryPicker({
   onAssign,
   triggerClassName,
   id,
+  disabled,
 }: {
   tx: Transaction;
   tree: CategoryTreeNode<Category>[];
@@ -147,9 +150,11 @@ export function CategoryPicker({
   onAssign: (id: string, categoryId: string) => void;
   triggerClassName?: string;
   id?: string;
+  disabled?: boolean;
 }) {
   return (
     <Select
+      disabled={disabled}
       value={tx.categoryId ?? "__none__"}
       onValueChange={(v) => {
         if (v && v !== "__none__") onAssign(tx.id, v);
@@ -168,7 +173,8 @@ export function CategoryPicker({
   );
 }
 
-function useBusy() {
+/** A pending flag around an async action, cleared even when the action throws. */
+export function useBusy() {
   const [busy, setBusy] = React.useState(false);
   const run = React.useCallback(async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -182,7 +188,7 @@ function useBusy() {
 }
 
 const ICON_BUTTON =
-  "text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex size-7 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-3 disabled:opacity-50";
+  "text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex size-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-3 disabled:opacity-50";
 
 /**
  * A pending AI suggestion (#149): accept writes the same user-tier memory as a

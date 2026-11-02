@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { groupByDay, dayLabel } from "../feed-days";
+import { groupByDay, dayLabel, shortDay, longDay } from "../days";
+
+describe("shortDay", () => {
+  it("writes a calendar date as two-digit day, month and year", () => {
+    expect(shortDay("2026-05-04")).toBe("04.05.26");
+  });
+});
+
+describe("longDay", () => {
+  it("writes a calendar date with weekday, month name and year", () => {
+    expect(longDay("2026-05-04")).toBe("יום שני, 4 במאי 2026");
+  });
+});
 
 describe("groupByDay", () => {
   it("groups consecutive rows of the same date, keeping the listing's order", () => {

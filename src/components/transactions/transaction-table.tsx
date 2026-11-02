@@ -21,17 +21,7 @@ import {
 } from "./row-parts";
 import type { TransactionActions } from "./use-transaction-actions";
 import type { Transaction } from "./types";
-
-const shortDate = new Intl.DateTimeFormat("he-IL", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "2-digit",
-});
-
-function formatDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  return shortDate.format(new Date(y, m - 1, d));
-}
+import { shortDay } from "./days";
 
 /**
  * The desktop layout: a dense, fixed-layout table whose amounts sit in one
@@ -99,7 +89,7 @@ export function TransactionTable({
                   />
                 </TableCell>
                 <TableCell className="text-muted-foreground tabular-nums">
-                  {formatDay(tx.date)}
+                  {shortDay(tx.date)}
                 </TableCell>
                 <TableCell className="py-1.5">
                   <button

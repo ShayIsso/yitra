@@ -22,6 +22,7 @@ import { PAGE_SIZES, UNCATEGORIZED } from "@/lib/transactions/view-params";
 import { cn } from "@/lib/utils";
 import { ActiveFilterChips, FilterControls, SearchField, hasActiveFilters } from "./filters";
 import { LoadError, ListSkeleton, NoMatches, NoTransactions } from "./states";
+import { useBusy } from "./row-parts";
 import { TransactionFeed } from "./transaction-feed";
 import { TransactionSheet } from "./transaction-sheet";
 import { TransactionTable } from "./transaction-table";
@@ -58,7 +59,7 @@ export function TransactionsPage({
   const selected = selection.key === viewKey ? selection.ids : new Set<string>();
   const [selecting, setSelecting] = React.useState(false);
   const [bulkCategoryId, setBulkCategoryId] = React.useState("");
-  const [bulkApplying, setBulkApplying] = React.useState(false);
+  const [bulkApplying, runBulk] = useBusy();
   const [openId, setOpenId] = React.useState<string | null>(null);
 
   function setSelected(ids: Set<string>) {
@@ -79,12 +80,11 @@ export function TransactionsPage({
     setSelecting(false);
     setBulkCategoryId("");
   }
-  async function applyBulk() {
+  function applyBulk() {
     if (!bulkCategoryId || selected.size === 0) return;
-    setBulkApplying(true);
-    const ok = await actions.bulkCategorize(Array.from(selected), bulkCategoryId);
-    setBulkApplying(false);
-    if (ok) endSelection();
+    return runBulk(async () => {
+      if (await actions.bulkCategorize(Array.from(selected), bulkCategoryId)) endSelection();
+    });
   }
 
   function clearFilters() {
@@ -358,16 +358,12 @@ function UndoButton({
   label: string;
   busyLabel: string;
 }) {
-  const [busy, setBusy] = React.useState(false);
+  const [busy, run] = useBusy();
   return (
     <Button
       variant="outline"
       disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        await onUndo();
-        setBusy(false);
-      }}
+      onClick={() => run(onUndo)}
       className="bg-card h-11 lg:h-9"
     >
       {busy ? busyLabel : label}

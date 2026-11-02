@@ -45,7 +45,6 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   ArrowCounterClockwise: ["regular"],
   LinkSimple: ["regular"],
   Robot: ["regular"],
-  CircleNotch: ["regular"],
 
   // Categorization provider choices (off, local, external)
   Prohibit: ["regular"],

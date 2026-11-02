@@ -1,8 +1,8 @@
 /**
  * The transactions page's URL contract: which filtered, paged view a
  * `/transactions?…` link opens. The page reads its whole view from the URL,
- * so reload and back/forward keep it, and other surfaces (home insights, the
- * command palette) deep-link with `transactionsHref`. The query names are the
+ * so reload and back/forward keep it, and any other surface can deep-link to
+ * a filtered view with `transactionsHref`. The query names are the
  * listing API's own (`transactionFiltersSchema`), plus a `month` shorthand.
  * No DB import, so client components may import it.
  */
