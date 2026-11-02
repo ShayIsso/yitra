@@ -199,22 +199,10 @@ export function ConnectedSummary({
             </p>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              size="lg"
-              className="min-h-11"
-              onClick={() => setTarget(null)}
-              disabled={removing}
-            >
+            <Button variant="outline" onClick={() => setTarget(null)} disabled={removing}>
               ביטול
             </Button>
-            <Button
-              variant="destructive"
-              size="lg"
-              className="min-h-11"
-              onClick={confirmRemove}
-              disabled={removing}
-            >
+            <Button variant="destructive" onClick={confirmRemove} disabled={removing}>
               {removing ? "מסיר..." : "הסרה"}
             </Button>
           </DialogFooter>
