@@ -22,6 +22,7 @@ import {
   outflowContribution,
   type AnalyticsTransaction,
 } from "@/lib/analytics";
+import type { reconciliationRoleEnum } from "@/db/schema";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 
 /**
@@ -67,7 +68,7 @@ export type OutlookRow = {
   chargedAmount: number;
   status: "pending" | "completed";
   categoryType: AnalyticsTransaction["categoryType"];
-  reconciliationRole: "settlement_lump" | "settlement_detail" | "transfer_pair" | null;
+  reconciliationRole: (typeof reconciliationRoleEnum.enumValues)[number] | null;
 };
 
 /** One live recurring series' charge for the month (CONTEXT.md "projected charge"). */
@@ -187,10 +188,16 @@ const israelDay = new Intl.DateTimeFormat("en-CA", {
  * The outlook's "today": the calendar day in Israel, where the owner and the
  * banks are. A UTC day would still be yesterday for the first two or three
  * hours of each local day, and on the 1st would refuse the month that just
- * began.
+ * began. The older budgets reads (`getExpenseTargetPace`, budget statuses)
+ * still take the UTC day.
  */
 export function outlookToday(now: Date): string {
   return israelDay.format(now);
+}
+
+/** Whether `month` has begun on the outlook's calendar day — the outlook's precondition. */
+export function hasOutlookMonthStarted(month: YearMonth, now: Date): boolean {
+  return monthElapsed(month, outlookToday(now)).dayOfMonth > 0;
 }
 
 function toAgorot(amount: number): number {
@@ -214,12 +221,12 @@ function isoDay(month: YearMonth, day: number): string {
 function countedRows(rows: readonly OutlookRow[], month: YearMonth, throughDate: string) {
   const prefix = `${monthKey(month)}-`;
   return rows.filter(
-    (r) =>
-      r.date.startsWith(prefix) &&
-      r.date <= throughDate &&
-      r.reconciliationRole !== "settlement_lump",
+    (r) => r.date.startsWith(prefix) && r.date <= throughDate && !isSettlementLump(r),
   );
 }
+
+const isSettlementLump = (row: Pick<OutlookRow, "reconciliationRole">): boolean =>
+  row.reconciliationRole === "settlement_lump";
 
 /**
  * Whether a row adds to the month's spend under the outlook's rules: an
@@ -227,7 +234,7 @@ function countedRows(rows: readonly OutlookRow[], month: YearMonth, throughDate:
  * series has arrived only through such a row.
  */
 export function countsAsSpend(row: Pick<OutlookRow, "categoryType" | "reconciliationRole">) {
-  return row.categoryType === "expense" && row.reconciliationRole !== "settlement_lump";
+  return row.categoryType === "expense" && !isSettlementLump(row);
 }
 
 /** A whole month by the outlook's rules. */

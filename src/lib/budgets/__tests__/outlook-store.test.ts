@@ -89,6 +89,8 @@ function store(
     banks: string[];
     lastRuns: SyncRunSummary[];
     successes: { bank: string; finishedAt: Date }[];
+    /** Defaults to the earliest of `successes`. */
+    firstSuccess: Date | null;
     runningSince: Date | null;
   }> = {},
 ): MonthOutlookStore & { windows: [string, string][] } {
@@ -131,6 +133,11 @@ function store(
     },
     async lastRecordedSuccessPerBank() {
       return data.successes;
+    },
+    async firstRecordedSuccessAt() {
+      if (over.firstSuccess !== undefined) return over.firstSuccess;
+      const times = data.successes.map((s) => s.finishedAt.getTime());
+      return times.length === 0 ? null : new Date(Math.min(...times));
     },
     async syncRunningSince() {
       return data.runningSince;
@@ -267,6 +274,47 @@ describe("getMonthOutlookWithStore", () => {
     expect(outlook).toMatchObject({
       spent: 0,
       dueCharges: [{ amount: 150, expectedDate: "2026-06-20", late: false }],
+    });
+  });
+
+  it("finds this month's charge of a series the bank already lists into later months", async () => {
+    const june = stored("Invented Sofa", "2026-06-20", 400);
+    const july = stored("Invented Sofa", "2026-07-20", 400);
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        rows: [june.row, july.row],
+        patterns: [series("Invented Sofa")],
+        detection: [charge("Invented Sofa", "2026-05-20", 400), june.evidence, july.evidence],
+      }),
+    );
+    expect(outlook).toMatchObject({
+      spent: 0,
+      dueRecurring: 400,
+      dueCharges: [{ amount: 400, expectedDate: "2026-06-20", late: false }],
+    });
+  });
+
+  it("stays first-sync while the first run is still going, even after a bank finished", async () => {
+    const runStart = new Date("2026-06-15T08:50:00Z");
+    const finished = new Date("2026-06-15T08:58:00Z");
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        runningSince: runStart,
+        successes: [{ bank: "discount", finishedAt: finished }],
+        firstSuccess: finished,
+        lastRuns: [
+          run("discount", finished, new Date("2026-06-15T08:51:00Z")),
+          run("max", null, new Date("2026-06-15T08:59:00Z")),
+        ],
+      }),
+    );
+    expect(outlook).toEqual({
+      state: "first-sync",
+      progress: { running: true, banksDone: 1, banksTotal: 2 },
     });
   });
 

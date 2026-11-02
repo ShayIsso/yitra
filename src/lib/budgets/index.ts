@@ -7,15 +7,9 @@
  * analytics uses, so budget numbers always agree with the Dashboard.
  */
 import { db } from "@/db";
-import { transactions, categories, monthlyTargets, bankCredentials } from "@/db/schema";
-import { and, gte, lte, eq, min } from "drizzle-orm";
+import { categories, monthlyTargets } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { getMonthlySummary, getMonthTransactionDetails } from "@/lib/analytics";
-import { drizzleRecurringStore } from "@/lib/recurring-detection";
-import {
-  drizzleSyncRunStore,
-  getLastRecordedSuccessPerBank,
-  getLastRunPerBank,
-} from "@/lib/sync/runs";
 import {
   createBudgetWithStore,
   updateBudgetWithStore,
@@ -38,7 +32,8 @@ import {
   type YearMonth,
 } from "./pace";
 import { outlookToday, type MonthOutlook } from "./outlook";
-import { getMonthOutlookWithStore, type MonthOutlookStore } from "./outlook-store";
+import { getMonthOutlookWithStore } from "./outlook-store";
+import { makeDrizzleMonthOutlookStore } from "./outlook-drizzle-store";
 
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
 export type { StoredBudget, BudgetWriteData, BudgetChanges, BudgetStore } from "./store";
@@ -64,7 +59,7 @@ export {
 
 export {
   monthOutlook,
-  outlookToday,
+  hasOutlookMonthStarted,
   STALE_SYNC_AFTER_MS,
   THIN_HISTORY_MIN_FULL_MONTHS,
   type MonthOutlook,
@@ -133,7 +128,7 @@ export async function getMonthOutlook(year: number, month: number): Promise<Mont
   return getMonthOutlookWithStore(
     { year, month },
     { today: outlookToday(now), now },
-    drizzleMonthOutlookStore,
+    makeDrizzleMonthOutlookStore(async () => (await getMonthlyTargets()).expenseTarget),
   );
 }
 
@@ -243,66 +238,3 @@ export async function getExpenseTargetPace(
 
   return evaluateExpenseTargetPace(expenseTarget, monthExpenses, elapsed);
 }
-
-const drizzleMonthOutlookStore: MonthOutlookStore = {
-  async loadRows(from, to) {
-    const rows = await db
-      .select({
-        id: transactions.id,
-        date: transactions.date,
-        description: transactions.description,
-        chargedAmount: transactions.chargedAmount,
-        status: transactions.status,
-        categoryType: categories.type,
-        reconciliationRole: transactions.reconciliationRole,
-      })
-      .from(transactions)
-      .leftJoin(categories, eq(transactions.categoryId, categories.id))
-      .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-
-    return rows.map((r) => ({
-      ...r,
-      chargedAmount: Number(r.chargedAmount),
-      categoryType: r.categoryType ?? null,
-    }));
-  },
-
-  async accountHistoryStarts() {
-    const rows = await db
-      .select({ earliest: min(transactions.date) })
-      .from(transactions)
-      .groupBy(transactions.bankAccountId);
-    return rows.flatMap((r) => (r.earliest ? [r.earliest] : []));
-  },
-
-  async expenseTarget() {
-    return (await getMonthlyTargets()).expenseTarget;
-  },
-
-  async recurring() {
-    const [patterns, txns] = await Promise.all([
-      drizzleRecurringStore.getPersistedPatterns(),
-      drizzleRecurringStore.getTransactionsForDetection(),
-    ]);
-    return { patterns, transactions: txns };
-  },
-
-  async credentialBankTypes() {
-    const rows = await db.select({ bankType: bankCredentials.bankType }).from(bankCredentials);
-    return rows.map((r) => r.bankType);
-  },
-
-  lastRunPerBank() {
-    return getLastRunPerBank(drizzleSyncRunStore);
-  },
-
-  lastRecordedSuccessPerBank() {
-    return getLastRecordedSuccessPerBank();
-  },
-
-  async syncRunningSince() {
-    // Lazy: the sync barrel pulls in the scraper, which no budgets read needs loaded.
-    const { syncClaimHeldSince } = await import("@/lib/sync");
-    return syncClaimHeldSince();
-  },
-};

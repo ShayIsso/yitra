@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError, z } from "zod";
-import { getMonthOutlook, outlookToday } from "@/lib/budgets";
+import { getMonthOutlook, hasOutlookMonthStarted } from "@/lib/budgets";
 import { formatZodError } from "@/lib/api-utils";
 
 const querySchema = z
@@ -16,13 +16,9 @@ const querySchema = z
       .min(1, "חודש לא תקין")
       .max(12, "חודש לא תקין"),
   })
-  .refine(
-    ({ year, month }) => {
-      const [ty, tm] = outlookToday(new Date()).split("-").map(Number);
-      return year * 12 + month <= ty * 12 + tm;
-    },
-    { message: "החודש עוד לא התחיל" },
-  );
+  .refine((month) => hasOutlookMonthStarted(month, new Date()), {
+    message: "החודש עוד לא התחיל",
+  });
 
 /** The month outlook (#312): what's left of the month's expense target, as of the last sync. */
 export async function GET(request: Request) {
