@@ -95,11 +95,19 @@ export function createReviewStore(client: DbClient = db): ReviewStore {
  * pending-review suggestion. Mirrors merchant-memory's `overwriteLawSql` —
  * the single Drizzle expression of the filter, owned where the underlying
  * table (ai_suggestions) is owned, reused at the transactions list seam.
+ *
+ * The suggestion columns are written through an explicit alias, not as column
+ * objects: the transactions listing runs this inside Drizzle's relational
+ * builder (`db.query.transactions.findMany`), which rewrites every column
+ * object in a `where` onto the transactions alias, turning
+ * `ai_suggestions.transaction_id` into a non-existent
+ * `transactions.transaction_id` (needs-review.pg.test.ts).
  */
 export function needsReviewSql(): SQL {
+  const col = (c: { name: string }) => sql`s.${sql.identifier(c.name)}`;
   return sql`exists (
-    select 1 from ${aiSuggestions}
-    where ${aiSuggestions.transactionId} = ${transactions.id}
-      and ${aiSuggestions.status} = 'pending_review'
+    select 1 from ${aiSuggestions} s
+    where ${col(aiSuggestions.transactionId)} = ${transactions.id}
+      and ${col(aiSuggestions.status)} = 'pending_review'
   )`;
 }

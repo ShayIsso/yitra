@@ -248,7 +248,7 @@ export function ActiveFilterChips({
           : `עד ${shortDay(view.dateTo)}`;
     chips.push({ key: "dates", label, clear: { dateFrom: "", dateTo: "" } });
   }
-  if (view.search) chips.push({ key: "search", label: `”${view.search}“`, clear: { search: "" } });
+  if (view.search) chips.push({ key: "search", label: `"${view.search}"`, clear: { search: "" } });
   if (chips.length === 0) return null;
 
   return (
