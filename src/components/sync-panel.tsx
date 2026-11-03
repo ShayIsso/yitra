@@ -15,6 +15,7 @@ import {
   WarningCircleIcon,
 } from "@/components/icons";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BankBadge } from "@/components/bank-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
@@ -393,6 +394,45 @@ function SyncHeader({ children }: { children?: React.ReactNode }) {
       </div>
       {children}
     </header>
+  );
+}
+
+/** The page while its runs load, laid out like the populated page: header, then the account rows. */
+export function SyncPanelSkeleton() {
+  return (
+    <div aria-busy="true" className="flex max-w-3xl flex-col gap-6">
+      <span role="status" className="sr-only">
+        טוען את עמוד הסנכרון
+      </span>
+      <SyncHeader>
+        <Skeleton className="h-11 w-full rounded-lg sm:w-32 md:h-10" />
+      </SyncHeader>
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lead font-semibold">חשבונות</h2>
+        <Card className="gap-0 py-0">
+          <div className="divide-border divide-y">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <Skeleton className="size-10 shrink-0 rounded-full" />
+                  <div className="flex flex-col gap-1">
+                    <Skeleton className="h-6 w-36" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col items-start gap-0.5 ps-13 sm:ps-0">
+                  <Skeleton className="h-[1.375rem] w-36" />
+                  <Skeleton className="ms-5.5 h-4 w-16" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
   );
 }
 

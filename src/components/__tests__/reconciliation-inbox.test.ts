@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ReconciliationInbox } from "@/components/reconciliation-inbox";
+import {
+  ReconciliationInbox,
+  ReconciliationInboxSkeleton,
+} from "@/components/reconciliation-inbox";
 import type { PendingGroup, PendingMember } from "@/components/reconciliation-group-view";
 
 vi.mock("next/navigation", () => ({
@@ -46,5 +49,15 @@ describe("the inbox's bulk toolbar", () => {
 
     expect(html).toContain("בחר הכל");
     expect(html).toContain("אשר נבחרים");
+  });
+});
+
+describe("the inbox's loading skeleton", () => {
+  it("keeps the page heading and announces that the inbox is loading", () => {
+    const html = renderToStaticMarkup(createElement(ReconciliationInboxSkeleton));
+
+    expect(html).toMatch(/<h1[^>]*>תיבת ההתאמות<\/h1>/);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toMatch(/role="status"[^>]*>טוען את תיבת ההתאמות</);
   });
 });
