@@ -124,6 +124,18 @@ describe("monthLoadView", () => {
     expect(view).toEqual({ data: "oct", current: true, failed: false, pending: false });
   });
 
+  it("loads afresh, not as a failure, when the owner comes back to a month that failed earlier", () => {
+    const view = monthLoadView(
+      run([
+        request(1, "2026-11"),
+        fail(1, "2026-11"),
+        request(2, "2026-10"),
+        request(3, "2026-11"),
+      ]),
+    );
+    expect(view).toEqual({ data: null, current: false, failed: false, pending: true });
+  });
+
   it("is pending again while a failed month retries", () => {
     const view = monthLoadView(
       run([request(1, "2026-11"), fail(1, "2026-11"), request(2, "2026-11")]),

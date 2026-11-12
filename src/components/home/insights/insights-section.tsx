@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HEBREW_MONTHS_SHORT, monthKey } from "@/components/reports/format";
-import type { Insight, InsightFacts, InsightMonth } from "@/lib/analytics/insights";
+import { monthPosition, type Insight, type InsightMonth } from "@/lib/analytics/insights";
 import { cn } from "@/lib/utils";
 import { monthName } from "../month";
 import { useMonthLoad } from "../month-load";
@@ -21,8 +21,8 @@ import { INSIGHT_CARD_SIZE, InsightCard, type CardInsight } from "./insight-card
 
 type RecapInsight = Extract<Insight, { kind: "recap" }>;
 
-/** `/api/insights` as the row reads it: the selected cards, and the day they were judged on. */
-type InsightsResponse = { facts: Pick<InsightFacts, "today">; insights: Insight[] };
+/** `/api/insights`: the selected cards (the recap carries its whole fact), and the day they were judged on. */
+type InsightsResponse = { today: string; insights: Insight[] };
 
 // The recap story, the dialog primitive and everything else it draws load
 // only when the owner opens it (or reaches for it), never with the home route.
@@ -80,7 +80,7 @@ export const InsightsSection = React.memo(function InsightsSection({
         <InsightsRow
           insights={data.insights}
           month={month}
-          today={data.facts.today}
+          today={data.today}
           labelledBy={titleId}
           rowRef={setRow}
         />
@@ -108,7 +108,12 @@ function ScrollButtons({ row }: { row: HTMLDivElement }) {
     // RTL: scrollLeft is 0 at the first card and grows negative toward the last.
     const measure = () => {
       const max = row.scrollWidth - row.clientWidth;
-      setEdges({ atStart: row.scrollLeft > -1, atEnd: row.scrollLeft < -max + 1 });
+      const atStart = row.scrollLeft > -1;
+      const atEnd = row.scrollLeft < -max + 1;
+      // Scroll fires every frame; only an edge reached or left re-renders.
+      setEdges((prev) =>
+        prev.atStart === atStart && prev.atEnd === atEnd ? prev : { atStart, atEnd },
+      );
     };
     measure();
     row.addEventListener("scroll", measure, { passive: true });
@@ -173,7 +178,9 @@ function InsightsRow({
   const recapCardRef = React.useRef<HTMLButtonElement>(null);
   const recapInsight = insights.find((i): i is RecapInsight => i.kind === "recap") ?? null;
 
-  if (insights.length === 0) return <InsightsEmpty />;
+  if (insights.length === 0) {
+    return <InsightsEmpty current={monthPosition(month, today).phase === "current"} />;
+  }
   return (
     <>
       {/* Focusable so the row scrolls from the keyboard even when its cards aren't links. */}
@@ -274,17 +281,21 @@ function InsightsSkeleton() {
   );
 }
 
-function InsightsEmpty() {
+/** Closed months never get card-debit, budget or upcoming-bill cards, so their copy names only what can still come. */
+function InsightsEmpty({ current }: { current: boolean }) {
   return (
     <Card className="my-1 h-44 flex-row items-center gap-3 p-4">
       <span className="bg-muted grid size-9 shrink-0 place-items-center rounded-full">
         <CheckCircleIcon weight="fill" className="size-5" />
       </span>
       <div className="flex flex-col gap-1">
-        <p className="text-body font-semibold">אין כרגע משהו שמחכה לך</p>
+        <p className="text-body font-semibold">
+          {current ? "אין כרגע משהו שמחכה לך" : "אין תובנות לחודש הזה"}
+        </p>
         <p className="text-body text-muted-foreground max-w-prose text-pretty">
-          חיובי אשראי קרובים, עסקאות שמחכות לסיווג, תקציבים בסיכון ושינויים בולטים בהוצאות יופיעו
-          כאן.
+          {current
+            ? "חיובי אשראי קרובים, עסקאות שמחכות לסיווג, תקציבים בסיכון ושינויים בולטים בהוצאות יופיעו כאן."
+            : "עסקאות שמחכות לסיווג, ההוצאה הגדולה של החודש ושינויים בולטים מול החודש שלפניו יופיעו כאן."}
         </p>
       </div>
     </Card>

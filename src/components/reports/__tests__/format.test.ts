@@ -4,6 +4,8 @@ import {
   formatPercent,
   formatPointsDelta,
   formatSignedPercent,
+  parseReportMonthParam,
+  reportsMonthHref,
 } from "@/components/reports/format";
 import { computeMonthlySummary } from "@/lib/analytics";
 
@@ -57,5 +59,23 @@ describe("signed figures in RTL", () => {
   it("keeps a negative savings rate's minus anchored and a positive one unsigned", () => {
     expect(formatPercent(-15)).toBe(`${LRM}-15%`);
     expect(formatPercent(23)).toBe("23%");
+  });
+});
+
+describe("reports month link", () => {
+  it("links to one month's report", () => {
+    expect(reportsMonthHref({ year: 2026, month: 3 })).toBe("/reports?month=2026-03");
+  });
+
+  it("reads the month a link names", () => {
+    expect(parseReportMonthParam("2026-03")).toBe("2026-03");
+  });
+
+  it("reads nothing from an absent or malformed month, so the default month opens", () => {
+    expect(parseReportMonthParam(null)).toBeNull();
+    expect(parseReportMonthParam("2026-13")).toBeNull();
+    expect(parseReportMonthParam("2026-00")).toBeNull();
+    expect(parseReportMonthParam("2026-3")).toBeNull();
+    expect(parseReportMonthParam("march")).toBeNull();
   });
 });

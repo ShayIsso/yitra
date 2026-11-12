@@ -15,6 +15,8 @@ import { Amount } from "@/components/ui/amount";
 import { Card } from "@/components/ui/card";
 import { monthPosition, type Insight, type InsightMonth } from "@/lib/analytics/insights";
 import { cn } from "@/lib/utils";
+import { formatDayMonth } from "../format";
+import { HeroAmount } from "../hero-states";
 import { CategoryGlyph } from "./category-glyph";
 import { cardDebitLines, insightHref, isAttentionInsight } from "./insight-view";
 
@@ -23,17 +25,7 @@ export const INSIGHT_CARD_SIZE = "h-44 w-60 shrink-0 snap-start";
 
 export type CardInsight = Exclude<Insight, { kind: "recap" }>;
 
-/** "10.11": client-only formatting (hydration rule, CLAUDE.md). */
-function dayMonth(isoDate: string): string {
-  const [, month, day] = isoDate.split("-").map(Number);
-  return `${day}.${month}`;
-}
-
 const COUNT = new Intl.NumberFormat("he-IL");
-
-function Money({ amount, className }: { amount: number; className?: string }) {
-  return <Amount amount={amount} colorize={false} fractionDigits={0} className={className} />;
-}
 
 function Value({ amount }: { amount: number }) {
   return <Amount amount={amount} size="title" figure colorize={false} fractionDigits={0} />;
@@ -137,8 +129,8 @@ function cardContent(
                   className="text-caption text-muted-foreground flex gap-1 tabular-nums"
                 >
                   <span className="truncate">{c.displayName}</span>
-                  <span className="shrink-0">· {dayMonth(c.date)}</span>
-                  {several && <Money amount={c.amount} className="ms-auto shrink-0" />}
+                  <span className="shrink-0">· {formatDayMonth(c.date)}</span>
+                  {several && <HeroAmount amount={c.amount} className="ms-auto shrink-0" />}
                 </li>
               ))}
               {more > 0 && (
@@ -193,8 +185,8 @@ function cardContent(
             </Eyebrow>
             <Title>{first.categoryName}</Title>
             <p className="text-body text-muted-foreground tabular-nums">
-              <Money amount={first.spent} className="text-foreground font-semibold" /> מתוך{" "}
-              <Money amount={first.limit} />
+              <HeroAmount amount={first.spent} className="text-foreground font-semibold" /> מתוך{" "}
+              <HeroAmount amount={first.limit} />
             </p>
           </>
         ),
@@ -238,7 +230,7 @@ function cardContent(
               <Value amount={insight.change} />
             </p>
             <Caption>
-              <Money amount={insight.amount} /> לעומת <Money amount={insight.previous} />
+              <HeroAmount amount={insight.amount} /> לעומת <HeroAmount amount={insight.previous} />
             </Caption>
           </>
         ),
@@ -252,7 +244,7 @@ function cardContent(
             <p className="text-body truncate font-semibold">{insight.description}</p>
             <Value amount={insight.amount} />
             <Caption>
-              {dayMonth(insight.date)}
+              {formatDayMonth(insight.date)}
               {insight.categoryName && ` · ${insight.categoryName}`}
             </Caption>
           </>

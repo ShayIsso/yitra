@@ -43,6 +43,19 @@ export function monthKey(m: YearMonth): string {
   return `${m.year}-${String(m.month).padStart(2, "0")}`;
 }
 
+/** The reports page opened on one month's report (`/reports?month=YYYY-MM`). */
+export function reportsMonthHref(m: YearMonth): string {
+  return `/reports?month=${monthKey(m)}`;
+}
+
+/**
+ * The month key a `/reports?month=` value names, or null when it is absent or
+ * malformed, in which case the page opens on its default month.
+ */
+export function parseReportMonthParam(value: string | null): string | null {
+  return value !== null && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : null;
+}
+
 export function monthLabel(m: YearMonth): string {
   return `${HEBREW_MONTHS[m.month - 1]} ${m.year}`;
 }

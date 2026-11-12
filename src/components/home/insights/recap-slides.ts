@@ -1,4 +1,5 @@
 import type { RecapFact } from "@/lib/analytics/insights";
+import { formatPercent } from "@/components/reports/format";
 
 /**
  * One card of the month recap story. Every figure is a field of the
@@ -65,4 +66,16 @@ export function recapSlides(recap: RecapFact): RecapSlide[] {
   }
   slides.push({ kind: "verdict", verdict: recap.verdict });
   return slides;
+}
+
+/**
+ * The headline card's sentence. A positive net with no savings rate means no
+ * income came in at all: refunds outweighed the month's charges, so the
+ * sentence must not speak of income kept.
+ */
+export function headlineLine(slide: Extract<RecapSlide, { kind: "headline" }>): string {
+  if (slide.netSavings < 0) return "יצא יותר ממה שנכנס.";
+  if (slide.netSavings === 0) return "ההכנסות וההוצאות התקזזו.";
+  if (slide.savingsRate === null) return "לא נכנסו הכנסות, וההחזרים עלו על החיובים.";
+  return `נשאר לך מההכנסות: ${formatPercent(slide.savingsRate)} מהן.`;
 }

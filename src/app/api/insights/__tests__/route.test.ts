@@ -66,6 +66,15 @@ describe("GET /api/insights", () => {
     );
   });
 
+  it("answers with the cards and the day they were judged on, keeping the reduced facts server-side", async () => {
+    vi.setSystemTime(new Date("2026-06-15T09:00:00Z"));
+    const res = await get("?year=2026&month=6");
+    const body = await res.json();
+    expect(Object.keys(body).sort()).toEqual(["insights", "today"]);
+    expect(body.today).toBe("2026-06-15");
+    expect(body.insights).toEqual([]);
+  });
+
   it("rejects an invalid month with a 400", async () => {
     vi.setSystemTime(new Date("2026-06-15T09:00:00Z"));
     const res = await get("?year=2026&month=13");

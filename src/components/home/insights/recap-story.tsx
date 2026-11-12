@@ -5,19 +5,14 @@ import Link from "next/link";
 import { CaretLeftIcon, CaretRightIcon, XIcon } from "@/components/icons";
 import { Amount } from "@/components/ui/amount";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { formatPercent, monthLabel } from "@/components/reports/format";
+import { formatPercent, monthLabel, reportsMonthHref } from "@/components/reports/format";
 import { previousMonth, type RecapFact } from "@/lib/analytics/insights";
 import { cn } from "@/lib/utils";
-import { HERO_BUTTON, HERO_QUIET_BUTTON } from "../hero-states";
+import { HERO_BUTTON, HERO_QUIET_BUTTON, HeroAmount } from "../hero-states";
 import { monthName } from "../month";
-import { recapSlides, type RecapSlide } from "./recap-slides";
+import { headlineLine, recapSlides, type RecapSlide } from "./recap-slides";
 
 const QUIET_BUTTON = cn(HERO_QUIET_BUTTON, "justify-center disabled:opacity-40");
-
-/** Hero money: whole shekels in the hero's own ink (pos/neg are not checked on the teal). */
-function Money({ amount, className }: { amount: number; className?: string }) {
-  return <Amount amount={amount} colorize={false} fractionDigits={0} className={className} />;
-}
 
 function Figure({ amount }: { amount: number }) {
   return <Amount amount={amount} size="headline" figure colorize={false} fractionDigits={0} />;
@@ -46,6 +41,13 @@ export default function RecapStory({
 }) {
   const slides = React.useMemo(() => recapSlides(recap), [recap]);
   const [index, setIndex] = React.useState(0);
+  // Every opening starts from the first card, even one that interrupts the
+  // closing animation (the dialog stays mounted between openings).
+  const [openSeen, setOpenSeen] = React.useState(open);
+  if (open !== openSeen) {
+    setOpenSeen(open);
+    if (open) setIndex(0);
+  }
   const nextRef = React.useRef<HTMLButtonElement>(null);
   const at = Math.min(index, slides.length - 1);
   const slide = slides[at];
@@ -56,14 +58,7 @@ export default function RecapStory({
   const forward = () => (last ? onOpenChange(false) : step(1));
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      // Each opening starts the story from its first card.
-      onOpenChangeComplete={(next) => {
-        if (!next) setIndex(0);
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
         initialFocus={nextRef}
@@ -165,15 +160,9 @@ function SlideBody({
         <>
           <Eyebrow>השורה התחתונה של {name}</Eyebrow>
           <Figure amount={slide.netSavings} />
-          <Line>
-            {slide.netSavings > 0
-              ? `נשאר לך מההכנסות${slide.savingsRate !== null ? `: ${formatPercent(slide.savingsRate)} מהן` : ""}.`
-              : slide.netSavings < 0
-                ? "יצא יותר ממה שנכנס."
-                : "ההכנסות וההוצאות התקזזו."}
-          </Line>
+          <Line>{headlineLine(slide)}</Line>
           <p className="text-body text-hero-muted tabular-nums">
-            נכנסו <Money amount={slide.income} /> · יצאו <Money amount={slide.expenses} />
+            נכנסו <HeroAmount amount={slide.income} /> · יצאו <HeroAmount amount={slide.expenses} />
           </p>
         </>
       );
@@ -190,7 +179,7 @@ function SlideBody({
             {slide.name}
           </p>
           <Line>
-            <Money amount={slide.amount} className="font-semibold" />,{" "}
+            <HeroAmount amount={slide.amount} className="font-semibold" />,{" "}
             {formatPercent(slide.share * 100)} מההוצאות לפי קטגוריות.
           </Line>
           <div
@@ -211,8 +200,8 @@ function SlideBody({
           <p className="text-headline font-bold">{slide.name}</p>
           <Line>
             {slide.direction === "up" ? "עלה" : "ירד"} מ־
-            <Money amount={slide.previous} /> ל־
-            <Money amount={slide.amount} className="font-semibold" />.
+            <HeroAmount amount={slide.previous} /> ל־
+            <HeroAmount amount={slide.amount} className="font-semibold" />.
           </Line>
         </>
       );
@@ -224,7 +213,7 @@ function SlideBody({
             {Number(slide.date.slice(8, 10))} ב{name}
           </p>
           <Line>
-            <Money amount={slide.amount} className="font-semibold" /> הוצאות ביום אחד.
+            <HeroAmount amount={slide.amount} className="font-semibold" /> הוצאות ביום אחד.
           </Line>
           {slide.topDescription && (
             <p className="text-body text-hero-muted">הגדולה שבהן: {slide.topDescription}</p>
@@ -248,7 +237,7 @@ function SlideBody({
           <Eyebrow>ולסיום</Eyebrow>
           <VerdictBody verdict={slide.verdict} />
           <div className="pointer-events-auto mt-3 flex flex-wrap gap-2">
-            <Link href="/reports" onClick={onClose} className={HERO_BUTTON}>
+            <Link href={reportsMonthHref(recap.month)} onClick={onClose} className={HERO_BUTTON}>
               לדוח המלא
             </Link>
           </div>
@@ -276,8 +265,8 @@ function VerdictBody({ verdict }: { verdict: RecapFact["verdict"] }) {
         <p className="text-headline font-bold">ההוצאות עברו את היעד</p>
         <Line>
           ב־
-          <Money amount={verdict.by} className="font-semibold" />, מעל יעד של{" "}
-          <Money amount={verdict.target} />.
+          <HeroAmount amount={verdict.by} className="font-semibold" />, מעל יעד של{" "}
+          <HeroAmount amount={verdict.target} />.
         </Line>
       </>
     );
@@ -291,12 +280,12 @@ function VerdictBody({ verdict }: { verdict: RecapFact["verdict"] }) {
       <Line>
         {verdict.by === 0 ? (
           <>
-            בדיוק ביעד של <Money amount={verdict.target} />.
+            בדיוק ביעד של <HeroAmount amount={verdict.target} />.
           </>
         ) : (
           <>
-            <Money amount={verdict.by} className="font-semibold" /> מתחת ליעד של{" "}
-            <Money amount={verdict.target} />.
+            <HeroAmount amount={verdict.by} className="font-semibold" /> מתחת ליעד של{" "}
+            <HeroAmount amount={verdict.target} />.
           </>
         )}
       </Line>

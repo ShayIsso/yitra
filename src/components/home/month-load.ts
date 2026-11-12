@@ -37,7 +37,14 @@ export const INITIAL_MONTH_LOAD: MonthLoad<never> = {
 export function monthLoadReducer<T>(state: MonthLoad<T>, action: MonthLoadAction<T>): MonthLoad<T> {
   switch (action.type) {
     case "request":
-      return { ...state, seq: action.seq, key: action.key };
+      // A retry of the failed month keeps its failure on screen (pending);
+      // moving to any other month forgets it, so coming back loads afresh.
+      return {
+        ...state,
+        seq: action.seq,
+        key: action.key,
+        failedKey: action.key === state.key ? state.failedKey : null,
+      };
     case "settle":
       if (action.seq !== state.seq) return state;
       return action.result.ok
