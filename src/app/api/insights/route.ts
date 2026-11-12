@@ -26,7 +26,8 @@ const toIsoDate = (date: Date): string => date.toISOString().slice(0, 10);
  * The home screen's insights aggregate (#313): one request composing the
  * existing analytics, budgets, recurring and attention reads server-side, so
  * the client never stitches insights together from paged transaction reads.
- * Returns the selected, ordered insight cards and the day they were judged on.
+ * Returns the selected, ordered insight cards and the day they were judged on;
+ * the recap card carries its whole fact, so the reduced facts stay server-side.
  */
 export async function GET(request: Request) {
   try {
@@ -97,8 +98,6 @@ export async function GET(request: Request) {
       expenseTarget,
     });
 
-    // The client reads the cards and the day they were judged on; the recap
-    // card carries its whole fact, so the reduced facts stay server-side.
     return NextResponse.json({ today: facts.today, insights: selectInsights(facts) });
   } catch (err) {
     if (err instanceof ZodError) {
