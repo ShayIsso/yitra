@@ -68,6 +68,8 @@ const TEXT_ON_EVERY_SURFACE = [
 const FILL_PAIRS: [text: string, fill: string][] = [
   ["--card-foreground", "--card"],
   ["--popover-foreground", "--popover"],
+  // Command palette headings, hints, placeholder and key legend (shell/palette).
+  ["--muted-foreground", "--popover"],
   ["--primary-foreground", "--primary"],
   ["--secondary-foreground", "--secondary"],
   ["--accent-foreground", "--accent"],

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { PaletteLauncher } from "./palette/launcher";
 import { BrandLink } from "./parts";
 import { Rail } from "./rail";
 import { TabBar } from "./tab-bar";
@@ -47,6 +48,7 @@ export function AppShell({
         </div>
       </main>
       <TabBar pathname={pathname} pendingReconCount={pendingReconCount} />
+      <PaletteLauncher />
     </div>
   );
 }
