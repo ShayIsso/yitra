@@ -101,8 +101,18 @@ export const CATEGORY_ICON_OPTIONS: readonly { name: string; label: string }[] =
   PICKER,
 ).map(([name, { label }]) => ({ name, label }));
 
+/**
+ * The picker option a stored name stands for: an old Lucide name becomes its
+ * Phosphor counterpart, anything else is returned as stored. The edit form
+ * starts from this so the picker shows the stored icon as selected; the row is
+ * rewritten only if the owner saves the form.
+ */
+export function pickerIconName(stored: string): string {
+  return Object.hasOwn(LUCIDE_NAMES, stored) ? LUCIDE_NAMES[stored] : stored;
+}
+
 function pickerEntry(stored: string) {
-  const name = Object.hasOwn(LUCIDE_NAMES, stored) ? LUCIDE_NAMES[stored] : stored;
+  const name = pickerIconName(stored);
   return Object.hasOwn(PICKER, name) ? PICKER[name] : null;
 }
 

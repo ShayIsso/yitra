@@ -8,7 +8,7 @@ import type { OnboardingPathFacts } from "@/lib/onboarding/path";
 import type { Cadence } from "@/lib/recurring-detection";
 import type { SyncRunStatus } from "@/lib/sync/runs";
 import { toLocalDate } from "@/components/transactions/days";
-import { verdictNeedsAttention } from "@/components/budget-verdict";
+import { verdictNeedsAttention } from "@/lib/budgets/verdict";
 import { transactionsHref } from "@/lib/transactions/view-params";
 
 /** `/api/attention-counts`: four independent queue sizes. */

@@ -7,6 +7,7 @@ import {
   DEFAULT_CATEGORY_ICON,
   categoryIconLabel,
   isKnownCategoryIcon,
+  pickerIconName,
 } from "@/components/category-icon";
 import { DEFAULT_GROUPS, TAXONOMY_V2 } from "@/db/taxonomy";
 
@@ -73,6 +74,23 @@ describe("category icons", () => {
     expect(draw("Home")).toBe(draw("House"));
     expect(draw("Volleyball")).toBe(draw("SoccerBall"));
     expect(categoryIconLabel("Utensils")).toBe(categoryIconLabel("ForkKnife"));
+  });
+
+  it("opens every stored name on a picker option, so the edit form shows it selected", () => {
+    const options = new Set(CATEGORY_ICON_OPTIONS.map((o) => o.name));
+    const stored = [
+      ...LUCIDE_PICKER_NAMES,
+      ...[...TAXONOMY_V2, ...DEFAULT_GROUPS].map((c) => c.icon),
+    ];
+    expect(stored.filter((name) => !options.has(pickerIconName(name)))).toEqual([]);
+    expect(pickerIconName("Utensils")).toBe("ForkKnife");
+    expect(pickerIconName("Coffee")).toBe("Coffee");
+    expect(pickerIconName("ForkKnife")).toBe("ForkKnife");
+  });
+
+  it("leaves a name it does not know as stored", () => {
+    expect(pickerIconName("NoSuchIcon")).toBe("NoSuchIcon");
+    expect(pickerIconName("toString")).toBe("toString");
   });
 
   it("draws an unknown name as the neutral mark, in the category-mark weight", () => {

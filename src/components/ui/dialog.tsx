@@ -6,7 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/icons";
-import { sheetDragOutcome } from "./sheet-drag";
+import { releaseVelocity, sheetDragOutcome, type DragSample } from "./sheet-drag";
 
 /**
  * The app's one dialog primitive, responsive by construction (#315, spec #312
@@ -33,7 +33,10 @@ import { sheetDragOutcome } from "./sheet-drag";
  *
  * - Width: the centred dialog is `md:max-w-sm`; widen it with a `md:max-w-*`
  *   className on DialogContent. The sheet is always full width.
- * - Height: content taller than the viewport scrolls inside the popup while
+ * - Structure: `className` styles the popup frame (size, position, surface);
+ *   `children` sit in a scrolling body (`p-4`, `gap-4` grid) that
+ *   `bodyClassName` restyles, e.g. `p-0` for edge-to-edge content.
+ * - Height: content taller than the viewport scrolls inside the body while
  *   DialogFooter stays pinned to its bottom edge, so the primary action is
  *   never below the fold of a long phone form.
  * - Footer: actions sit side by side (end-aligned) from `md`; in the sheet
@@ -45,11 +48,12 @@ import { sheetDragOutcome } from "./sheet-drag";
  *   its `showCloseButton` is false; DialogHeader reserves end padding for it
  *   only when it is shown.
  * - Focus: Base UI traps focus while open, closes on Escape and on a backdrop
- *   press, and returns focus to the trigger. The popup's bottom scroll padding
+ *   press, and returns focus to the trigger. The body's bottom scroll padding
  *   covers the pinned footer, so a field reached by Tab is scrolled into view
  *   above it rather than under it.
- * - Swipe: the sheet carries a grab handle; dragging it down far or fast
- *   enough closes the sheet like a backdrop press (`SheetHandle`).
+ * - Swipe: the sheet carries a grab handle above its body (never scrolled
+ *   away); dragging it down far or fast enough closes the sheet like a
+ *   backdrop press (`SheetHandle`).
  * - Motion: the sheet slides up, the dialog zooms in; under reduced motion both
  *   only fade (ADR-0015 "Motion").
  */
@@ -90,15 +94,18 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 
 const SETTLE_MS = 150;
 
+type Drag = { pointerId: number; popup: HTMLElement; samples: DragSample[] };
+
 /**
- * The sheet's grab handle (below `md` only): dragging it down moves the sheet
- * with the finger, and a long or quick enough drag closes it the way a
- * backdrop press does. The drag lives on the handle alone, with touch-action
- * off there, so it never competes with scrolling the sheet's content.
+ * The sheet's grab handle (below `md` only), a strip of its own above the
+ * scrolling body so it stays in reach however far the sheet is scrolled.
+ * Dragging it down moves the sheet with the finger, and a long or quick enough
+ * drag closes it the way a backdrop press does. touch-action is off on the
+ * strip alone, so the drag never competes with scrolling the content.
  * Decorative to assistive tech: Escape and the close button stay the ways out.
  */
 function SheetHandle({ onDismiss }: { onDismiss: () => void }) {
-  const drag = React.useRef<{ y: number; t: number; popup: HTMLElement } | null>(null);
+  const drag = React.useRef<Drag | null>(null);
 
   const settle = (popup: HTMLElement, dismiss: boolean) => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -126,37 +133,55 @@ function SheetHandle({ onDismiss }: { onDismiss: () => void }) {
     );
   };
 
+  const end = (e: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || e.pointerId !== current.pointerId) return null;
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    return current;
+  };
+
   return (
     <div
       aria-hidden="true"
       data-slot="dialog-sheet-handle"
-      className="absolute inset-x-12 top-0 flex h-6 cursor-grab touch-none justify-center pt-2 md:hidden"
+      className="flex h-6 shrink-0 cursor-grab touch-none justify-center pt-2.5 md:hidden"
       onPointerDown={(e) => {
+        // One finger drives the sheet; a second touch or button is ignored.
+        if (!e.isPrimary || drag.current) return;
         const popup = e.currentTarget.closest<HTMLElement>("[data-slot=dialog-content]");
         if (!popup) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { y: e.clientY, t: e.timeStamp, popup };
+        drag.current = {
+          pointerId: e.pointerId,
+          popup,
+          samples: [{ y: e.clientY, t: e.timeStamp }],
+        };
         popup.style.transition = "none";
       }}
       onPointerMove={(e) => {
-        if (!drag.current) return;
-        const dy = Math.max(0, e.clientY - drag.current.y);
-        drag.current.popup.style.transform = `translateY(${dy}px)`;
+        const current = drag.current;
+        if (!current || e.pointerId !== current.pointerId) return;
+        current.samples.push({ y: e.clientY, t: e.timeStamp });
+        const dy = Math.max(0, e.clientY - current.samples[0].y);
+        current.popup.style.transform = `translateY(${dy}px)`;
       }}
       onPointerUp={(e) => {
-        const start = drag.current;
-        if (!start) return;
-        drag.current = null;
+        const current = end(e);
+        if (!current) return;
+        const up = { y: e.clientY, t: e.timeStamp };
         const outcome = sheetDragOutcome(
-          e.clientY - start.y,
-          e.timeStamp - start.t,
-          start.popup.offsetHeight,
+          up.y - current.samples[0].y,
+          releaseVelocity(current.samples, up),
+          current.popup.offsetHeight,
         );
-        settle(start.popup, outcome === "dismiss");
+        settle(current.popup, outcome === "dismiss");
       }}
-      onPointerCancel={() => {
-        if (drag.current) settle(drag.current.popup, false);
-        drag.current = null;
+      onPointerCancel={(e) => {
+        const current = end(e);
+        if (current) settle(current.popup, false);
       }}
     >
       <span className="bg-muted-foreground/40 h-1 w-9 rounded-full" />
@@ -164,13 +189,20 @@ function SheetHandle({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
+/** The scrolling body's own layout; `bodyClassName` replaces or extends it. */
+const BODY =
+  "relative grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain p-4 scroll-pb-36 md:scroll-pb-20";
+
 function DialogContent({
   className,
+  bodyClassName,
   children,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
+  /** Classes for the scrolling body that holds `children` (padding, gap, layout). */
+  bodyClassName?: string;
 }) {
   const closeRef = React.useRef<HTMLButtonElement>(null);
   return (
@@ -180,10 +212,10 @@ function DialogContent({
         data-slot="dialog-content"
         data-close-button={showCloseButton ? "" : undefined}
         className={cn(
-          "bg-popover text-popover-foreground ring-foreground/10 fixed z-50 grid max-h-[calc(100dvh-2rem)] w-full gap-4 overflow-y-auto overscroll-contain p-4 text-sm ring-1 outline-none",
-          // Sheet (< md). Scroll padding ≈ the pinned footer's height (two
-          // stacked 44px actions in the sheet, one row from md).
-          "inset-x-0 bottom-0 scroll-pb-36 rounded-t-xl duration-200 md:scroll-pb-20",
+          // A fixed frame: the handle on top, the body scrolls beneath it.
+          "bg-popover text-popover-foreground ring-foreground/10 fixed z-50 flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden text-sm ring-1 outline-none",
+          // Sheet (< md)
+          "inset-x-0 bottom-0 rounded-t-xl duration-200",
           "data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom",
           // Centred dialog (md+)
           "md:inset-x-auto md:start-1/2 md:top-1/2 md:bottom-auto md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:duration-100 md:rtl:translate-x-1/2",
@@ -196,16 +228,22 @@ function DialogContent({
         <SheetHandle onDismiss={() => closeRef.current?.click()} />
         {/* The handle's way to close: a press on Base UI's own Close. */}
         <DialogPrimitive.Close ref={closeRef} hidden tabIndex={-1} aria-hidden="true" />
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            render={<Button variant="ghost" className="absolute end-1.5 top-1.5 size-11" />}
-          >
-            <XIcon className="size-5" />
-            <span className="sr-only">סגירה</span>
-          </DialogPrimitive.Close>
-        )}
+        {/* Scroll padding ≈ the pinned footer's height (two stacked 44px
+            actions in the sheet, one row from md). */}
+        <div data-slot="dialog-body" className={cn(BODY, bodyClassName)}>
+          {children}
+          {/* In the body, so it scrolls away with the header it belongs to
+              instead of floating over the fields scrolled beneath it. */}
+          {showCloseButton && (
+            <DialogPrimitive.Close
+              data-slot="dialog-close"
+              render={<Button variant="ghost" className="absolute end-1.5 top-1.5 size-11" />}
+            >
+              <XIcon className="size-5" />
+              <span className="sr-only">סגירה</span>
+            </DialogPrimitive.Close>
+          )}
+        </div>
       </DialogPrimitive.Popup>
     </DialogPortal>
   );
@@ -238,7 +276,7 @@ function DialogFooter({
       className={cn(
         "-mx-4 -mb-4 flex flex-col-reverse gap-2 border-t p-4 md:flex-row md:justify-end md:rounded-b-xl",
         // Pinned to the popup's bottom edge. The sticky inset is measured from
-        // the popup's content box (inside its p-4), hence -bottom-4 to match
+        // the body's content box (inside its p-4), hence -bottom-4 to match
         // -mb-4; bottom-0 would float it 1rem up over the last field.
         "sticky -bottom-4",
         // muted/50 made opaque: content scrolls beneath the pinned footer.

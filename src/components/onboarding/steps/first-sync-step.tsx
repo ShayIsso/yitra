@@ -19,7 +19,8 @@ import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/insti
 import { observedFromResponse } from "@/components/institution-picker";
 import { BankStatus, BankStatusDetail, StageProgress } from "@/components/sync-bank-status";
 import { OtpSheet } from "@/components/sync-otp-sheet";
-import { awaitsCode, liveBankStatus } from "@/components/bank-status-view";
+import { useOtpPrompt } from "@/components/use-otp-prompt";
+import { liveBankStatus } from "@/components/bank-status-view";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,8 @@ const INSTITUTION_STEP_HREF = "/setup?step=institution";
 const LEAVE_WARNING = "הסנכרון עדיין פועל, ויציאה מהדף תעצור אותו. לצאת בכל זאת?";
 
 const NOTHING_OBSERVED: ReadonlySet<string> = new Set();
+
+const NONE_CONNECTED: readonly ConnectedInstitution[] = [];
 
 const SECONDARY_ACTION = { variant: "outline", size: "lg", className: "min-h-11 px-4" } as const;
 
@@ -179,14 +182,12 @@ export function FirstSyncBody({
   onOtpChange,
   onOtpSubmit,
 }: FirstSyncBodyProps) {
-  // The institution whose code prompt the owner closed; reopened from its row.
-  const [dismissedOtpBank, setDismissedOtpBank] = useState<string | null>(null);
-  const connected = load.status === "ready" ? load.connected : [];
-  const otpInstitution =
-    connected.find((i) => awaitsCode(stream.bankStates[i.bankType], stream.otp[i.bankType])) ??
-    null;
+  const otp = useOtpPrompt(load.status === "ready" ? load.connected : NONE_CONNECTED, stream, {
+    setOtpDraft: onOtpChange,
+    submitOtp: onOtpSubmit,
+  });
   const startRun = () => {
-    setDismissedOtpBank(null);
+    otp.reopen();
     onStart();
   };
   const footer = firstSyncFooter(view);
@@ -223,25 +224,14 @@ export function FirstSyncBody({
             stream={stream}
             running={view.phase === "running"}
             observed={observed}
-            dismissedOtpBank={dismissedOtpBank}
-            onOtpReopen={() => setDismissedOtpBank(null)}
+            closedOtpFor={otp.closedFor}
+            onOtpReopen={otp.reopen}
           />
           <Outcome view={view} stream={stream} onRetry={startRun} disabled={navigation.pending} />
         </>
       )}
 
-      {otpInstitution && (
-        <OtpSheet
-          open={dismissedOtpBank !== otpInstitution.bankType}
-          bankType={otpInstitution.bankType}
-          displayName={otpInstitution.displayName}
-          code={stream.otpDrafts[otpInstitution.bankType] ?? ""}
-          countdown={stream.otp[otpInstitution.bankType]}
-          onCodeChange={(code) => onOtpChange(otpInstitution.bankType, code)}
-          onSubmit={() => onOtpSubmit(otpInstitution.bankType)}
-          onDismiss={() => setDismissedOtpBank(otpInstitution.bankType)}
-        />
-      )}
+      {otp.sheet && <OtpSheet {...otp.sheet} />}
 
       <StepFooter navigation={footerNavigation} primary={primary} />
     </div>
@@ -292,14 +282,15 @@ function InstitutionList({
   stream,
   running,
   observed,
-  dismissedOtpBank,
+  closedOtpFor,
   onOtpReopen,
 }: {
   connected: readonly ConnectedInstitution[];
   stream: SyncStreamState;
   running: boolean;
   observed: ReadonlySet<string>;
-  dismissedOtpBank: string | null;
+  /** The institution whose code prompt was closed while its code is still awaited. */
+  closedOtpFor: string | null;
   onOtpReopen: () => void;
 }) {
   return (
@@ -337,13 +328,12 @@ function InstitutionList({
               </a>
             )}
             {/* Offered only once the prompt was closed; while it is open the sheet is the way in. */}
-            {awaitsCode(live, stream.otp[institution.bankType]) &&
-              dismissedOtpBank === institution.bankType && (
-                <Button className="min-h-11 self-start px-4" onClick={onOtpReopen}>
-                  <KeyIcon />
-                  הזנת קוד
-                </Button>
-              )}
+            {closedOtpFor === institution.bankType && (
+              <Button className="min-h-11 self-start px-4" onClick={onOtpReopen}>
+                <KeyIcon />
+                הזנת קוד
+              </Button>
+            )}
           </li>
         );
       })}

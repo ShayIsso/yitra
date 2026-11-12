@@ -45,6 +45,7 @@ import {
   CategoryIcon,
   DEFAULT_CATEGORY_ICON,
   categoryIconLabel,
+  pickerIconName,
 } from "@/components/category-icon";
 import {
   AddButton,
@@ -165,7 +166,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
     form.reset({
       name: cat.name,
       type: cat.type,
-      icon: cat.icon,
+      icon: pickerIconName(cat.icon),
       color: cat.color,
       parentId: cat.parentId,
     });

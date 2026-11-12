@@ -80,37 +80,41 @@ Chrome for Testing 148 headless, method as above.
 
 | Home (`/`)                              | Baseline `a8a5f8d`                    | `main` `46a5b6f` | Redesign final |
 | --------------------------------------- | ------------------------------------- | ---------------- | -------------- |
-| First-load JS, modern browsers, gzip -9 | 278.7 kB                              | 257.4 kB         | **249.0 kB**   |
-| Budget ceiling (baseline + 40 kB)       | 318.7 kB                              |                  | 69.7 kB under  |
+| First-load JS, modern browsers, gzip -9 | 278.7 kB                              | 257.4 kB         | **249.3 kB**   |
+| Budget ceiling (baseline + 40 kB)       | 318.7 kB                              |                  | 69.4 kB under  |
 | Icons on the route (`route-icons.ts`)   | 8.8 kB (all Lucide, `module-cost.ts`) | 10.0 kB          | 10.9 kB        |
 | FCP, median of 7, CPU 6x + Slow 4G      | 2120 ms                               | 2140 ms          | 2156 ms        |
 | LCP, median of 7, CPU 6x + Slow 4G      | 6060 ms                               | 2356 ms          | 2372 ms        |
 | CLS, median of 7                        | 0.000                                 | 0.000            | 0.000          |
 
-The redesign ends 29.7 kB _below_ the pre-redesign home. FCP is within noise
+The redesign ends 29.4 kB _below_ the pre-redesign home. FCP is within noise
 of both references (the `main` and final runs were back to back; the baseline
 was measured in another session), and LCP is far earlier than the baseline's
 because the home's largest element now renders with the hero. #327's own
-change to home: −8.4 kB, from dropping the unused `motion` library (about
-11 kB eager on every route) net of the category glyphs below.
+change to home: −8.1 kB, from dropping the unused `motion` library (about
+11 kB eager on every route) net of the category glyphs below. First-load
+figures are from the final build (after #359's review fixes, which added
+0.1–0.3 kB per route); the `main` / final timing pairs come from the
+back-to-back runs one build earlier. A re-run of home on the final build
+gave FCP 2100 ms, LCP 2300 ms, CLS 0.000 (median of 7).
 
 **Every page** (first-load JS gzip -9; icons; FCP / LCP / CLS median of 3,
 CPU 6x + Slow 4G; `main` `46a5b6f` → final):
 
 | Route             | First-load JS    | Icons (glyphs)           | FCP / LCP final | CLS   |
 | ----------------- | ---------------- | ------------------------ | --------------- | ----- |
-| `/transactions`   | 240.5 → 223.0 kB | 10.0 (65) → 4.3 (25) kB  | 2140 / 5260 ms  | 0.000 |
-| `/reports`        | 235.7 → 218.1 kB | 10.0 (65) → 4.2 (24) kB  | 2100 / 2148 ms  | 0.000 |
-| `/reconciliation` | 235.9 → 217.5 kB | 10.0 (65) → 3.2 (15) kB  | 2104 / 2152 ms  | 0.000 |
-| `/subscriptions`  | 206.2 → 188.8 kB | 10.0 (65) → 3.6 (18) kB  | 2160 / 2228 ms  | 0.000 |
-| `/sync`           | 236.6 → 219.8 kB | 10.0 (65) → 4.0 (21) kB  | 2096 / 2144 ms  | 0.000 |
-| `/settings`       | 297.7 → 284.6 kB | 10.0 (65) → 10.7 (61) kB | 2140 / 2376 ms  | 0.000 |
+| `/transactions`   | 240.5 → 223.2 kB | 10.0 (65) → 4.3 (25) kB  | 2140 / 5260 ms  | 0.000 |
+| `/reports`        | 235.7 → 218.3 kB | 10.0 (65) → 4.2 (24) kB  | 2100 / 2148 ms  | 0.000 |
+| `/reconciliation` | 235.9 → 217.6 kB | 10.0 (65) → 3.2 (15) kB  | 2104 / 2152 ms  | 0.000 |
+| `/subscriptions`  | 206.2 → 189.0 kB | 10.0 (65) → 3.6 (18) kB  | 2160 / 2228 ms  | 0.000 |
+| `/sync`           | 236.6 → 220.0 kB | 10.0 (65) → 4.0 (21) kB  | 2096 / 2144 ms  | 0.000 |
+| `/settings`       | 297.7 → 284.8 kB | 10.0 (65) → 10.7 (61) kB | 2140 / 2376 ms  | 0.000 |
 | `/login`          | 171.5 → 150.1 kB | 10.0 (65) → 0.4 (1) kB   | 2172 / 2172 ms  | 0.000 |
 | `/setup`          | final 264.3 kB   |                          | 2484 / 2532 ms  | 0.000 |
 
 `main`'s FCP / LCP for the same routes were within ±50 ms of these except
 `/subscriptions` (2420 / 2488 ms on `main`), and every `main` CLS was 0.000.
-`/setup` was measured on a second, empty throwaway database (the wizard
+`/setup` (one build earlier) was measured on a second, empty throwaway database (the wizard
 redirects once onboarding is complete).
 
 **Icons per route.** On `main`, Turbopack put every glyph any route used into
@@ -121,7 +125,7 @@ whole 79-glyph set is 13.0 kB gz (`module-cost.ts`), but no route loads it.
 Home (10.9 kB) and settings (10.7 kB) are 0.9 and 0.7 kB over the ~10 kB
 icon budget, because both can draw any of the 31 category marks (the picker's
 Phosphor names and the Lucide names older `categories.icon` rows hold); every
-other route is at 4.3 kB or less. Home's first-load JS as a whole stays 69.7 kB
+other route is at 4.3 kB or less. Home's first-load JS as a whole stays 69.4 kB
 under its ceiling.
 
 Per-route icons are measured with

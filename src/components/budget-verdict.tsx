@@ -10,7 +10,8 @@
 import { CheckCircleIcon, WarningCircleIcon } from "@/components/icons";
 import { CategoryDot } from "@/components/category-dot";
 import { Amount } from "@/components/ui/amount";
-import type { BudgetVerdict, SavingsTargetVerdict } from "@/lib/budgets";
+import type { SavingsTargetVerdict } from "@/lib/budgets";
+import { verdictNeedsAttention, type BudgetVerdict } from "@/lib/budgets/verdict";
 import { cn } from "@/lib/utils";
 
 export const VERDICT_LABEL: Record<BudgetVerdict, string> = {
@@ -19,10 +20,6 @@ export const VERDICT_LABEL: Record<BudgetVerdict, string> = {
   "on-pace": "בקצב",
   "comfortably-under": "מתחת ליעד בנוחות",
 };
-
-export function verdictNeedsAttention(verdict: BudgetVerdict): boolean {
-  return verdict === "over" || verdict === "at-risk";
-}
 
 export function BudgetVerdictChip({ verdict }: { verdict: BudgetVerdict }) {
   const attention = verdictNeedsAttention(verdict);
