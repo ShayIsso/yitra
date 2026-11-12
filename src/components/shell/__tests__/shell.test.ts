@@ -23,7 +23,8 @@ const regular = (icon: NavGlyph) => markup(createElement(icon, { weight: "regula
 function renderShell(pathname: string, pendingReconCount = 0) {
   currentPath = pathname;
   // children arrive as createElement's third argument, which its typing can't see.
-  const props = { pendingReconCount } as ComponentProps<typeof AppShell>;
+  const monthRange = { first: { year: 2026, month: 1 }, current: { year: 2026, month: 11 } };
+  const props = { pendingReconCount, monthRange } as ComponentProps<typeof AppShell>;
   const html = markup(createElement(AppShell, props, createElement("p", null, "page body")));
   const navs = [...html.matchAll(/<nav[^>]*\saria-label="([^"]*)"[^>]*>(.*?)<\/nav>/g)];
   expect(navs).toHaveLength(2);

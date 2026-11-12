@@ -1,5 +1,6 @@
 import { HEBREW_MONTHS, monthKey, type YearMonth } from "@/components/reports/format";
 import { monthAtIndex, monthIndex } from "@/lib/analytics/month-window";
+import { OUTLOOK_FIRST_YEAR } from "@/lib/budgets/outlook-range";
 import { israelCalendarDay } from "@/lib/calendar";
 
 /**
@@ -30,6 +31,23 @@ export const HOME_MONTH_PARAM = "month";
  * The outlook has nothing to say about a month that hasn't started.
  */
 export type MonthRange = { first: HomeMonth; current: HomeMonth };
+
+/**
+ * The browsable range given the months that hold data: from the oldest of
+ * them, or the outlook route's own floor when there is none. Rows the bank
+ * lists ahead (installments) never put the floor past the current month.
+ */
+export function homeMonthRange(
+  monthsWithData: readonly HomeMonth[],
+  current: HomeMonth,
+): MonthRange {
+  if (monthsWithData.length === 0) {
+    return { first: { year: OUTLOOK_FIRST_YEAR, month: 1 }, current };
+  }
+  const oldest = monthsWithData.reduce((a, b) => (compareMonths(b, a) < 0 ? b : a));
+  const first = compareMonths(oldest, current) > 0 ? current : oldest;
+  return { first: { year: first.year, month: first.month }, current };
+}
 
 export function isBrowsable(m: HomeMonth, { first, current }: MonthRange): boolean {
   return compareMonths(m, first) >= 0 && compareMonths(m, current) <= 0;

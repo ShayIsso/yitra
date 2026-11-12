@@ -17,22 +17,57 @@ export type Destination = {
   href: string;
   label: string;
   icon: NavGlyph;
+  /** Other names the command palette finds the page by, English ones included for a Latin keyboard. */
+  keywords: readonly string[];
 };
 
 export const RECONCILIATION_HREF = "/reconciliation";
 
+/** The page region the skip link and the command palette move focus to. */
+export const MAIN_CONTENT_ID = "main-content";
+
 /** The phone tab bar's own tabs; a fifth "more" tab opens MORE_DESTINATIONS. */
 export const TAB_DESTINATIONS: readonly Destination[] = [
-  { href: "/", label: "בית", icon: HouseIcon },
-  { href: "/transactions", label: "תנועות", icon: ArrowsLeftRightIcon },
-  { href: "/reports", label: "דוחות", icon: ChartPieSliceIcon },
-  { href: RECONCILIATION_HREF, label: "התאמות", icon: TrayIcon },
+  { href: "/", label: "בית", icon: HouseIcon, keywords: ["home", "dashboard", "ראשי", "דשבורד"] },
+  {
+    href: "/transactions",
+    label: "תנועות",
+    icon: ArrowsLeftRightIcon,
+    keywords: ["transactions", "הוצאות", "הכנסות"],
+  },
+  {
+    href: "/reports",
+    label: "דוחות",
+    icon: ChartPieSliceIcon,
+    keywords: ["reports", "דו״חות", "מגמות"],
+  },
+  {
+    href: RECONCILIATION_HREF,
+    label: "התאמות",
+    icon: TrayIcon,
+    keywords: ["reconciliation", "התאמה"],
+  },
 ];
 
 export const MORE_DESTINATIONS: readonly Destination[] = [
-  { href: "/subscriptions", label: "מנויים", icon: RepeatIcon },
-  { href: "/sync", label: "סנכרון", icon: ArrowsClockwiseIcon },
-  { href: "/settings", label: "הגדרות", icon: GearSixIcon },
+  {
+    href: "/subscriptions",
+    label: "מנויים",
+    icon: RepeatIcon,
+    keywords: ["subscriptions", "חיובים קבועים", "הוראות קבע"],
+  },
+  {
+    href: "/sync",
+    label: "סנכרון",
+    icon: ArrowsClockwiseIcon,
+    keywords: ["sync", "בנקים", "עדכון"],
+  },
+  {
+    href: "/settings",
+    label: "הגדרות",
+    icon: GearSixIcon,
+    keywords: ["settings", "קטגוריות", "חוקים", "יעדים", "תקציבים"],
+  },
 ];
 
 /** The desktop rail lists every destination. */
