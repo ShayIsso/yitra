@@ -48,6 +48,9 @@ export type TransferFlip = {
   keepUserCategory: boolean;
 };
 
+/** What a category reset is undoing: see `InboxStore.setCategory`. */
+export type ReleaseIntent = "reject" | "undo";
+
 export type InboxStore = {
   getGroupMembers(groupId: string): Promise<InboxTransaction[]>;
   getGroupMembersByIds(groupIds: string[]): Promise<Map<string, InboxTransaction[]>>;
@@ -66,7 +69,7 @@ export type InboxStore = {
    *   itself writes (internal transfer, card settlement), which can sit under a
    *   stale `user`/`memory` source because auto-apply leaves provenance alone.
    */
-  setCategory(txnId: string, categoryId: string | null, intent: "reject" | "undo"): Promise<void>;
+  setCategory(txnId: string, categoryId: string | null, intent: ReleaseIntent): Promise<void>;
   getCategoryIdByName(name: string): Promise<string | null>;
   getRulesOrderedByPriority(): Promise<CategoryRule[]>;
 };
@@ -200,8 +203,6 @@ async function rejectMembers(
 ): Promise<void> {
   // The rejected pairs are recorded with the clear, so no sync can re-propose them.
   await store.clearGroup([groupId], pairsToRecordOnReject(members));
-  // Rows go back to their rule result, except a user/memory category, which the
-  // store's write guard keeps.
   for (const member of members) {
     await store.setCategory(member.id, categorize(member.description, rules), "reject");
   }

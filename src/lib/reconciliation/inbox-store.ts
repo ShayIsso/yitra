@@ -14,9 +14,9 @@ import {
 import { and, eq, isNull, inArray, notInArray, or, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { CategorySource } from "@/lib/merchant-memory";
-import type { InboxStore, InboxTransaction, TransferFlip } from "./inbox-ops";
+import type { InboxStore, InboxTransaction, ReleaseIntent, TransferFlip } from "./inbox-ops";
 import type { RejectedPair } from "./rejected-pairs";
-import { SETTLEMENT_CATEGORY_NAME, TRANSFER_CATEGORY_NAME } from "./category-names";
+import { RECONCILIATION_CATEGORY_NAMES } from "./category-names";
 import { recordRejections } from "./rejection-writes";
 import type { CategoryRule } from "@/lib/categories/rules";
 
@@ -259,23 +259,23 @@ export const drizzleInboxStore: InboxStore = {
   async setCategory(
     txnId: string,
     categoryId: string | null,
-    intent: "reject" | "undo",
+    intent: ReleaseIntent,
   ): Promise<void> {
     // Reconciliation re-runs the rule engine on split/edit rows, so a non-null
     // result is rule-sourced (ADR-0010); clearing resets provenance to NULL.
     // Memory is deliberately NOT consulted here in this slice (issue #135).
-    // Matched by category name at write time: undo has already cleared the
-    // reconciliation columns, so nothing on the row says what wrote its category.
     const writable = or(
       isNull(transactions.categorySource),
       notInArray(transactions.categorySource, ["user", "memory"]),
+      // By category name, in the write: undo has already cleared the
+      // reconciliation columns, so nothing on the row says what wrote its category.
       intent === "undo"
         ? inArray(
             transactions.categoryId,
             db
               .select({ id: categories.id })
               .from(categories)
-              .where(inArray(categories.name, [TRANSFER_CATEGORY_NAME, SETTLEMENT_CATEGORY_NAME])),
+              .where(inArray(categories.name, [...RECONCILIATION_CATEGORY_NAMES])),
           )
         : undefined,
     );
