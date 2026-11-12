@@ -6,6 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "@/components/icons";
+import { sheetDragOutcome } from "./sheet-drag";
 
 /**
  * The app's one dialog primitive, responsive by construction (#315, spec #312
@@ -47,6 +48,8 @@ import { XIcon } from "@/components/icons";
  *   press, and returns focus to the trigger. The popup's bottom scroll padding
  *   covers the pinned footer, so a field reached by Tab is scrolled into view
  *   above it rather than under it.
+ * - Swipe: the sheet carries a grab handle; dragging it down far or fast
+ *   enough closes the sheet like a backdrop press (`SheetHandle`).
  * - Motion: the sheet slides up, the dialog zooms in; under reduced motion both
  *   only fade (ADR-0015 "Motion").
  */
@@ -85,6 +88,82 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
   );
 }
 
+const SETTLE_MS = 150;
+
+/**
+ * The sheet's grab handle (below `md` only): dragging it down moves the sheet
+ * with the finger, and a long or quick enough drag closes it the way a
+ * backdrop press does. The drag lives on the handle alone, with touch-action
+ * off there, so it never competes with scrolling the sheet's content.
+ * Decorative to assistive tech: Escape and the close button stay the ways out.
+ */
+function SheetHandle({ onDismiss }: { onDismiss: () => void }) {
+  const drag = React.useRef<{ y: number; t: number; popup: HTMLElement } | null>(null);
+
+  const settle = (popup: HTMLElement, dismiss: boolean) => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    popup.style.transition = reduced ? "none" : `transform ${SETTLE_MS}ms ease-out`;
+    if (!dismiss) {
+      popup.style.transform = "";
+      return;
+    }
+    // Its exit animation would restart from the resting position, so the
+    // sheet leaves from wherever the finger let go instead.
+    popup.style.animation = "none";
+    popup.style.transform = "translateY(100%)";
+    window.setTimeout(
+      () => {
+        onDismiss();
+        // A dialog may refuse to close (some do while their action runs);
+        // then the sheet slides back instead of staying open off-screen.
+        requestAnimationFrame(() => {
+          if (!popup.isConnected || !popup.hasAttribute("data-open")) return;
+          popup.style.animation = "";
+          popup.style.transform = "";
+        });
+      },
+      reduced ? 0 : SETTLE_MS,
+    );
+  };
+
+  return (
+    <div
+      aria-hidden="true"
+      data-slot="dialog-sheet-handle"
+      className="absolute inset-x-12 top-0 flex h-6 cursor-grab touch-none justify-center pt-2 md:hidden"
+      onPointerDown={(e) => {
+        const popup = e.currentTarget.closest<HTMLElement>("[data-slot=dialog-content]");
+        if (!popup) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { y: e.clientY, t: e.timeStamp, popup };
+        popup.style.transition = "none";
+      }}
+      onPointerMove={(e) => {
+        if (!drag.current) return;
+        const dy = Math.max(0, e.clientY - drag.current.y);
+        drag.current.popup.style.transform = `translateY(${dy}px)`;
+      }}
+      onPointerUp={(e) => {
+        const start = drag.current;
+        if (!start) return;
+        drag.current = null;
+        const outcome = sheetDragOutcome(
+          e.clientY - start.y,
+          e.timeStamp - start.t,
+          start.popup.offsetHeight,
+        );
+        settle(start.popup, outcome === "dismiss");
+      }}
+      onPointerCancel={() => {
+        if (drag.current) settle(drag.current.popup, false);
+        drag.current = null;
+      }}
+    >
+      <span className="bg-muted-foreground/40 h-1 w-9 rounded-full" />
+    </div>
+  );
+}
+
 function DialogContent({
   className,
   children,
@@ -93,6 +172,7 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -113,6 +193,9 @@ function DialogContent({
         )}
         {...props}
       >
+        <SheetHandle onDismiss={() => closeRef.current?.click()} />
+        {/* The handle's way to close: a press on Base UI's own Close. */}
+        <DialogPrimitive.Close ref={closeRef} hidden tabIndex={-1} aria-hidden="true" />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
@@ -203,8 +286,6 @@ export {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
   DialogTrigger,
 };

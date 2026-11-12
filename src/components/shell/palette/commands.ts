@@ -12,7 +12,7 @@ import { monthKey } from "@/components/reports/format";
 import { transactionsHref } from "@/lib/transactions/view-params";
 import { ALL_DESTINATIONS } from "../nav";
 
-export type PaletteGroup = "pages" | "transactions" | "months";
+type PaletteGroup = "pages" | "transactions" | "months";
 
 export type PaletteCommand = {
   id: string;

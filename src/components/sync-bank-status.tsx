@@ -1,6 +1,5 @@
 "use client";
 
-import { useId } from "react";
 import {
   ArrowsClockwiseIcon,
   CheckCircleIcon,
@@ -9,12 +8,10 @@ import {
   PauseIcon,
   WarningCircleIcon,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { BankStatusIcon, BankStatusTone, BankStatusView } from "@/components/bank-status-view";
 import { cn } from "@/lib/utils";
 
-// One institution's sync status and OTP entry, shared by the Sync page and the wizard.
+// One institution's sync status, shared by the Sync page and the wizard.
 
 const TONE_CLASS: Record<BankStatusTone, string> = {
   waiting: "text-muted-foreground",
@@ -103,43 +100,4 @@ export function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-export type OtpEntryProps = {
-  readonly code: string;
-  /** Hidden when `undefined` or zero. */
-  readonly secondsLeft: number | undefined;
-  readonly onCodeChange: (code: string) => void;
-  readonly onSubmit: () => void;
-};
-
-export function OtpEntry({ code, secondsLeft, onCodeChange, onSubmit }: OtpEntryProps) {
-  const inputId = useId();
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label htmlFor={inputId} className="sr-only">
-        קוד אימות שהתקבל ב-SMS
-      </label>
-      <Input
-        id={inputId}
-        className="h-11 max-w-[11rem] tabular-nums"
-        placeholder="הזן קוד SMS"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        value={code}
-        onChange={(e) => onCodeChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSubmit();
-        }}
-      />
-      <Button className="h-11 px-4" onClick={onSubmit}>
-        אשר
-      </Button>
-      {secondsLeft !== undefined && secondsLeft > 0 && (
-        <span className="text-muted-foreground text-body tabular-nums">
-          {formatCountdown(secondsLeft)}
-        </span>
-      )}
-    </div>
-  );
 }

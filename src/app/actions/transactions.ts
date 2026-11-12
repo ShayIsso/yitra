@@ -20,8 +20,8 @@ import { notAssignableResult } from "./not-assignable";
 
 /**
  * A transaction's custom description or category assignment renders on the
- * transactions table itself and — through the dashboard's totals,
- * spending-by-category chart and recent transactions list — on "/".
+ * transactions table itself and — through the home screen's totals,
+ * category list and activity feed — on "/".
  */
 function revalidateTransactionPages() {
   revalidatePath("/transactions");

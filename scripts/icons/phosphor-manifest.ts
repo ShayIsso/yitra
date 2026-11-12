@@ -25,7 +25,6 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   Moon: ["regular"],
   Sun: ["regular"],
   X: ["regular"],
-  Command: ["regular"],
   CalendarBlank: ["regular"],
   ArrowElbowDownLeft: ["regular"],
   Info: ["regular"],
@@ -33,10 +32,12 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   CaretLeft: ["regular"],
   CaretRight: ["regular"],
   CaretDown: ["regular"],
+  CaretUp: ["regular"],
   Sparkle: ["regular", "duotone"],
   Check: ["regular"],
   Trash: ["regular"],
   ShieldCheck: ["regular"],
+  ShieldWarning: ["regular"],
   Key: ["regular"],
   Flask: ["regular"],
   Funnel: ["regular"],
@@ -60,7 +61,6 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   WarningCircle: ["fill"],
   CheckCircle: ["fill"],
   Clock: ["fill"],
-  Play: ["fill"],
   Pause: ["fill"],
 
   // Insights and stat tiles
@@ -76,8 +76,9 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   ChartLineUp: ["duotone"],
   Bank: ["duotone"],
 
-  // Category marks (the categories.icon column stores Lucide names; the
-  // redesign maps them onto these)
+  // Category marks. The categories.icon column stores a name: Lucide names
+  // from before the redesign (the seeded taxonomy and the old picker) and the
+  // picker's Phosphor names since; src/components/category-icon.tsx maps both.
   Money: ["duotone"],
   Bus: ["duotone"],
   PlusCircle: ["duotone"],
@@ -92,4 +93,16 @@ export const PHOSPHOR_MANIFEST: Record<string, readonly IconWeight[]> = {
   ShoppingCart: ["duotone"],
   ForkKnife: ["duotone"],
   DotsThreeCircle: ["duotone"],
+  Car: ["duotone"],
+  GraduationCap: ["duotone"],
+  Shield: ["duotone"],
+  Airplane: ["duotone"],
+  Bicycle: ["duotone"],
+  Train: ["duotone"],
+  Barbell: ["duotone"],
+  MusicNotes: ["duotone"],
+  Monitor: ["duotone"],
+  DeviceMobile: ["duotone"],
+  Globe: ["duotone"],
+  SoccerBall: ["duotone"],
 };

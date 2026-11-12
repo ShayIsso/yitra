@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
 import {
   Controller,
   FormProvider,
@@ -34,7 +33,7 @@ import { Label } from "@/components/ui/label";
  *         </FormItem>
  *       )} />
  *       <FormRootError />
- *       <FormSubmit>שמור</FormSubmit>
+ *       <FormSubmit pendingText="שומר...">שמור</FormSubmit>
  *     </form>
  *   </Form>
  *
@@ -179,8 +178,10 @@ function FormRootError({ className, ...props }: React.ComponentProps<"p">) {
 
 /**
  * Submit button with a visible pending state and double-submit protection:
- * disabled (and showing a spinner) while RHF is submitting or while an
- * external `pending` flag (e.g. a wrapping transition) is true.
+ * disabled, and labelled `pendingText`, while RHF is submitting or while an
+ * external `pending` flag (e.g. a wrapping transition) is true. The busy state
+ * is a word, not a spinner: ADR-0015 allows no infinite animation but the
+ * skeleton pulse.
  */
 function FormSubmit({
   pending,
@@ -197,7 +198,6 @@ function FormSubmit({
 
   return (
     <Button type="submit" data-slot="form-submit" disabled={isPending || disabled} {...props}>
-      {isPending && <Loader2 className="size-4 animate-spin" />}
       {isPending && pendingText ? pendingText : children}
     </Button>
   );
@@ -247,5 +247,4 @@ export {
   FormRootError,
   FormSubmit,
   applyActionErrors,
-  useFormField,
 };

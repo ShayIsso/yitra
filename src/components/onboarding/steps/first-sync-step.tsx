@@ -8,6 +8,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   InfoIcon,
+  KeyIcon,
   PlusIcon,
   WarningCircleIcon,
 } from "@/components/icons";
@@ -16,12 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
 import { observedFromResponse } from "@/components/institution-picker";
-import {
-  BankStatus,
-  BankStatusDetail,
-  OtpEntry,
-  StageProgress,
-} from "@/components/sync-bank-status";
+import { BankStatus, BankStatusDetail, StageProgress } from "@/components/sync-bank-status";
+import { OtpSheet } from "@/components/sync-otp-sheet";
 import { awaitsCode, liveBankStatus } from "@/components/bank-status-view";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
@@ -182,10 +179,20 @@ export function FirstSyncBody({
   onOtpChange,
   onOtpSubmit,
 }: FirstSyncBodyProps) {
+  // The institution whose code prompt the owner closed; reopened from its row.
+  const [dismissedOtpBank, setDismissedOtpBank] = useState<string | null>(null);
+  const connected = load.status === "ready" ? load.connected : [];
+  const otpInstitution =
+    connected.find((i) => awaitsCode(stream.bankStates[i.bankType], stream.otp[i.bankType])) ??
+    null;
+  const startRun = () => {
+    setDismissedOtpBank(null);
+    onStart();
+  };
   const footer = firstSyncFooter(view);
   const primary: StepFooterPrimary = {
     wait: { disabled: true },
-    start: { label: "התחלת סנכרון", onClick: onStart },
+    start: { label: "התחלת סנכרון", onClick: startRun },
     busy: { label: "מסנכרן...", pending: true },
     finish: {},
   }[footer.primary];
@@ -216,11 +223,24 @@ export function FirstSyncBody({
             stream={stream}
             running={view.phase === "running"}
             observed={observed}
-            onOtpChange={onOtpChange}
-            onOtpSubmit={onOtpSubmit}
+            dismissedOtpBank={dismissedOtpBank}
+            onOtpReopen={() => setDismissedOtpBank(null)}
           />
-          <Outcome view={view} stream={stream} onRetry={onStart} disabled={navigation.pending} />
+          <Outcome view={view} stream={stream} onRetry={startRun} disabled={navigation.pending} />
         </>
+      )}
+
+      {otpInstitution && (
+        <OtpSheet
+          open={dismissedOtpBank !== otpInstitution.bankType}
+          bankType={otpInstitution.bankType}
+          displayName={otpInstitution.displayName}
+          code={stream.otpDrafts[otpInstitution.bankType] ?? ""}
+          countdown={stream.otp[otpInstitution.bankType]}
+          onCodeChange={(code) => onOtpChange(otpInstitution.bankType, code)}
+          onSubmit={() => onOtpSubmit(otpInstitution.bankType)}
+          onDismiss={() => setDismissedOtpBank(otpInstitution.bankType)}
+        />
       )}
 
       <StepFooter navigation={footerNavigation} primary={primary} />
@@ -272,15 +292,15 @@ function InstitutionList({
   stream,
   running,
   observed,
-  onOtpChange,
-  onOtpSubmit,
+  dismissedOtpBank,
+  onOtpReopen,
 }: {
   connected: readonly ConnectedInstitution[];
   stream: SyncStreamState;
   running: boolean;
   observed: ReadonlySet<string>;
-  onOtpChange: (bank: string, code: string) => void;
-  onOtpSubmit: (bank: string) => void;
+  dismissedOtpBank: string | null;
+  onOtpReopen: () => void;
 }) {
   return (
     <ConnectedList>
@@ -316,14 +336,14 @@ function InstitutionList({
                 צפה בצילום מסך
               </a>
             )}
-            {awaitsCode(live, stream.otp[institution.bankType]) && (
-              <OtpEntry
-                code={stream.otpDrafts[institution.bankType] ?? ""}
-                secondsLeft={stream.otp[institution.bankType]?.secondsLeft}
-                onCodeChange={(code) => onOtpChange(institution.bankType, code)}
-                onSubmit={() => onOtpSubmit(institution.bankType)}
-              />
-            )}
+            {/* Offered only once the prompt was closed; while it is open the sheet is the way in. */}
+            {awaitsCode(live, stream.otp[institution.bankType]) &&
+              dismissedOtpBank === institution.bankType && (
+                <Button className="min-h-11 self-start px-4" onClick={onOtpReopen}>
+                  <KeyIcon />
+                  הזנת קוד
+                </Button>
+              )}
           </li>
         );
       })}

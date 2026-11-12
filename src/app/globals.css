@@ -41,11 +41,9 @@
  *
  * Icons: Phosphor through @/components/icons (regular inactive, fill for
  *   active navigation and status, duotone for insight and category marks).
- *   Lucide remains in older components until the redesign's cleanup.
  *
- * Motion: JS animation goes through @/components/motion (LazyMotion `m.*`,
- *   reduced motion handled by its provider). The CSS utilities below share
- *   its curve (--ease-enter) and timings. Transform and opacity only;
+ * Motion: CSS only, through the utilities below (--ease-enter curve) and
+ *   tw-animate for the dialog and select popups. Transform and opacity only;
  *   entrances run once per DOM node (a refetch that doesn't remount never
  *   replays them, so don't key an animated container by refetched data);
  *   no count-up on money; no infinite animation except the skeleton pulse;
@@ -57,14 +55,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-rubik), system-ui, sans-serif;
   --font-heading: var(--font-rubik), system-ui, sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -86,14 +76,10 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-emerald: var(--emerald);
-  --color-emerald-foreground: var(--emerald-foreground);
   --color-pos: var(--pos);
   --color-neg: var(--neg);
   --color-bar: var(--bar);
   --color-bar-strong: var(--bar-strong);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
   --color-attention: var(--attention);
   --color-attention-foreground: var(--attention-foreground);
   --color-attention-subtle: var(--attention-subtle);
@@ -180,18 +166,6 @@
   --attention-subtle: #ffe2d6;
   --attention-text: #a3381b;
 
-  /* Aliases of other tokens. A var() inside a custom property resolves where
-     it is declared, so the dark block redeclares each alias for its own scope.
-     --warning is the coral pair under its older name; use it only for the
-     attention states of ADR-0015 (badges, stale/failed sync, at-risk/over). */
-  --warning: var(--attention);
-  --warning-foreground: var(--attention-foreground);
-
-  /* Retired "emerald = positive" tokens, kept as aliases of the money pair
-     until the redesign's cleanup removes their last uses. */
-  --emerald: var(--pos);
-  --emerald-foreground: #ffffff;
-
   /* ── Hero surface: dark teal in both themes ── */
   --hero: #0c4143;
   --hero-foreground: #f4f8f6;
@@ -206,16 +180,6 @@
   --chart-3: #d99a2b;
   --chart-4: #3d78ad;
   --chart-5: #a05470;
-
-  /* ── Sidebar ── */
-  --sidebar: var(--card);
-  --sidebar-foreground: var(--card-foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
 }
 
 [data-theme="dark"],
@@ -257,20 +221,9 @@
   --attention-subtle: #3a2219;
   --attention-text: #ff9a80;
 
-  --emerald-foreground: #0b1314;
-
+  /* Redeclared, not inherited: a var() inside a custom property resolves
+     where it is declared, so the light block's alias would keep its --neg. */
   --destructive: var(--neg);
-  --warning: var(--attention);
-  --warning-foreground: var(--attention-foreground);
-  --emerald: var(--pos);
-  --sidebar: var(--card);
-  --sidebar-foreground: var(--card-foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
 
   --hero: #0d3a3c;
   --hero-foreground: #f4f8f6;
@@ -311,15 +264,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /**
-   * .fade-in — 150ms ease-out opacity enter animation.
-   * Apply to elements that appear after data load or user action.
-   * No scroll-triggered animations (Phase 3 backlog).
-   */
-  .fade-in {
-    animation: fade-in 150ms ease-out both;
-  }
-
+  /* The opacity-only entrance every animation falls back to under reduced motion. */
   @keyframes fade-in {
     from {
       opacity: 0;
@@ -330,18 +275,19 @@
   }
 
   /**
-   * .enter — fade + 8px rise, 220ms on --ease-enter (#202; same as the
-   * `enter` preset in @/components/motion).
+   * .enter — fade + 8px rise, 220ms on --ease-enter (#202).
    * Apply to a section/card wrapper that should enter gently on mount.
    * .stagger > * shares this same animation (see below) — kept as one
    * selector so the timing/easing only needs to change in one place.
+   * The keyframes are not named `enter`: tw-animate-css owns that name for
+   * its `animate-in` popups, and a second definition would replace one of them.
    */
   .enter,
   .stagger > * {
-    animation: enter 220ms var(--ease-enter) both;
+    animation: rise-in 220ms var(--ease-enter) both;
   }
 
-  @keyframes enter {
+  @keyframes rise-in {
     from {
       opacity: 0;
       transform: translateY(8px);
@@ -393,19 +339,10 @@
   }
 
   /**
-   * .view-wash — whole-view opacity fade on load. Apply once, at the
-   * outermost dashboard container (not per-page-navigation, not per-refetch).
-   */
-  .view-wash {
-    animation: fade-in 220ms ease-out both;
-  }
-
-  /**
    * .page-enter — the shell's page transition (#315): fade + 6px rise, once
    * per navigation (the shell keys it by pathname). Fill mode `backwards`, not
    * `both`: a transform left on the page wrapper after the animation would make
-   * it the containing block of every position:fixed descendant. Own keyframe
-   * name because tw-animate-css also defines `enter`.
+   * it the containing block of every position:fixed descendant.
    */
   .page-enter {
     animation: page-enter 200ms var(--ease-enter) backwards;
@@ -454,12 +391,9 @@
 
   /**
    * prefers-reduced-motion — drop translate/scale, keep opacity only (#202).
-   * Falls back to the existing .fade-in keyframes (opacity 0→1) rather than
-   * a new one, per the "single .fade-in" motion convention above.
    */
   @media (prefers-reduced-motion: reduce) {
     .enter,
-    .view-wash,
     .page-enter,
     .stagger > * {
       animation-name: fade-in;

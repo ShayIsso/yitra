@@ -28,7 +28,7 @@ export type BankSyncState = {
   transactionCount?: number;
 };
 
-export type SyncSummary = {
+type SyncSummary = {
   total: number;
   byBank: Record<string, number>;
 };
@@ -265,7 +265,7 @@ export type SyncStream = {
  * that dropped mid-run; rows imported before the drop are kept, so a caller
  * showing imported data must re-read it either way.
  */
-export type SyncSettled = "complete" | "refused" | "failed";
+type SyncSettled = "complete" | "refused" | "failed";
 
 export type SyncStreamOptions = {
   /** Runs after `sync_complete` has been applied. */

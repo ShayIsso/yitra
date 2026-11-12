@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BudgetRow, SavingsVerdictChip } from "@/components/budget-status-card";
+import { BudgetRow, SavingsVerdict } from "@/components/budget-verdict";
 import { cn } from "@/lib/utils";
 // Runtime helpers come from DB-free leaf modules; the report shapes are
 // type-only imports (build-erased) so no DB code reaches the client bundle
@@ -319,9 +319,8 @@ function SummarySection({ report, label }: { report: MonthlyReport; label: strin
 }
 
 // ── month-close verdicts (issue #169) ─────────────────────────────────────────
-// Closed months only, and only when there is something to show. Chip
-// vocabulary comes straight from the budget card (BudgetRow /
-// SavingsVerdictChip): no parallel chip implementation here.
+// Closed months only, and only when there is something to show. The verdicts
+// render through the same components as the home budgets section.
 function MonthCloseSection({ monthClose }: { monthClose: MonthCloseVerdicts }) {
   if (!monthClose.monthClosed) return null;
   if (monthClose.budgets.length === 0 && !monthClose.savingsTarget) return null;
@@ -351,7 +350,7 @@ function MonthCloseSection({ monthClose }: { monthClose: MonthCloseVerdicts }) {
                     fractionDigits={0}
                   />
                 </span>
-                <SavingsVerdictChip verdict={monthClose.savingsTarget.verdict} />
+                <SavingsVerdict verdict={monthClose.savingsTarget.verdict} />
               </span>
             </li>
           )}
@@ -613,7 +612,7 @@ function BreakdownRow({
 
 // ── skeleton ──────────────────────────────────────────────────────────────────
 
-export function MonthlySkeleton({ withToolbar = false }: { withToolbar?: boolean }) {
+function MonthlySkeleton({ withToolbar = false }: { withToolbar?: boolean }) {
   return (
     <div className="space-y-8" role="status" aria-busy aria-label="טוען את הדוח">
       {withToolbar && (

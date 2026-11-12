@@ -77,7 +77,7 @@ export function homeMonthOf(now: Date): HomeMonth {
 }
 
 /** Five, not six: at 360px six segments shrink below a 44px tap target. */
-export const MONTH_WINDOW = 5;
+const MONTH_WINDOW = 5;
 
 /**
  * The segmented control's months, oldest first. In RTL that puts the newest

@@ -6,11 +6,11 @@ export type ConnectedLoad =
   | { readonly status: "failed" }
   | { readonly status: "ready"; readonly connected: readonly ConnectedInstitution[] };
 
-export type FirstSyncNotice =
+type FirstSyncNotice =
   | { readonly kind: "refused"; readonly message: string }
   | { readonly kind: "connection-error" };
 
-export type FirstSyncPhase =
+type FirstSyncPhase =
   | "loading"
   /** The connected institutions could not be read. */
   | "unavailable"

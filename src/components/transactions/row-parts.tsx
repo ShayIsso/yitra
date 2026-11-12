@@ -20,7 +20,7 @@ import { CADENCE_LABELS } from "@/components/cadence-labels";
 import { CategoryName, ChargedAmount } from "./row-basics";
 import type { Transaction } from "./types";
 
-export function recurringLabel(re: NonNullable<Transaction["recurringExpense"]>): string {
+function recurringLabel(re: NonNullable<Transaction["recurringExpense"]>): string {
   return `הוצאה חוזרת: ${re.merchant} (${CADENCE_LABELS[re.cadence]})`;
 }
 

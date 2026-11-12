@@ -4,7 +4,7 @@ import * as React from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
+import { CaretDownIcon, CaretUpIcon, CheckIcon } from "@/components/icons";
 
 const Select = SelectPrimitive.Root;
 
@@ -13,16 +13,6 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
     <SelectPrimitive.Group
       data-slot="select-group"
       className={cn("scroll-my-1 p-1", className)}
-      {...props}
-    />
-  );
-}
-
-function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
-  return (
-    <SelectPrimitive.Value
-      data-slot="select-value"
-      className={cn("flex flex-1 text-start", className)}
       {...props}
     />
   );
@@ -40,15 +30,17 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
+      // The default height is a plain h-8, not a data-[size=default] variant:
+      // a variant out-ranks a caller's h-11, which cn cannot merge away.
       className={cn(
-        "border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 flex w-fit items-center justify-between gap-1.5 rounded-lg border bg-transparent py-2 ps-2.5 pe-2 text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-3 data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 flex h-8 w-fit items-center justify-between gap-1.5 rounded-lg border bg-transparent py-2 ps-2.5 pe-2 text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-3 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon
-        render={<ChevronDownIcon className="text-muted-foreground pointer-events-none size-4" />}
+        render={<CaretDownIcon className="text-muted-foreground pointer-events-none size-4" />}
       />
     </SelectPrimitive.Trigger>
   );
@@ -153,7 +145,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <ChevronUpIcon />
+      <CaretUpIcon />
     </SelectPrimitive.ScrollUpArrow>
   );
 }
@@ -171,7 +163,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <ChevronDownIcon />
+      <CaretDownIcon />
     </SelectPrimitive.ScrollDownArrow>
   );
 }
@@ -182,9 +174,6 @@ export {
   SelectGroup,
   SelectItem,
   SelectLabel,
-  SelectScrollDownButton,
-  SelectScrollUpButton,
   SelectSeparator,
   SelectTrigger,
-  SelectValue,
 };

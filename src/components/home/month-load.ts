@@ -9,7 +9,7 @@ import { useEffect, useReducer, useRef } from "react";
  * answer lands, even if that answer is a failure; another month's data is
  * marked not current.
  */
-export type MonthLoadResult<T> = { ok: true; data: T } | { ok: false };
+type MonthLoadResult<T> = { ok: true; data: T } | { ok: false };
 
 export type MonthLoad<T> = {
   /** The latest request; a settle carrying any other is stale. */

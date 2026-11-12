@@ -18,7 +18,7 @@ import { monthPosition, type Insight, type InsightMonth } from "@/lib/analytics/
 import { cn } from "@/lib/utils";
 import { formatDayMonth } from "../format";
 import { HeroAmount } from "../hero-states";
-import { CategoryGlyph } from "./category-glyph";
+import { CategoryIcon } from "@/components/category-icon";
 import { cardDebitLines, insightHref, isAttentionInsight } from "./insight-view";
 
 /** Every card in the row is this size, the skeleton's bones included, so loading shifts nothing. */
@@ -210,7 +210,7 @@ function cardContent(
       };
     case "category-jump":
       return {
-        mark: <CategoryGlyph icon={insight.icon} className={MARK} />,
+        mark: <CategoryIcon icon={insight.icon} className={MARK} />,
         body: (
           <>
             <Eyebrow>

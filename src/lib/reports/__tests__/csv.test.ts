@@ -150,6 +150,17 @@ describe("buildCsv", () => {
     expect(csv.split("\r\n")[1].split(",")[10]).toBe("ILS");
   });
 
+  it("writes both currency columns as ISO codes, whichever spelling was stored", () => {
+    const csv = buildCsv([
+      baseRow({ chargedCurrency: "₪", originalAmount: -30, originalCurrency: "$" }),
+    ]);
+    const fields = csv.split("\r\n")[1].split(",");
+    expect(fields[9]).toBe("-120.50");
+    expect(fields[10]).toBe("ILS");
+    expect(fields[11]).toBe("-30.00");
+    expect(fields[12]).toBe("USD");
+  });
+
   it("maps bank type, status, and category source to their Hebrew labels", () => {
     const csv = buildCsv([
       baseRow({ bankType: "visaCal", status: "pending", categorySource: "memory" }),
