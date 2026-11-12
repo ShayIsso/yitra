@@ -8,6 +8,7 @@ import type { OnboardingPathFacts } from "@/lib/onboarding/path";
 import type { Cadence } from "@/lib/recurring-detection";
 import type { SyncRunStatus } from "@/lib/sync/runs";
 import { toLocalDate } from "@/components/transactions/days";
+import { verdictNeedsAttention } from "@/lib/budgets/verdict";
 import { transactionsHref } from "@/lib/transactions/view-params";
 
 /** `/api/attention-counts`: four independent queue sizes. */
@@ -141,7 +142,7 @@ export function budgetRing(pace: { spentFraction: number; verdict: BudgetVerdict
   return {
     fill: finite ? Math.max(0, Math.min(1, pace.spentFraction)) : 1,
     percent: finite ? Math.round(pace.spentFraction * 100) : null,
-    attention: pace.verdict === "over" || pace.verdict === "at-risk",
+    attention: verdictNeedsAttention(pace.verdict),
   };
 }
 
@@ -182,7 +183,7 @@ export function expectsOnboarding(runs: readonly { status: SyncRunStatus }[]): b
 }
 
 /** Some institution's latest run succeeded (the runs are last-per-bank). */
-export function anyRunSucceeded(runs: readonly { status: SyncRunStatus }[]): boolean {
+function anyRunSucceeded(runs: readonly { status: SyncRunStatus }[]): boolean {
   return runs.some((run) => run.status === "success");
 }
 

@@ -15,6 +15,7 @@ import {
   computeCategoryNetSpend,
   type AnalyticsTransaction,
 } from "@/lib/analytics";
+import type { BudgetVerdict } from "./verdict";
 
 /** A calendar month. Budgets reason per-month; the day lives in {@link MonthElapsed}. */
 export type YearMonth = { year: number; month: number };
@@ -30,8 +31,6 @@ export const WARN_MARGIN = 0.1;
 export const REASSURE_MARGIN = 0.2;
 /** `comfortably-under` is muted through this day-of-month so an early, sparse month never over-reassures. */
 export const MUTE_THROUGH_DAY = 7;
-
-export type BudgetVerdict = "over" | "at-risk" | "on-pace" | "comfortably-under";
 
 /** Where `today` sits inside a budget's month. `dayOfMonth` is 0 before the month, `daysInMonth` after it. */
 export type MonthElapsed = {

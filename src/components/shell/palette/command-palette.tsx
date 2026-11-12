@@ -108,7 +108,8 @@ export default function CommandPalette({
         data-command-palette=""
         initialFocus={inputRef}
         finalFocus={() => !navigatedRef.current}
-        className="flex flex-col gap-0 overflow-hidden p-0 md:top-[12vh] md:max-w-xl md:translate-y-0"
+        className="md:top-[12vh] md:max-w-xl md:translate-y-0"
+        bodyClassName="flex flex-col gap-0 overflow-hidden p-0"
       >
         <DialogTitle className="sr-only">חיפוש מהיר</DialogTitle>
         <div className="flex h-14 shrink-0 items-center gap-3 border-b ps-4 pe-14">

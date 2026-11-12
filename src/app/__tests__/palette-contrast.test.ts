@@ -74,21 +74,16 @@ const FILL_PAIRS: [text: string, fill: string][] = [
   ["--secondary-foreground", "--secondary"],
   ["--accent-foreground", "--accent"],
   ["--attention-foreground", "--attention"],
-  ["--warning-foreground", "--warning"],
   ["--attention-text", "--attention-subtle"],
   // Teal link and badge text (reports table toggle, "new" subscription badge).
   ["--primary", "--card"],
   ["--primary", "--background"],
   // A teal list link on its hover fill (home/sections upcoming "more" row).
   ["--primary", "--muted"],
-  ["--emerald-foreground", "--emerald"],
   ["--hero-foreground", "--hero"],
   ["--hero-muted", "--hero"],
   // The hero's light action on hover (home/hero-states.tsx).
   ["--hero", "--hero-muted"],
-  ["--sidebar-foreground", "--sidebar"],
-  ["--sidebar-primary-foreground", "--sidebar-primary"],
-  ["--sidebar-accent-foreground", "--sidebar-accent"],
 ];
 
 const PAIRS: [string, string][] = [
@@ -109,9 +104,7 @@ type Tint = {
 /**
  * Text drawn on translucent token fills, with every alpha (rest and hover) the
  * components use in each theme: the destructive button and badge
- * (ui/button.tsx, ui/badge.tsx), the budget chips (budget-status-card.tsx),
- * the toast variants (ui/toast.tsx), the amber count badges, on the hero
- * the entry screens' sheen, current step and control hover
+ * (ui/button.tsx, ui/badge.tsx), on the hero the entry screens' sheen, current step and control hover
  * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx) and the home
  * hero's chips, notes and the equation's result term at /15
  * (home/hero-states.tsx), and the sand
@@ -129,9 +122,6 @@ const TINTS: Tint[] = [
     tint: "--destructive",
     alphas: { light: [0.1, 0.2], dark: [0.1, 0.15, 0.2] },
   },
-  { text: "--emerald", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
-  { text: "--foreground", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
-  { text: "--foreground", tint: "--warning", alphas: { light: [0.15], dark: [0.15] } },
   ...(
     [
       // /20 bounds a quiet button's /10 hover over a /10 note (about /19).

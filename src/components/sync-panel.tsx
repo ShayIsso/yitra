@@ -21,8 +21,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { BankStatus, BankStatusDetail, StageProgress } from "@/components/sync-bank-status";
 import { OtpSheet } from "@/components/sync-otp-sheet";
+import { useOtpPrompt } from "@/components/use-otp-prompt";
 import {
-  awaitsCode,
   liveBankStatus,
   persistedBankStatus,
   type BankStatusView,
@@ -117,10 +117,6 @@ function RetryButton({ onRetry, disabled }: { onRetry: () => void; disabled: boo
   );
 }
 
-function codeAwaited(stream: SyncStreamState, bankType: string): boolean {
-  return awaitsCode(stream.bankStates[bankType], stream.otp[bankType]);
-}
-
 function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPanelProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -136,8 +132,6 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   // runs once this is set, so a clock read never happens in the render
   // path shared with SSR (bug #193's exact trap).
   const [nowMs, setNowMs] = useState<number | null>(null);
-  // The bank whose code prompt the owner closed; reopened from its row.
-  const [dismissedOtpBank, setDismissedOtpBank] = useState<string | null>(null);
   const { state, start, setOtpDraft, submitOtp } = useSyncStream({
     // Re-reads the recorded runs on the server, so an experimental institution
     // this run just synced loses its caveat (live SSE state is never evidence),
@@ -148,6 +142,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
     state;
   const busy = syncing || state.starting;
   const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
+  const otp = useOtpPrompt(banks, state, { setOtpDraft, submitOtp });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount flag so SSR and hydration render the clock-free form (bug #193)
@@ -155,7 +150,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   }, []);
 
   function startSync() {
-    setDismissedOtpBank(null);
+    otp.reopen();
     void start();
   }
 
@@ -168,7 +163,6 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
     );
   }
 
-  const otpBank = banks.find((bank) => codeAwaited(state, bank.bankType)) ?? null;
   const neverSynced =
     !busy && !summary && Object.keys(bankStates).length === 0 && lastRuns.length === 0;
   const currentIndex = banks.findIndex((bank) => {
@@ -265,8 +259,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
                 persistedRun?.status === "error" ||
                 persistedRun?.status === "otp_skipped";
               // Offered only once the prompt was closed; while it is open the sheet is the way in.
-              const waitingForCode =
-                codeAwaited(state, bank.bankType) && dismissedOtpBank === bank.bankType;
+              const waitingForCode = otp.closedFor === bank.bankType;
 
               return (
                 <li
@@ -310,7 +303,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
                   {(canRetry || waitingForCode || liveState?.screenshotFilename) && (
                     <div className="flex flex-wrap items-center gap-2">
                       {waitingForCode && (
-                        <Button className={ACTION_SIZE} onClick={() => setDismissedOtpBank(null)}>
+                        <Button className={ACTION_SIZE} onClick={otp.reopen}>
                           <KeyIcon />
                           הזנת קוד
                         </Button>
@@ -344,18 +337,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
         />
       )}
 
-      {otpBank && (
-        <OtpSheet
-          open={dismissedOtpBank !== otpBank.bankType}
-          bankType={otpBank.bankType}
-          displayName={otpBank.displayName}
-          code={state.otpDrafts[otpBank.bankType] ?? ""}
-          countdown={state.otp[otpBank.bankType]}
-          onCodeChange={(code) => setOtpDraft(otpBank.bankType, code)}
-          onSubmit={() => void submitOtp(otpBank.bankType)}
-          onDismiss={() => setDismissedOtpBank(otpBank.bankType)}
-        />
-      )}
+      {otp.sheet && <OtpSheet {...otp.sheet} />}
     </div>
   );
 }

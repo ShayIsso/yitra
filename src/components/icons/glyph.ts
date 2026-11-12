@@ -12,7 +12,9 @@ export type GlyphProps<W extends IconWeight> = Omit<IconProps, "weight" | "ref">
 /**
  * Builds one Phosphor icon from just the weights it is drawn in, rendered
  * through the package's context-free base so it works in server and client
- * components alike. Only phosphor.generated.ts calls this.
+ * components alike. Only the generated per-glyph modules (generated/<Name>.ts)
+ * call this, each at its top level as a pure call: keep it free of side
+ * effects, or every glyph would be kept on every route (see ../package.json).
  */
 export function glyph<W extends IconWeight>(name: string, shapes: Record<W, readonly Shape[]>) {
   const declared = Object.keys(shapes) as W[];

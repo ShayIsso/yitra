@@ -750,8 +750,8 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
 
 /**
  * The month read in the `TransactionWithCategory` shape that totals and
- * breakdowns use — {@link getMonthlySummary}, {@link getSpendingByCategory}
- * and the reports store's monthly report — projected
+ * breakdowns use — {@link getMonthlySummary} and the reports store's monthly
+ * report — projected
  * from {@link getMonthTransactionDetails} through `toTransactionWithCategory`.
  */
 export async function getMonthTransactions(
@@ -776,13 +776,6 @@ export async function getRollupCategories(): Promise<RollupCategory[]> {
 
 export async function getMonthlySummary(year: number, month: number): Promise<MonthlySummary> {
   return computeMonthlySummary(await getMonthTransactions(year, month));
-}
-
-export async function getSpendingByCategory(
-  year: number,
-  month: number,
-): Promise<CategorySpending[]> {
-  return computeSpendingByCategory(await getMonthTransactions(year, month));
 }
 
 /**
@@ -866,24 +859,6 @@ export async function getTopMerchants(
   limit?: number,
 ): Promise<TopMerchant[]> {
   return computeTopMerchants(await getMonthMerchantTransactions(year, month), limit);
-}
-
-/**
- * Group-first spending breakdown for a month (ADR-0011 §4): the same leaf
- * totals as {@link getSpendingByCategory}, rolled up under their groups with
- * root leaves alongside. Type-driven totals are untouched — this is a lens over
- * the existing expense breakdown, not a new financial computation.
- */
-export async function getSpendingRollup(
-  year: number,
-  month: number,
-): Promise<CategorySpendingNode[]> {
-  const [spending, rollupCategories] = await Promise.all([
-    getSpendingByCategory(year, month),
-    getRollupCategories(),
-  ]);
-
-  return rollUpSpendingByGroup(spending, rollupCategories);
 }
 
 /** An account as stored, before the next-debit estimate is substituted for card accounts. */

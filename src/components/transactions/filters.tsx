@@ -21,7 +21,7 @@ import { STATUS_LABELS } from "./row-parts";
 
 type Navigate = (patch: Partial<TransactionsView>, opts?: { replace?: boolean }) => void;
 
-export function categoryFilterLabel(
+function categoryFilterLabel(
   categoryId: string,
   categoryById: ReadonlyMap<string, Category>,
 ): string {

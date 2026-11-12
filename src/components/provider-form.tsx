@@ -43,7 +43,7 @@ const OPTIONS: Record<AiProviderKind, Option> = {
 /** Zero-egress first, as the default. */
 const OPTION_ORDER: readonly AiProviderKind[] = ["off", "ollama", "gemini"];
 
-export type ProviderFormActionsState = {
+type ProviderFormActionsState = {
   readonly pending: boolean;
   /** The environment pins the provider, so submitting saves nothing. */
   readonly pinned: boolean;

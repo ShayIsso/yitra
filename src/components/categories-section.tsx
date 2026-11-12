@@ -4,40 +4,6 @@ import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  Banknote,
-  CirclePlus,
-  ShoppingCart,
-  Coffee,
-  Car,
-  Home,
-  Receipt,
-  Heart,
-  Clapperboard,
-  ShoppingBag,
-  GraduationCap,
-  Shield,
-  Repeat,
-  Gift,
-  TrendingUp,
-  PiggyBank,
-  ArrowLeftRight,
-  CreditCard,
-  MoreHorizontal,
-  Utensils,
-  Plane,
-  Bike,
-  Bus,
-  Train,
-  Dumbbell,
-  Music,
-  Monitor,
-  Smartphone,
-  Globe,
-  Volleyball,
-  HandCoins,
-  type LucideIcon,
-} from "lucide-react";
 import { ArrowUpIcon, ChartPieSliceIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +41,13 @@ import {
 import { getCategoryBudgetAction } from "@/app/actions/budgets";
 import { CategoryDot } from "@/components/category-dot";
 import {
+  CATEGORY_ICON_OPTIONS,
+  CategoryIcon,
+  DEFAULT_CATEGORY_ICON,
+  categoryIconLabel,
+  pickerIconName,
+} from "@/components/category-icon";
+import {
   AddButton,
   RowAction,
   RowTile,
@@ -98,76 +71,6 @@ type Category = {
   parentId: string | null;
 };
 
-const ICON_MAP: Record<string, LucideIcon> = {
-  Banknote,
-  CirclePlus,
-  ShoppingCart,
-  Coffee,
-  Car,
-  Home,
-  Receipt,
-  Heart,
-  Clapperboard,
-  ShoppingBag,
-  GraduationCap,
-  Shield,
-  Repeat,
-  Gift,
-  TrendingUp,
-  PiggyBank,
-  ArrowLeftRight,
-  CreditCard,
-  MoreHorizontal,
-  Utensils,
-  Plane,
-  Bike,
-  Bus,
-  Train,
-  Dumbbell,
-  Music,
-  Monitor,
-  Smartphone,
-  Globe,
-  Volleyball,
-  HandCoins,
-};
-
-const ICON_LABELS: Record<string, string> = {
-  Banknote: "שטר כסף",
-  CirclePlus: "הוספה",
-  ShoppingCart: "עגלת קניות",
-  Coffee: "קפה",
-  Car: "רכב",
-  Home: "בית",
-  Receipt: "קבלה",
-  Heart: "לב",
-  Clapperboard: "סרט",
-  ShoppingBag: "תיק קניות",
-  GraduationCap: "כובע סיום",
-  Shield: "מגן",
-  Repeat: "חזרה",
-  Gift: "מתנה",
-  TrendingUp: "מגמה עולה",
-  PiggyBank: "קופת חיסכון",
-  ArrowLeftRight: "חץ דו-כיווני",
-  CreditCard: "כרטיס אשראי",
-  MoreHorizontal: "אחר",
-  Utensils: "כלי אוכל",
-  Plane: "מטוס",
-  Bike: "אופניים",
-  Bus: "אוטובוס",
-  Train: "רכבת",
-  Dumbbell: "משקולות",
-  Music: "מוזיקה",
-  Monitor: "מסך",
-  Smartphone: "סמארטפון",
-  Globe: "גלובוס",
-  Volleyball: "כדורגל",
-  HandCoins: "מזומן",
-};
-
-const AVAILABLE_ICONS = Object.keys(ICON_MAP);
-
 const TYPE_LABELS: Record<CategoryType, string> = {
   income: "הכנסה",
   expense: "הוצאה",
@@ -181,20 +84,16 @@ const TYPE_LABELS: Record<CategoryType, string> = {
 // the form just offers "root" vs "under this existing root category").
 const NO_PARENT = "__none__";
 
-/**
- * `categories.icon` stores Lucide names, so the glyph comes from that set until
- * the stored names are mapped onto the app's icon set. It draws in ink; the
- * category's colour shows only as its dot (ADR-0015).
- */
-function CategoryIcon({ name }: { name: string }) {
-  const Icon = ICON_MAP[name] ?? MoreHorizontal;
-  return <Icon strokeWidth={1.75} />;
-}
-
 type CategoryFormValues = z.infer<typeof createCategorySchema>;
 
 function emptyForm(): CategoryFormValues {
-  return { name: "", type: "expense", icon: "MoreHorizontal", color: "#6366f1", parentId: null };
+  return {
+    name: "",
+    type: "expense",
+    icon: DEFAULT_CATEGORY_ICON,
+    color: "#6366f1",
+    parentId: null,
+  };
 }
 
 /** Root-level categories of the given type, minus `excludeId` — every valid move/detach target (ADR-0011: a parent must itself be a root; a populated one is rejected server-side with the guided path). */
@@ -267,7 +166,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
     form.reset({
       name: cat.name,
       type: cat.type,
-      icon: cat.icon,
+      icon: pickerIconName(cat.icon),
       color: cat.color,
       parentId: cat.parentId,
     });
@@ -368,7 +267,7 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
         openLabel={`עריכת ${cat.name}`}
         leading={
           <RowTile>
-            <CategoryIcon name={cat.icon} />
+            <CategoryIcon icon={cat.icon} />
           </RowTile>
         }
         title={cat.name}
@@ -545,24 +444,18 @@ export function CategoriesSection({ initialCategories }: { initialCategories: Ca
                         <FormControl>
                           <SelectTrigger className="w-full">
                             <span className="flex items-center gap-2">
-                              {(() => {
-                                const Icon = ICON_MAP[field.value] ?? MoreHorizontal;
-                                return <Icon className="size-4" />;
-                              })()}
-                              {ICON_LABELS[field.value] ?? field.value}
+                              <CategoryIcon icon={field.value} className="size-4" />
+                              {categoryIconLabel(field.value)}
                             </span>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {AVAILABLE_ICONS.map((iconName) => {
-                            const Icon = ICON_MAP[iconName]!;
-                            return (
-                              <SelectItem key={iconName} value={iconName}>
-                                <Icon className="size-4" />
-                                {ICON_LABELS[iconName] ?? iconName}
-                              </SelectItem>
-                            );
-                          })}
+                          {CATEGORY_ICON_OPTIONS.map(({ name, label }) => (
+                            <SelectItem key={name} value={name}>
+                              <CategoryIcon icon={name} className="size-4" />
+                              {label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />

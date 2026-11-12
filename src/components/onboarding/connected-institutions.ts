@@ -12,7 +12,7 @@ function isConnected(row: unknown): row is ConnectedInstitution {
 }
 
 /** `null` when the body is not a list, so each step decides what an unreadable answer means. */
-export function connectedInstitutionsFrom(body: unknown): ConnectedInstitution[] | null {
+function connectedInstitutionsFrom(body: unknown): ConnectedInstitution[] | null {
   return Array.isArray(body) ? body.filter(isConnected) : null;
 }
 

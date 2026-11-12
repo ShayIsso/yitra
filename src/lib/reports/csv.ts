@@ -10,6 +10,7 @@
  */
 
 import { bankLabel } from "@/lib/bank-registry";
+import { canonicalCurrency } from "@/lib/transactions/currency";
 
 export type CategoryType = "income" | "expense" | "investment" | "transfer" | "ignore";
 export type CategorySource = "rule" | "memory" | "ai" | "user";
@@ -125,9 +126,11 @@ function toCsvFields(row: ReportRow): string[] {
     row.groupName ?? "",
     row.categoryType ? CATEGORY_TYPE_LABELS[row.categoryType] : "",
     formatAmount(row.chargedAmount),
-    row.chargedCurrency ?? "ILS",
+    // Stored currencies mix ISO codes and symbols ("ILS" and "₪"); a consumer
+    // filtering or summing by currency needs one spelling.
+    canonicalCurrency(row.chargedCurrency ?? "ILS"),
     formatAmount(row.originalAmount),
-    row.originalCurrency,
+    canonicalCurrency(row.originalCurrency),
     formatInstallment(row.installmentNumber, row.installmentTotal),
     STATUS_LABELS[row.status],
     row.categorySource ? CATEGORY_SOURCE_LABELS[row.categorySource] : "",

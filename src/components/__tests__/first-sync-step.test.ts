@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FirstSyncBody } from "@/components/onboarding/steps/first-sync-step";
@@ -16,6 +16,17 @@ import {
   type SyncStreamAction,
   type SyncStreamState,
 } from "@/components/sync-stream";
+
+// The sheet portals out of the static markup, so it renders here as a marker
+// carrying the props the step hands it.
+vi.mock("@/components/sync-otp-sheet", () => ({
+  OtpSheet: (props: { open: boolean; displayName: string }) =>
+    createElement(
+      "output",
+      { "data-otp-sheet": props.open ? "open" : "closed" },
+      props.displayName,
+    ),
+}));
 
 const BANK = "synthetic-bank";
 const CARD = "synthetic-card";
@@ -219,10 +230,11 @@ describe("the first-sync step as rendered", () => {
     expect(html).not.toContain(START);
   });
 
-  it("prompts for the OTP inside the step while the run waits for it", () => {
+  it("asks for the code in the shared sheet, not inline, while the run waits for it", () => {
     const html = render(connected, stream(accepted, event({ type: "otp_required", bank: BANK })));
-    expect(html).toContain("הזן קוד SMS");
-    expect(html).toContain("3:00");
+    expect(html).toContain('<output data-otp-sheet="open">Synthetic checking</output>');
+    expect(html).not.toContain("one-time-code");
+    expect(html).not.toContain("הזנת קוד");
     expect(html).not.toContain("דילוג");
   });
 
@@ -245,6 +257,11 @@ describe("the first-sync step as rendered", () => {
     expect(html).toContain("2 תנועות");
     expect(html).toContain(INSTITUTION_STEP);
     expect(html).toContain(FINISH);
+  });
+
+  it("draws no code prompt while no institution waits for a code", () => {
+    const html = render(connected, stream(accepted, event({ type: "bank_complete", bank: BANK })));
+    expect(html).not.toContain("data-otp-sheet");
   });
 
   it("shows the server's refusal as a plain notice", () => {

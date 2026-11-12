@@ -3,9 +3,9 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { awaitsCode } from "@/components/bank-status-view";
 import { monthKey } from "@/components/reports/format";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
+import { useOtpPrompt } from "@/components/use-otp-prompt";
 import type { MonthlyTargetsData } from "@/lib/budgets";
 import type { Category } from "@/lib/categories";
 import { israelCalendarDay } from "@/lib/calendar";
@@ -122,7 +122,6 @@ export function HomeScreen({
   /** The client clock, read only after mount (bug #193: no clock in the SSR path). */
   const [nowMs, setNowMs] = React.useState<number | null>(null);
   const [targetOpen, setTargetOpen] = React.useState(false);
-  const [dismissedOtpBank, setDismissedOtpBank] = React.useState<string | null>(null);
 
   // The shell's pending-reconciliation badge and the month floor are server-rendered.
   const refreshServer = React.useCallback(() => router.refresh(), [router]);
@@ -164,6 +163,7 @@ export function HomeScreen({
     },
   });
   const stream = sync.state;
+  const otp = useOtpPrompt(banks, stream, sync);
   const live = stream.starting || stream.syncing;
   React.useEffect(() => {
     liveRef.current = live;
@@ -230,14 +230,10 @@ export function HomeScreen({
     [range, month],
   );
 
-  const codeBank =
-    banks.find((bank) => awaitsCode(stream.bankStates[bank.bankType], stream.otp[bank.bankType]))
-      ?.bankType ?? null;
-  const otpBank = banks.find((bank) => bank.bankType === codeBank) ?? null;
-  const reopenCode = () => setDismissedOtpBank(null);
+  const codeBank = otp.institution?.bankType ?? null;
 
   function startSync() {
-    setDismissedOtpBank(null);
+    otp.reopen();
     void sync.start();
   }
 
@@ -282,7 +278,7 @@ export function HomeScreen({
             <FreshnessIndicator
               freshness={freshness}
               onSyncNow={startSync}
-              onEnterCode={reopenCode}
+              onEnterCode={otp.reopen}
             />
           )
         }
@@ -300,7 +296,7 @@ export function HomeScreen({
               banks={banks}
               stream={stream}
               onStartSync={startSync}
-              onEnterCode={reopenCode}
+              onEnterCode={otp.reopen}
               onSetTarget={() => setTargetOpen(true)}
             />
           </div>
@@ -352,18 +348,7 @@ export function HomeScreen({
         />
       )}
 
-      {otpBank && (
-        <OtpSheet
-          open={dismissedOtpBank !== otpBank.bankType}
-          bankType={otpBank.bankType}
-          displayName={otpBank.displayName}
-          code={stream.otpDrafts[otpBank.bankType] ?? ""}
-          countdown={stream.otp[otpBank.bankType]}
-          onCodeChange={(code) => sync.setOtpDraft(otpBank.bankType, code)}
-          onSubmit={() => void sync.submitOtp(otpBank.bankType)}
-          onDismiss={() => setDismissedOtpBank(otpBank.bankType)}
-        />
-      )}
+      {otp.sheet && <OtpSheet {...otp.sheet} />}
 
       {targetOpen && shown && (data?.state === "no-target" || data?.state === "thin-history") && (
         <TargetDialog

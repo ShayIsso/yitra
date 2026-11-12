@@ -47,9 +47,8 @@ export type BudgetConfig = {
 
 /**
  * One category budget's month-close result. Field names deliberately mirror
- * the Dashboard's `BudgetChipData` (BGR9, `budget-status-card.tsx`) so both
- * render through the exact same chip component — the vocabulary law this
- * slice must hold.
+ * `BudgetRowData` (`src/components/budget-verdict.tsx`) so the reports render
+ * it through the same verdict components as the home budgets section.
  */
 export type CategoryBudgetVerdict = {
   id: string;

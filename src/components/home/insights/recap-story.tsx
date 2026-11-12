@@ -71,7 +71,8 @@ export default function RecapStory({
           else return;
           e.preventDefault();
         }}
-        className="bg-hero text-hero-foreground ring-hero-foreground/10 flex min-h-[min(36rem,calc(100dvh-2rem))] flex-col gap-0 p-0 md:max-w-md"
+        className="bg-hero text-hero-foreground ring-hero-foreground/10 min-h-[min(36rem,calc(100dvh-2rem))] md:max-w-md"
+        bodyClassName="flex flex-col gap-0 p-0"
       >
         <div className="flex items-center gap-1.5 px-5 pt-4" aria-hidden="true">
           {slides.map((s, i) => (

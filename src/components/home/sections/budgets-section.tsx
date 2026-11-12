@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircleIcon, GaugeIcon, WarningCircleIcon } from "@/components/icons";
-import { VERDICT_LABEL } from "@/components/budget-status-card";
+import { GaugeIcon } from "@/components/icons";
+import { BudgetVerdictChip, SavingsVerdict } from "@/components/budget-verdict";
 import { CategoryDot } from "@/components/category-dot";
 import { settingsSectionHref } from "@/components/settings/sections";
 import { Amount } from "@/components/ui/amount";
 import { Card } from "@/components/ui/card";
-import type { BudgetStatus, BudgetVerdict, SavingsTargetStatus } from "@/lib/budgets";
+import type { BudgetStatus, SavingsTargetStatus } from "@/lib/budgets";
 import type { Category } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import type { SectionLoad } from "./load";
@@ -60,25 +60,6 @@ function Ring({ fill, attention }: { fill: number; attention: boolean }) {
   );
 }
 
-/** The verdict in words with a glyph: coral only when it calls for attention. */
-function VerdictChip({ verdict, attention }: { verdict: BudgetVerdict; attention: boolean }) {
-  return (
-    <span
-      className={cn(
-        "text-caption inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
-        attention ? "bg-attention-subtle text-attention-text" : "bg-muted text-muted-foreground",
-      )}
-    >
-      {attention ? (
-        <WarningCircleIcon weight="fill" className="size-3.5" />
-      ) : (
-        <CheckCircleIcon weight="fill" className="size-3.5" />
-      )}
-      {VERDICT_LABEL[verdict]}
-    </span>
-  );
-}
-
 const TILE = "flex-row items-center gap-3 p-3";
 
 function RingTile({ status, category }: { status: BudgetStatus; category: Category | undefined }) {
@@ -102,7 +83,7 @@ function RingTile({ status, category }: { status: BudgetStatus; category: Catego
           <Amount amount={pace.limit} colorize={false} fractionDigits={0} />
         </p>
         <span className="mt-1 flex">
-          <VerdictChip verdict={pace.verdict} attention={ring.attention} />
+          <BudgetVerdictChip verdict={pace.verdict} />
         </span>
       </div>
     </Card>
@@ -140,18 +121,7 @@ function SavingsTargetRow({ status }: { status: SavingsTargetStatus }) {
           <Amount amount={status.target} colorize={false} fractionDigits={0} />
         </span>
       </p>
-      {status.verdict === "met" && (
-        <span className="text-caption text-muted-foreground inline-flex items-center gap-1 font-medium">
-          <CheckCircleIcon weight="fill" className="text-primary size-3.5" />
-          הושג
-        </span>
-      )}
-      {status.verdict === "missed" && (
-        <span className="text-caption text-attention-text inline-flex items-center gap-1 font-medium">
-          <WarningCircleIcon weight="fill" className="size-3.5" />
-          לא הושג
-        </span>
-      )}
+      {status.verdict && <SavingsVerdict verdict={status.verdict} />}
     </Card>
   );
 }

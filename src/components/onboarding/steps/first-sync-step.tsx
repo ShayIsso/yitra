@@ -8,6 +8,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   InfoIcon,
+  KeyIcon,
   PlusIcon,
   WarningCircleIcon,
 } from "@/components/icons";
@@ -16,13 +17,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { aiSummaryLines } from "@/components/ai-summary-lines";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
 import { observedFromResponse } from "@/components/institution-picker";
-import {
-  BankStatus,
-  BankStatusDetail,
-  OtpEntry,
-  StageProgress,
-} from "@/components/sync-bank-status";
-import { awaitsCode, liveBankStatus } from "@/components/bank-status-view";
+import { BankStatus, BankStatusDetail, StageProgress } from "@/components/sync-bank-status";
+import { OtpSheet } from "@/components/sync-otp-sheet";
+import { useOtpPrompt } from "@/components/use-otp-prompt";
+import { liveBankStatus } from "@/components/bank-status-view";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import { bankTrustOf } from "@/lib/bank-registry";
 import { cn } from "@/lib/utils";
@@ -182,10 +180,18 @@ export function FirstSyncBody({
   onOtpChange,
   onOtpSubmit,
 }: FirstSyncBodyProps) {
+  const otp = useOtpPrompt(load.status === "ready" ? load.connected : [], stream, {
+    setOtpDraft: onOtpChange,
+    submitOtp: onOtpSubmit,
+  });
+  const startRun = () => {
+    otp.reopen();
+    onStart();
+  };
   const footer = firstSyncFooter(view);
   const primary: StepFooterPrimary = {
     wait: { disabled: true },
-    start: { label: "התחלת סנכרון", onClick: onStart },
+    start: { label: "התחלת סנכרון", onClick: startRun },
     busy: { label: "מסנכרן...", pending: true },
     finish: {},
   }[footer.primary];
@@ -216,12 +222,14 @@ export function FirstSyncBody({
             stream={stream}
             running={view.phase === "running"}
             observed={observed}
-            onOtpChange={onOtpChange}
-            onOtpSubmit={onOtpSubmit}
+            closedOtpFor={otp.closedFor}
+            onOtpReopen={otp.reopen}
           />
-          <Outcome view={view} stream={stream} onRetry={onStart} disabled={navigation.pending} />
+          <Outcome view={view} stream={stream} onRetry={startRun} disabled={navigation.pending} />
         </>
       )}
+
+      {otp.sheet && <OtpSheet {...otp.sheet} />}
 
       <StepFooter navigation={footerNavigation} primary={primary} />
     </div>
@@ -272,15 +280,16 @@ function InstitutionList({
   stream,
   running,
   observed,
-  onOtpChange,
-  onOtpSubmit,
+  closedOtpFor,
+  onOtpReopen,
 }: {
   connected: readonly ConnectedInstitution[];
   stream: SyncStreamState;
   running: boolean;
   observed: ReadonlySet<string>;
-  onOtpChange: (bank: string, code: string) => void;
-  onOtpSubmit: (bank: string) => void;
+  /** The institution whose code prompt was closed while its code is still awaited. */
+  closedOtpFor: string | null;
+  onOtpReopen: () => void;
 }) {
   return (
     <ConnectedList>
@@ -316,13 +325,12 @@ function InstitutionList({
                 צפה בצילום מסך
               </a>
             )}
-            {awaitsCode(live, stream.otp[institution.bankType]) && (
-              <OtpEntry
-                code={stream.otpDrafts[institution.bankType] ?? ""}
-                secondsLeft={stream.otp[institution.bankType]?.secondsLeft}
-                onCodeChange={(code) => onOtpChange(institution.bankType, code)}
-                onSubmit={() => onOtpSubmit(institution.bankType)}
-              />
+            {/* Offered only once the prompt was closed; while it is open the sheet is the way in. */}
+            {closedOtpFor === institution.bankType && (
+              <Button className="min-h-11 self-start px-4" onClick={onOtpReopen}>
+                <KeyIcon />
+                הזנת קוד
+              </Button>
             )}
           </li>
         );

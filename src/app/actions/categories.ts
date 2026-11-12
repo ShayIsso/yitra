@@ -78,8 +78,8 @@ function duplicateNameResult() {
 }
 
 /**
- * Category names and types render on settings, transactions, the dashboard
- * (spending-by-category chart), the reconciliation inbox and the
+ * Category names and types render on settings, transactions, the home
+ * screen (category list, insights), the reconciliation inbox and the
  * subscriptions naming dialog.
  */
 function revalidateCategoryPages() {

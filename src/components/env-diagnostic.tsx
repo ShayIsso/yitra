@@ -1,4 +1,4 @@
-import { ShieldAlert } from "lucide-react";
+import { ShieldWarningIcon } from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { BootEnvProblem, BootEnvVariable } from "@/lib/env";
@@ -30,7 +30,7 @@ export function EnvDiagnostic({ problems }: { problems: readonly BootEnvProblem[
       <Card className="w-full max-w-xl">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <ShieldAlert className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+            <ShieldWarningIcon className="text-muted-foreground size-6 shrink-0" />
             <CardTitle className="text-lg">חסרה הגדרת סביבה</CardTitle>
           </div>
         </CardHeader>

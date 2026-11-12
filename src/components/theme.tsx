@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { THEME_STORAGE_KEY } from "./theme-storage";
 
 export type Theme = "light" | "dark";
-
-/**
- * localStorage key the pre-paint script in the root layout reads/writes. Both
- * must agree on this name or the toggle and the flash-guard diverge.
- */
-export const THEME_STORAGE_KEY = "yitra-theme";
 
 /**
  * `<html data-theme>` is the single source of truth: the pre-paint inline
