@@ -9,17 +9,9 @@
  * the leaves.
  */
 
+import { CategoryDot } from "@/components/category-dot";
 import { SelectGroup, SelectItem, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
-
-export function CategoryDot({ color }: { color: string }) {
-  return (
-    <span
-      className="inline-block size-2 shrink-0 rounded-full"
-      style={{ backgroundColor: color }}
-    />
-  );
-}
 
 function LeafSelectItem({ leaf, indent }: { leaf: Category; indent?: string }) {
   return (

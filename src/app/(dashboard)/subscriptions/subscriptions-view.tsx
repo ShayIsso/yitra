@@ -14,6 +14,7 @@ import {
   TrendUpIcon,
   WarningCircleIcon,
 } from "@/components/icons";
+import { CADENCE_LABELS } from "@/components/cadence-labels";
 import { Amount } from "@/components/ui/amount";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -48,12 +49,6 @@ import {
 } from "./rows";
 
 // ── labels and formatting (client-side only: hydration rule) ─────────────────
-
-const CADENCE_LABELS: Record<SubscriptionRow["cadence"], string> = {
-  monthly: "חודשי",
-  quarterly: "רבעוני",
-  annual: "שנתי",
-};
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   all: "הכל",

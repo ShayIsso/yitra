@@ -9,6 +9,7 @@ import { monthKey } from "@/components/reports/format";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import type { MonthlyTargetsData } from "@/lib/budgets";
 import type { Category } from "@/lib/categories";
+import { israelCalendarDay } from "@/lib/calendar";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 import { firstSyncRunEnded, runsSignature } from "./first-sync-watch";
 import { FreshnessIndicator } from "./freshness-indicator";
@@ -25,6 +26,7 @@ import { ForecastChart } from "./forecast-chart";
 import { HeroBodySkeleton, HeroError, MonthHero } from "./month-hero";
 import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
+import { HomeSections } from "./sections/home-sections";
 import {
   HOME_MONTH_PARAM,
   homeHref,
@@ -52,6 +54,9 @@ const TargetDialog = dynamic(() => import("./target-dialog"), { ssr: false });
  */
 const FIRST_SYNC_POLL_MS = 4000;
 const FIRST_SYNC_SAFETY_TICKS = 8;
+
+/** One empty list, so the memoized sections see a stable prop until the runs arrive. */
+const NO_RUNS: SyncRunSummary[] = [];
 
 /** Keeps "updated 5 minutes ago" and staleness moving while the page stays open. */
 const CLOCK_TICK_MS = 60_000;
@@ -253,6 +258,9 @@ export function HomeScreen({
     shown?.outlook.state === "active" || shown?.outlook.state === "thin-history"
       ? shown.outlook
       : null;
+  const sectionsShown = answered && !welcoming;
+  const sectionsKey = `${version}:${sectionsNudge}`;
+  const homeDay = nowMs === null ? null : israelCalendarDay(new Date(nowMs));
 
   return (
     <div className="flex flex-col gap-6">
@@ -313,14 +321,18 @@ export function HomeScreen({
       )}
 
       {banks.length > 0 && (
-        <DashboardPanel
-          categories={categories}
-          month={month}
-          refreshKey={`${version}:${sectionsNudge}`}
-          visible={answered && !welcoming}
-          lastSyncRuns={runs ?? []}
-          onMonthlyTargets={setTargets}
-        />
+        <>
+          <DashboardPanel month={month} refreshKey={sectionsKey} visible={sectionsShown} />
+          <HomeSections
+            categories={categories}
+            month={month}
+            refreshKey={sectionsKey}
+            visible={sectionsShown}
+            lastSyncRuns={runs ?? NO_RUNS}
+            onMonthlyTargets={setTargets}
+            today={homeDay}
+          />
+        </>
       )}
 
       {otpBank && (

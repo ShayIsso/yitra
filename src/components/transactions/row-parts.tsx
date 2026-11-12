@@ -13,37 +13,18 @@ import {
 } from "@/components/icons";
 import { Amount } from "@/components/ui/amount";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import {
-  CategoryDot,
-  GroupedCategorySelectItems,
-} from "@/components/grouped-category-select-items";
+import { GroupedCategorySelectItems } from "@/components/grouped-category-select-items";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
 import { cn } from "@/lib/utils";
+import { CADENCE_LABELS } from "@/components/cadence-labels";
+import { CategoryName, ChargedAmount } from "./row-basics";
 import type { Transaction } from "./types";
-
-export function displayName(tx: Transaction): string {
-  return tx.customDescription ?? tx.description;
-}
-
-export const CADENCE_LABELS: Record<
-  NonNullable<Transaction["recurringExpense"]>["cadence"],
-  string
-> = {
-  monthly: "חודשי",
-  quarterly: "רבעוני",
-  annual: "שנתי",
-};
 
 export function recurringLabel(re: NonNullable<Transaction["recurringExpense"]>): string {
   return `הוצאה חוזרת: ${re.merchant} (${CADENCE_LABELS[re.cadence]})`;
 }
 
 export const STATUS_LABELS: Record<string, string> = { completed: "הושלם", pending: "ממתין" };
-
-/** Transfers and ignored rows are outside every total (CONTEXT.md), so their amount recedes. */
-export function isOutsideTotals(category: Category | undefined): boolean {
-  return category?.type === "transfer" || category?.type === "ignore";
-}
 
 /**
  * The charged amount, with the purchase's original amount beneath it only when
@@ -59,15 +40,9 @@ export function TransactionAmount({
   category: Category | undefined;
   className?: string;
 }) {
-  const muted = isOutsideTotals(category);
   return (
     <span className={cn("flex flex-col items-end text-end", className)}>
-      <Amount
-        amount={tx.chargedAmount}
-        currency={tx.chargedCurrency ?? "ILS"}
-        colorize={!muted && tx.chargedAmount > 0}
-        className={cn("font-semibold whitespace-nowrap", muted && "text-muted-foreground")}
-      />
+      <ChargedAmount amount={tx.chargedAmount} currency={tx.chargedCurrency} category={category} />
       {tx.originalCharge && (
         <span className="text-caption text-muted-foreground whitespace-nowrap">
           <span className="sr-only">סכום מקורי </span>
@@ -79,17 +54,6 @@ export function TransactionAmount({
         </span>
       )}
     </span>
-  );
-}
-
-export function CategoryName({ category }: { category: Category | undefined }) {
-  return category ? (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <CategoryDot color={category.color} />
-      <span className="truncate">{category.name}</span>
-    </span>
-  ) : (
-    <span className="text-muted-foreground truncate">ללא קטגוריה</span>
   );
 }
 

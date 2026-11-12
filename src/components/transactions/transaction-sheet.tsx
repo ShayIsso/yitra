@@ -22,15 +22,9 @@ import { Input } from "@/components/ui/input";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import { longDay } from "./days";
-import {
-  CADENCE_LABELS,
-  CategoryPicker,
-  PendingMark,
-  STATUS_LABELS,
-  displayName,
-  isOutsideTotals,
-  useBusy,
-} from "./row-parts";
+import { CADENCE_LABELS } from "@/components/cadence-labels";
+import { displayName, isOutsideTotals } from "./row-basics";
+import { CategoryPicker, PendingMark, STATUS_LABELS, useBusy } from "./row-parts";
 import type { TransactionActions } from "./use-transaction-actions";
 import type { Transaction } from "./types";
 

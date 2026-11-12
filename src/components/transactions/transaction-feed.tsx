@@ -6,7 +6,8 @@ import { CheckIcon } from "@/components/icons";
 import type { Category } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import { dayLabel, groupByDay } from "./days";
-import { CategoryName, RowMarks, TransactionAmount, displayName } from "./row-parts";
+import { CategoryName, displayName } from "./row-basics";
+import { RowMarks, TransactionAmount } from "./row-parts";
 import type { Transaction } from "./types";
 
 /**

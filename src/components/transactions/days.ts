@@ -16,7 +16,7 @@ export function groupByDay<T extends { date: string }>(rows: T[]): { day: string
   return groups;
 }
 
-function toLocalDate(day: string): Date {
+export function toLocalDate(day: string): Date {
   const [y, m, d] = day.slice(0, 10).split("-").map(Number);
   return new Date(y, m - 1, d);
 }
