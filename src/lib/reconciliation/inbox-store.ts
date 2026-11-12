@@ -11,7 +11,7 @@ import {
   bankCredentials,
   categoryRules,
 } from "@/db/schema";
-import { and, eq, isNull, inArray, ne, not, notInArray, or, asc } from "drizzle-orm";
+import { and, eq, isNull, inArray, notInArray, or, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { CategorySource } from "@/lib/merchant-memory";
 import type { InboxStore, InboxTransaction, TransferFlip } from "./inbox-ops";
@@ -265,20 +265,18 @@ export const drizzleInboxStore: InboxStore = {
     // Memory is deliberately NOT consulted here in this slice (issue #135).
     // The user/memory guard lives in the WHERE so a category chosen after the
     // caller read the row still wins (#341).
-    const userCategory = and(
-      inArray(transactions.categorySource, ["user", "memory"]),
+    const writable = or(
+      isNull(transactions.categorySource),
+      notInArray(transactions.categorySource, ["user", "memory"]),
       releasable.transferCategoryId
-        ? or(
-            isNull(transactions.categoryId),
-            ne(transactions.categoryId, releasable.transferCategoryId),
-          )
+        ? eq(transactions.categoryId, releasable.transferCategoryId)
         : undefined,
     );
     await db.transaction(async (tx) => {
       const written = await tx
         .update(transactions)
         .set({ categoryId, categorySource: categoryId === null ? null : "rule" })
-        .where(and(eq(transactions.id, txnId), not(userCategory!)))
+        .where(and(eq(transactions.id, txnId), writable))
         .returning({ id: transactions.id });
       if (categoryId !== null && written.length > 0) await supersedeOpenSuggestions([txnId], tx);
     });

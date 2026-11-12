@@ -98,6 +98,15 @@ describe("rows without a user category", () => {
     expect(state.get("b")).toMatchObject({ categoryId: null, categorySource: null });
   });
 
+  it("write the rule result to a row with no provenance on reject and undo", async () => {
+    const a = row("a", { categoryId: RENT, categorySource: null });
+    const b = row("b");
+    const { store, state } = storeOf([a, b]);
+    await undoTransaction("a", [a, b], store);
+    expect(state.get("a")).toMatchObject({ categoryId: RULE_RESULT, categorySource: "rule" });
+    expect(state.get("b")).toMatchObject({ categoryId: RULE_RESULT, categorySource: "rule" });
+  });
+
   it("release an approved transfer flip (user provenance) on undo", async () => {
     const flipped = row("a", {
       categoryId: TRANSFER,

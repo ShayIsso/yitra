@@ -199,6 +199,25 @@ describe.skipIf(!isThrowaway)("the suspected-transfer inbox on Postgres", () => 
     expect(await stored()).toMatchObject({ categoryId: null, categorySource: null });
   });
 
+  it.each([null, "income"] as const)(
+    "setCategory writes to a row with no provenance (category %s)",
+    async (existing) => {
+      await db
+        .update(schema.transactions)
+        .set({ categoryId: existing ? incomeCategoryId : null, categorySource: null })
+        .where(eq(schema.transactions.id, ROW));
+
+      await drizzleInboxStore.setCategory(ROW, incomeCategoryId, { transferCategoryId });
+      expect(await stored()).toMatchObject({
+        categoryId: incomeCategoryId,
+        categorySource: "rule",
+      });
+
+      await drizzleInboxStore.setCategory(ROW, null, { transferCategoryId: null });
+      expect(await stored()).toMatchObject({ categoryId: null, categorySource: null });
+    },
+  );
+
   it("setCategory releases the internal transfer an approval wrote", async () => {
     await db
       .update(schema.transactions)
