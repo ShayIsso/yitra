@@ -65,7 +65,7 @@ function pageCommands(): PaletteCommand[] {
 }
 
 function transactionCommands(current: HomeMonth): PaletteCommand[] {
-  const filter = (
+  const transactionView = (
     id: string,
     view: {
       label: string;
@@ -82,28 +82,28 @@ function transactionCommands(current: HomeMonth): PaletteCommand[] {
     icon: view.icon ?? FunnelIcon,
   });
   return [
-    filter("review", {
+    transactionView("review", {
       label: "ממתינות לסקירה",
       href: transactionsHref({ needsReview: true }),
       keywords: ["review", "לבדיקה"],
       icon: ListChecksIcon,
     }),
-    filter("uncategorized", {
+    transactionView("uncategorized", {
       label: "ללא קטגוריה",
       href: transactionsHref({ uncategorized: true }),
       keywords: ["uncategorized", "לא מסווגות"],
     }),
-    filter("this-month", {
+    transactionView("this-month", {
       label: "תנועות החודש",
       href: transactionsHref({ month: monthKey(current) }),
       keywords: ["this month"],
     }),
-    filter("last-month", {
+    transactionView("last-month", {
       label: "תנועות החודש שעבר",
       href: transactionsHref({ month: monthKey(shiftMonth(current, -1)) }),
       keywords: ["last month"],
     }),
-    filter("pending", {
+    transactionView("pending", {
       label: "תנועות בהמתנה",
       href: transactionsHref({ status: "pending" }),
       keywords: ["pending", "ממתין"],

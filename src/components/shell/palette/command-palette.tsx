@@ -73,8 +73,8 @@ export default function CommandPalette({
     if (step !== 0) {
       event.preventDefault();
       if (visible.length === 0) return;
-      const index = active ? visible.indexOf(active) : -1;
-      setActiveId(visible[(index + step + visible.length) % visible.length].id);
+      const at = active ? visible.indexOf(active) : -1;
+      setActiveId(visible[(at + step + visible.length) % visible.length].id);
     } else if (event.key === "Enter" && active) {
       event.preventDefault();
       choose(active);
@@ -83,7 +83,13 @@ export default function CommandPalette({
 
   const trimmed = query.trim();
   const resultsLabel =
-    trimmed === "" ? "" : visible.length === 0 ? "אין תוצאות" : `${visible.length} תוצאות`;
+    trimmed === ""
+      ? ""
+      : visible.length === 0
+        ? "אין תוצאות"
+        : visible.length === 1
+          ? "תוצאה אחת"
+          : `${visible.length} תוצאות`;
 
   return (
     <Dialog

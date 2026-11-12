@@ -33,11 +33,7 @@ export function buildSearchIndex<T extends Searchable>(items: readonly T[]): Sea
   }));
 }
 
-/**
- * How well one query word matches, best first: 0 a label word starts with
- * it, 1 inside a label word, 2 a keyword word starts with it, 3 inside a
- * keyword; null when it matches nowhere.
- */
+/** The tier one query word reaches (0 best, see `search`); null when it matches nowhere. */
 function tier(word: string, entry: Entry<unknown>): 0 | 1 | 2 | 3 | null {
   const startsWord = (text: string) => ` ${text}`.includes(` ${word}`);
   if (startsWord(entry.label)) return 0;
@@ -47,11 +43,7 @@ function tier(word: string, entry: Entry<unknown>): 0 | 1 | 2 | 3 | null {
   return null;
 }
 
-/**
- * A match's rank, compared element by element: a label starting with the
- * whole query first, then how many query words reached each tier, best tier
- * first. Null when some query word matches nowhere.
- */
+/** Compared element by element: whole-query label prefix, then the words per tier, best first. */
 function rank(words: string[], phrase: string, entry: Entry<unknown>): number[] | null {
   const counts = [0, 0, 0, 0];
   for (const word of words) {

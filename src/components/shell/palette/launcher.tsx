@@ -10,8 +10,10 @@ type LoadedPalette = {
 };
 
 // React.lazy, not next/dynamic: a lazy component keeps a failed import as its
-// result, so retrying after a ChunkLoadError (a stale hashed chunk after an
-// upgrade) needs a fresh one, which a module-level next/dynamic can't give.
+// result, so a retry after a ChunkLoadError needs a fresh one, which a
+// module-level next/dynamic can't give. A retry helps a dropped connection;
+// a stale hashed chunk after an upgrade keeps failing until a reload, but the
+// boundary below keeps it from taking the shell down.
 const loadPalette = (): LoadedPalette => ({
   Palette: React.lazy(() => import("./command-palette")),
 });
