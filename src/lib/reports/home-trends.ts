@@ -4,7 +4,6 @@ import {
   computeMonthlySummary,
   countedThroughToday,
   isMonthOverMonthChangeVisible,
-  monthAtIndex,
   monthChange,
   monthDateRange,
   monthIndex,
@@ -21,8 +20,11 @@ import {
   type RollupCategory,
   type TransactionWithCategory,
 } from "@/lib/analytics";
-import { isMonthHistoryComplete } from "@/lib/budgets";
-import { buildTrendsReport, type TrendsReport } from "./trends";
+import {
+  isComparisonHistoryComplete,
+  type AccountHistoryStart,
+} from "@/lib/analytics/history-coverage";
+import { buildTrendsReport, enumerateMonthRange, type TrendsReport } from "./trends";
 
 const HOME_TREND_MONTHS = 12;
 
@@ -39,11 +41,8 @@ export type HomeTrendsInput = {
   /** Every row in {@link homeTrendRange} for `month` and `today`. */
   rows: HomeTrendRow[];
   categories: RollupCategory[];
-  /**
-   * From when every connected credential's history is present (the month
-   * outlook's notion, `getHistoryCompleteSince`); null before any is stored.
-   */
-  historyCompleteSince: string | null;
+  /** Each account's earliest stored row, the month outlook's coverage read. */
+  historyStarts: AccountHistoryStart[];
 };
 
 export type HomeTrendTotals = {
@@ -95,8 +94,13 @@ export type HomeCategoryTrend = {
   share: number;
   /** Spend per month, aligned to `HomeTrends.months`; null for a month with no rows at all. */
   series: (number | null)[];
-  /** Against the month before; null while the comparison is not shown. */
-  change: (MonthChange & { previous: number }) | null;
+  /**
+   * Against the month before; null while the comparison is not shown.
+   * `previous` is over the same window as the change (month-to-date for a
+   * running month); `previousWhole` is the whole month before, which decides
+   * whether the category is new.
+   */
+  change: (MonthChange & { previous: number; previousWhole: number }) | null;
   /** Its leaves for a group, ranked; empty otherwise. */
   children: HomeCategoryTrend[];
 };
@@ -139,10 +143,8 @@ export function homeTrendWindowEnd(selected: InsightMonth, current: InsightMonth
 }
 
 function windowMonths(selected: InsightMonth, today: string): InsightMonth[] {
-  const end = monthIndex(homeTrendWindowEnd(selected, monthOf(today)));
-  return Array.from({ length: HOME_TREND_MONTHS }, (_, i) =>
-    monthAtIndex(end - HOME_TREND_MONTHS + 1 + i),
-  );
+  const end = homeTrendWindowEnd(selected, monthOf(today));
+  return enumerateMonthRange(monthDateRange(end.year, end.month).from, HOME_TREND_MONTHS);
 }
 
 /**
@@ -154,10 +156,11 @@ export function homeTrendRange(
   today: string,
 ): { from: string; to: string } {
   const months = windowMonths(selected, today);
-  const first = Math.min(monthIndex(months[0]), monthIndex(previousMonth(selected)));
+  const before = previousMonth(selected);
+  const first = monthIndex(before) < monthIndex(months[0]) ? before : months[0];
   const last = months[months.length - 1];
   return {
-    from: monthDateRange(monthAtIndex(first).year, monthAtIndex(first).month).from,
+    from: monthDateRange(first.year, first.month).from,
     to: monthDateRange(last.year, last.month).to,
   };
 }
@@ -196,9 +199,7 @@ function rowsByMonth(rows: readonly HomeTrendRow[]): (m: InsightMonth) => HomeTr
 }
 
 function isComparable(input: HomeTrendsInput): boolean {
-  return [input.month, previousMonth(input.month)].every((m) =>
-    isMonthHistoryComplete(m, input.historyCompleteSince),
-  );
+  return isComparisonHistoryComplete(previousMonth(input.month), input.month, input.historyStarts);
 }
 
 function monthOverMonth(
@@ -210,8 +211,8 @@ function monthOverMonth(
   if (!isMonthOverMonthChangeVisible(input.month, input.today)) {
     return { state: "early", visibleFromDay: MONTH_OVER_MONTH_VISIBLE_FROM_DAY };
   }
-  if (!isComparable(input)) return { state: "incomplete-history" };
   if (!previousMonthHasRows) return { state: "no-history" };
+  if (!isComparable(input)) return { state: "incomplete-history" };
   const previous = summaryTotals(window.previous);
   return {
     state: "shown",
@@ -228,7 +229,6 @@ function monthOverMonth(
   };
 }
 
-/** Every group's and leaf's amount by id. */
 function amountsById(nodes: readonly CategorySpendingNode[]): Map<string, number> {
   const byId = new Map<string, number>();
   for (const n of nodes) {
@@ -257,12 +257,13 @@ function seriesById(trend: TrendsReport): Map<string, (number | null)[]> {
 function rankCategories(
   trend: TrendsReport,
   spend: { month: CategorySpendingNode[]; previous: CategorySpendingNode[] },
-  compared: boolean,
+  previousWhole: (() => CategorySpendingNode[]) | null,
 ) {
   const nodes = spend.month;
   const total = toAgorot(nodes.reduce((sum, n) => sum + n.amount, 0));
   const series = seriesById(trend);
-  const previous = compared ? amountsById(spend.previous) : null;
+  const previous = previousWhole && amountsById(spend.previous);
+  const whole = previousWhole && amountsById(previousWhole());
 
   const trendOf = (n: CategorySpendingNode | Omit<CategorySpendingNode, "children">) => {
     const amount = toAgorot(n.amount);
@@ -275,7 +276,14 @@ function rankCategories(
       amount,
       share: total > 0 ? amount / total : 0,
       series: series.get(n.categoryId) ?? trend.months.map(() => null),
-      change: previous ? { previous: before, ...monthChange(amount, before) } : null,
+      change:
+        previous && whole
+          ? {
+              previous: before,
+              previousWhole: whole.get(n.categoryId) ?? 0,
+              ...monthChange(amount, before),
+            }
+          : null,
     };
   };
 
@@ -288,12 +296,14 @@ function rankCategories(
 
 function quietCategories(
   input: HomeTrendsInput,
+  comparison: HomeTrendComparison,
   spent: CategorySpendingNode[],
-  previousWhole: CategorySpendingNode[],
+  previousWhole: () => CategorySpendingNode[],
 ): QuietCategory[] {
-  if (!areQuietCategoriesVisible(input.month, input.today) || !isComparable(input)) return [];
+  if (!areQuietCategoriesVisible(input.month, input.today)) return [];
+  if (comparison.state === "incomplete-history" || comparison.state === "no-history") return [];
   const spentIds = new Set(spent.map((n) => n.categoryId));
-  return previousWhole
+  return previousWhole()
     .filter((n) => !spentIds.has(n.categoryId))
     .map((n) => ({
       categoryId: n.categoryId,
@@ -338,6 +348,9 @@ export function buildHomeTrends(input: HomeTrendsInput): HomeTrends {
   if (window === null) throw new RangeError("home trends: the month has not started");
   const comparison = monthOverMonth(input, window, totals, previousRows.length > 0);
   const spend = windowCategorySpend(window, categories);
+  // The whole month before: the comparison's own when it compares whole months.
+  let whole: CategorySpendingNode[] | null = window.basis === "whole-month" ? spend.previous : null;
+  const previousWhole = () => (whole ??= rollUpCategorySpend(previousRows, categories));
 
   return {
     month,
@@ -346,7 +359,7 @@ export function buildHomeTrends(input: HomeTrendsInput): HomeTrends {
     selectedIndex,
     totals,
     comparison,
-    categories: rankCategories(trend, spend, comparison.state === "shown"),
-    quiet: quietCategories(input, spend.month, rollUpCategorySpend(previousRows, categories)),
+    categories: rankCategories(trend, spend, comparison.state === "shown" ? previousWhole : null),
+    quiet: quietCategories(input, comparison, spend.month, previousWhole),
   };
 }

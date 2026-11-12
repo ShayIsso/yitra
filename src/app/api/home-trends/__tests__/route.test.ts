@@ -8,7 +8,7 @@ vi.mock("@/lib/analytics", async (importOriginal) => ({
 
 vi.mock("@/lib/budgets", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/budgets")>()),
-  getHistoryCompleteSince: vi.fn(async () => null),
+  getAccountHistoryStarts: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/reports", async (importOriginal) => {
@@ -17,7 +17,7 @@ vi.mock("@/lib/reports", async (importOriginal) => {
 });
 
 import { getRollupCategories, getTransactionDetailsBetween } from "@/lib/analytics";
-import { getHistoryCompleteSince } from "@/lib/budgets";
+import { getAccountHistoryStarts } from "@/lib/budgets";
 import { buildHomeTrends } from "@/lib/reports";
 import { GET } from "../route";
 
@@ -29,7 +29,7 @@ describe("GET /api/home-trends", () => {
     vi.mocked(buildHomeTrends).mockClear();
     vi.mocked(getTransactionDetailsBetween).mockClear();
     vi.mocked(getRollupCategories).mockClear();
-    vi.mocked(getHistoryCompleteSince).mockClear();
+    vi.mocked(getAccountHistoryStarts).mockClear();
   });
 
   afterEach(() => {
@@ -50,7 +50,7 @@ describe("GET /api/home-trends", () => {
     expect(getTransactionDetailsBetween).toHaveBeenCalledTimes(1);
     expect(getTransactionDetailsBetween).toHaveBeenCalledWith("2025-07-01", "2026-06-30");
     expect(getRollupCategories).toHaveBeenCalledTimes(1);
-    expect(getHistoryCompleteSince).toHaveBeenCalledTimes(1);
+    expect(getAccountHistoryStarts).toHaveBeenCalledTimes(1);
     const body = await res.json();
     expect(body.months).toHaveLength(12);
     // July 2025 … June 2026: February is the eighth month.

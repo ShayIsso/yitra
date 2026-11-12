@@ -6,7 +6,7 @@ import {
   type HomeTrendsInput,
   type HomeTrendRow,
 } from "../home-trends";
-import type { RollupCategory } from "@/lib/analytics";
+import type { AccountHistoryStart, RollupCategory } from "@/lib/analytics";
 
 // Invented taxonomy: one expense group with two leaves, an expense root leaf,
 // an income leaf and an investment leaf.
@@ -44,15 +44,15 @@ function row(date: string, categoryId: string, amount: number): HomeTrendRow {
 
 type Month = { year: number; month: number };
 
-/** Long before any fixture row: every month's history is complete. */
-const ALL_HISTORY = "2000-01-01";
+/** One credential whose history starts long before any fixture row. */
+const ALL_HISTORY: AccountHistoryStart[] = [{ credentialId: "bank", earliest: "2000-01-01" }];
 
 /** The input for `selected` as of `today`: the rows the route would read for it. */
 function input(
   selected: Month,
   today: string,
   rows: HomeTrendRow[],
-  historyCompleteSince: string | null = ALL_HISTORY,
+  historyStarts: AccountHistoryStart[] = ALL_HISTORY,
 ): HomeTrendsInput {
   const { from, to } = homeTrendRange(selected, today);
   return {
@@ -60,7 +60,7 @@ function input(
     today,
     rows: rows.filter((r) => r.date >= from && r.date <= to),
     categories,
-    historyCompleteSince,
+    historyStarts,
   };
 }
 
@@ -181,28 +181,62 @@ describe("buildHomeTrends — rows dated ahead of today", () => {
 });
 
 describe("buildHomeTrends — partly synced history", () => {
-  // The first sync reached back to Feb 10: February is only partly present.
+  // The first sync reached the card only from Feb 10: February is only partly present.
   const rows = [
     row("2026-02-12", "grocery", -300),
     row("2026-03-03", "grocery", -900),
     row("2026-03-05", "transport", -200),
   ];
+  const bank = { credentialId: "bank", earliest: "2025-06-01" };
 
-  it("does not compare with a month history covers only part of", () => {
-    const trends = buildHomeTrends(input(MARCH, "2026-03-20", rows, "2026-02-10"));
+  it("does not compare with a month a credential's history covers only part of", () => {
+    const partial = { credentialId: "card", earliest: "2026-02-10" };
+    const trends = buildHomeTrends(input(MARCH, "2026-03-20", rows, [bank, partial]));
     expect(trends.comparison).toEqual({ state: "incomplete-history" });
     expect(trends.categories.rows.every((r) => r.change === null)).toBe(true);
     expect(trends.quiet).toEqual([]);
   });
 
-  it("compares once history covers the month before from its first day", () => {
-    const trends = buildHomeTrends(input(MARCH, "2026-03-20", rows, "2026-02-01"));
+  it("compares once every credential's history covers the month before from its first day", () => {
+    const covered = { credentialId: "card", earliest: "2026-02-01" };
+    const trends = buildHomeTrends(input(MARCH, "2026-03-20", rows, [bank, covered]));
     expect(trends.comparison.state).toBe("shown");
   });
 
-  it("does not compare when nothing is stored yet", () => {
-    const trends = buildHomeTrends(input(MARCH, "2026-03-20", rows, null));
-    expect(trends.comparison).toEqual({ state: "incomplete-history" });
+  it("is not held back by a rarely used card whose first row comes after both months", () => {
+    const dormant = { credentialId: "card", earliest: "2026-04-05" };
+    const trends = buildHomeTrends(input(MARCH, "2026-04-20", rows, [bank, dormant]));
+    expect(trends.comparison.state).toBe("shown");
+  });
+
+  it("says there is no month before before it says history is partial", () => {
+    const onlyMarch = rows.filter((r) => r.date >= "2026-03-01");
+    const partial = { credentialId: "card", earliest: "2026-03-03" };
+    const trends = buildHomeTrends(input(MARCH, "2026-03-20", onlyMarch, [partial]));
+    expect(trends.comparison).toEqual({ state: "no-history" });
+  });
+});
+
+describe("buildHomeTrends — a category new this month", () => {
+  // A monthly charge: the 20th last month, the 3rd this month.
+  const rows = [row("2026-02-20", "transport", -250), row("2026-03-03", "transport", -250)];
+
+  it("judges newness against the whole month before, the change month-to-date", () => {
+    const transport = buildHomeTrends(input(MARCH, "2026-03-15", rows)).categories.rows[0];
+    expect(transport.change).toEqual({
+      previous: 0,
+      previousWhole: 250,
+      amount: 250,
+      percent: null,
+    });
+  });
+
+  it("has nothing last month when the category truly is new", () => {
+    const onlyMarch = [row("2026-02-05", "grocery", -400), rows[1]];
+    const transport = buildHomeTrends(input(MARCH, "2026-03-15", onlyMarch)).categories.rows.find(
+      (r) => r.categoryId === "transport",
+    );
+    expect(transport?.change?.previousWhole).toBe(0);
   });
 });
 
@@ -320,9 +354,10 @@ describe("buildHomeTrends — categories", () => {
 
   it("compares each category through the same day of last month", () => {
     const { categories: list } = buildHomeTrends(input(MARCH, "2026-03-15", rows));
-    // Last month through the 15th: groceries 800 and dining 250.
+    // Last month through the 15th: groceries 800 and dining 250; 1,450 in all.
     expect(list.rows[0].change).toEqual({
       previous: 1050,
+      previousWhole: 1450,
       amount: 150,
       percent: expect.any(Number),
     });

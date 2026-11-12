@@ -6,7 +6,7 @@ import {
   monthPosition,
   toTransactionWithCategory,
 } from "@/lib/analytics";
-import { getHistoryCompleteSince } from "@/lib/budgets";
+import { getAccountHistoryStarts } from "@/lib/budgets";
 import { buildHomeTrends, homeTrendRange } from "@/lib/reports";
 import { formatZodError } from "@/lib/api-utils";
 import { OUTLOOK_FIRST_YEAR, OUTLOOK_LAST_YEAR } from "@/lib/budgets/outlook-range";
@@ -41,10 +41,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "החודש עוד לא התחיל" }, { status: 400 });
     }
     const { from, to } = homeTrendRange(selected, today);
-    const [rows, categories, historyCompleteSince] = await Promise.all([
+    const [rows, categories, historyStarts] = await Promise.all([
       getTransactionDetailsBetween(from, to),
       getRollupCategories(),
-      getHistoryCompleteSince(),
+      getAccountHistoryStarts(),
     ]);
 
     return NextResponse.json(
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
         today,
         rows: rows.map((r) => ({ ...toTransactionWithCategory(r), date: r.date })),
         categories,
-        historyCompleteSince,
+        historyStarts,
       }),
     );
   } catch (err) {

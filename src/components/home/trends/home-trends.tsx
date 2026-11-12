@@ -10,27 +10,13 @@ import { useMonthLoad } from "../month-load";
 import { monthName, sameMonth, shiftMonth, type HomeMonth, type MonthRange } from "../month";
 import { CategoryList, CategoryListSkeleton } from "./category-list";
 import { StatTiles, StatTilesSkeleton } from "./stat-tiles";
-import { comparisonLabel } from "./trends-view";
+import { comparisonCaption, comparisonLabel } from "./trends-view";
 import { YearChart, YearChartSkeleton } from "./year-chart";
 
 async function readTrends(month: HomeMonth, signal: AbortSignal): Promise<HomeTrendsData> {
   const res = await fetch(`/api/home-trends?year=${month.year}&month=${month.month}`, { signal });
   if (!res.ok) throw new Error(String(res.status));
   return res.json() as Promise<HomeTrendsData>;
-}
-
-function comparisonCaption(data: HomeTrendsData): string {
-  const c = data.comparison;
-  switch (c.state) {
-    case "shown":
-      return `מול ${comparisonLabel(c)}`;
-    case "early":
-      return `ההשוואה לחודש הקודם תופיע מה־${c.visibleFromDay} בחודש`;
-    case "incomplete-history":
-      return "החודש הקודם לא סונכרן במלואו, אז אין השוואה";
-    case "no-history":
-      return "אין חודש קודם להשוואה";
-  }
 }
 
 /**
@@ -78,7 +64,7 @@ export const HomeTrends = React.memo(function HomeTrends({
       <Section
         id="home-stats"
         title="המספרים של החודש"
-        description={data ? comparisonCaption(data) : "\u00a0"}
+        description={data ? comparisonCaption(data.comparison) : "\u00a0"}
       >
         {failed ? (
           <SectionError what="המספרים של החודש" onRetry={retry} retrying={retrying} />

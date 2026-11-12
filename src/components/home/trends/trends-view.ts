@@ -1,4 +1,5 @@
 import type { MonthChange } from "@/lib/analytics/month-metrics";
+import type { HomeTrendComparison } from "@/lib/reports/home-trends";
 import { toAgorot } from "@/lib/analytics/agorot";
 import {
   formatPointsDelta,
@@ -39,10 +40,30 @@ export function rateChangeView(points: number): DeltaView {
   return { direction: points > 0 ? "up" : "down", label: formatPointsDelta(points) };
 }
 
-/** A category's change; one with nothing in the comparison window is new, with no baseline to rise from. */
-export function categoryChangeView(change: MonthChange & { previous: number }): DeltaView {
-  if (change.previous <= 0) return { direction: "flat", label: "חדש" };
+/**
+ * A category's change. One that spent nothing all last month is new, with no
+ * baseline to rise from; one that did is never new, though a running month's
+ * change is month-to-date and may find nothing yet on those days.
+ */
+export function categoryChangeView(
+  change: MonthChange & { previous: number; previousWhole: number },
+): DeltaView {
+  if (change.previousWhole <= 0) return { direction: "flat", label: "חדש" };
   return changeView(change);
+}
+
+/** The comparison, or why there is none, under the stat tiles' heading. */
+export function comparisonCaption(comparison: HomeTrendComparison): string {
+  switch (comparison.state) {
+    case "shown":
+      return `מול ${comparisonLabel(comparison)}`;
+    case "early":
+      return `ההשוואה לחודש הקודם תופיע מה־${comparison.visibleFromDay} בחודש`;
+    case "incomplete-history":
+      return "החודש הקודם לא סונכרן במלואו, אז אין השוואה";
+    case "no-history":
+      return "אין חודש קודם להשוואה";
+  }
 }
 
 /** What a change is measured against, in words ("מול …" is the chip's). */

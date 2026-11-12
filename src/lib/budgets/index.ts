@@ -33,7 +33,7 @@ import {
 } from "./pace";
 import { israelCalendarDay } from "@/lib/calendar";
 import type { MonthOutlook } from "./outlook";
-import { getMonthOutlookWithStore, historyCompleteSince } from "./outlook-store";
+import { getMonthOutlookWithStore } from "./outlook-store";
 import { makeDrizzleMonthOutlookStore, readAccountHistoryStarts } from "./outlook-drizzle-store";
 
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
@@ -61,7 +61,6 @@ export {
 export {
   monthOutlook,
   hasOutlookMonthStarted,
-  isMonthHistoryComplete,
   STALE_SYNC_AFTER_MS,
   THIN_HISTORY_MIN_FULL_MONTHS,
   type MonthOutlook,
@@ -70,7 +69,6 @@ export {
 } from "./outlook";
 export {
   getMonthOutlookWithStore,
-  historyCompleteSince,
   type MonthOutlookStore,
   type OutlookClock,
 } from "./outlook-store";
@@ -139,13 +137,11 @@ export async function getMonthOutlook(year: number, month: number): Promise<Mont
 }
 
 /**
- * From when every connected credential's history is present (YYYY-MM-DD), the
- * month outlook's notion; null before any transaction is stored. A month is
- * complete when this reaches its first day (`isMonthHistoryComplete`).
+ * Each bank account's earliest stored transaction with its credential: what
+ * history coverage is judged from (`@/lib/analytics` history-coverage), the
+ * same read the month outlook makes.
  */
-export async function getHistoryCompleteSince(): Promise<string | null> {
-  return historyCompleteSince(await readAccountHistoryStarts());
-}
+export const getAccountHistoryStarts = readAccountHistoryStarts;
 
 /**
  * Pace verdict for every budget in `month`. Each budget evaluates independently

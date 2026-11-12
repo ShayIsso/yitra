@@ -9,6 +9,23 @@ import { monthPosition, type InsightMonth } from "./insights";
 const dayOf = (row: { date: string }) => Number(row.date.slice(8, 10));
 
 /**
+ * Where `month` stands as of `today`, as the predicate a row of it (or of the
+ * month before, over the same days) must pass to count; null before it starts.
+ */
+function cutoff(
+  month: InsightMonth,
+  today: string,
+): {
+  basis: MonthToDateWindow<unknown>["basis"];
+  counts: (row: { date: string }) => boolean;
+} | null {
+  const position = monthPosition(month, today);
+  if (position.phase === "not-started") return null;
+  if (position.phase === "closed") return { basis: "whole-month", counts: () => true };
+  return { basis: "month-to-date", counts: (row) => dayOf(row) <= position.day };
+}
+
+/**
  * The rows of `month` that count as of `today`: a running month's through
  * today (a row the bank lists ahead, such as an installment, is not spent
  * yet), a closed month's all of them, a month not started none.
@@ -18,10 +35,8 @@ export function countedThroughToday<R extends { date: string }>(
   today: string,
   rows: readonly R[],
 ): R[] {
-  const position = monthPosition(month, today);
-  if (position.phase === "not-started") return [];
-  if (position.phase === "closed") return [...rows];
-  return rows.filter((r) => dayOf(r) <= position.day);
+  const cut = cutoff(month, today);
+  return cut ? rows.filter(cut.counts) : [];
 }
 
 export type MonthToDateWindow<R> = {
@@ -46,15 +61,11 @@ export function monthToDateWindow<R extends { date: string }>(
   today: string,
   rows: { month: readonly R[]; previous: readonly R[] },
 ): MonthToDateWindow<R> | null {
-  const position = monthPosition(month, today);
-  if (position.phase === "not-started") return null;
-  if (position.phase === "closed") {
-    return { basis: "whole-month", month: [...rows.month], previous: [...rows.previous] };
-  }
-  const upTo = (list: readonly R[]) => list.filter((r) => dayOf(r) <= position.day);
+  const cut = cutoff(month, today);
+  if (cut === null) return null;
   return {
-    basis: "month-to-date",
-    month: countedThroughToday(month, today, rows.month),
-    previous: upTo(rows.previous),
+    basis: cut.basis,
+    month: rows.month.filter(cut.counts),
+    previous: rows.previous.filter(cut.counts),
   };
 }

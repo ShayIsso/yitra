@@ -25,6 +25,7 @@ import {
   type AnalyticsTransaction,
   type ReconciliationRole,
 } from "@/lib/analytics";
+import { isMonthHistoryComplete } from "@/lib/analytics/history-coverage";
 import { israelCalendarDay } from "@/lib/calendar";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 import { isSyncStale } from "./staleness";
@@ -242,18 +243,6 @@ function wholeMonthSummary(rows: readonly OutlookRow[], month: YearMonth) {
  */
 export function outlookMonthExpenses(rows: readonly OutlookRow[], month: YearMonth): number {
   return wholeMonthSummary(rows, month).expenses;
-}
-
-/**
- * Whether every connected credential's history covers all of `month`, from its
- * first day (`historyCompleteSince`, see {@link MonthOutlookInput}). A month
- * the first sync reached only part of is not a month to average or compare.
- */
-export function isMonthHistoryComplete(
-  month: YearMonth,
-  historyCompleteSince: string | null,
-): boolean {
-  return historyCompleteSince !== null && historyCompleteSince <= isoDay(month, 1);
 }
 
 const ordinal = (month: YearMonth): number => month.year * 12 + month.month;

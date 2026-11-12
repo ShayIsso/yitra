@@ -3,6 +3,7 @@ import {
   categoryChangeView,
   changeView,
   chartColumns,
+  comparisonCaption,
   comparisonLabel,
   rateChangeView,
   sparklinePath,
@@ -44,17 +45,61 @@ describe("rateChangeView", () => {
 });
 
 describe("categoryChangeView", () => {
-  it("names a category with no spend in the comparison window new, not +∞", () => {
-    expect(categoryChangeView({ previous: 0, amount: 450, percent: null })).toEqual({
-      direction: "flat",
-      label: "חדש",
+  it("names a category with no spend all last month new, not +∞", () => {
+    expect(
+      categoryChangeView({ previous: 0, previousWhole: 0, amount: 450, percent: null }),
+    ).toEqual({ direction: "flat", label: "חדש" });
+  });
+
+  it("never calls a category new that spent last month, even after this date", () => {
+    // A monthly charge on the 20th last month, the 3rd this month.
+    const view = categoryChangeView({
+      previous: 0,
+      previousWhole: 250,
+      amount: 250,
+      percent: null,
     });
+    expect(view.label).not.toBe("חדש");
+    expect(view.direction).toBe("up");
   });
 
   it("tells a category's rise like any change", () => {
-    expect(categoryChangeView({ previous: 300, amount: 300, percent: 100 })).toMatchObject({
-      direction: "up",
-    });
+    expect(
+      categoryChangeView({ previous: 300, previousWhole: 300, amount: 300, percent: 100 }),
+    ).toMatchObject({ direction: "up" });
+  });
+});
+
+describe("comparisonCaption", () => {
+  it("names the comparison", () => {
+    expect(
+      comparisonCaption({
+        state: "shown",
+        basis: "whole-month",
+        previousMonth: { year: 2025, month: 12 },
+        income: { amount: 0, percent: null },
+        expenses: { amount: 0, percent: null },
+        netSavings: { amount: 0, percent: null },
+        investment: { amount: 0, percent: null },
+        savingsRate: null,
+      }),
+    ).toBe("מול דצמבר");
+  });
+
+  it("says there is no month before", () => {
+    expect(comparisonCaption({ state: "no-history" })).toBe("אין חודש קודם להשוואה");
+  });
+
+  it("says the month before is only partly synced", () => {
+    expect(comparisonCaption({ state: "incomplete-history" })).toBe(
+      "החודש הקודם לא סונכרן במלואו, אז אין השוואה",
+    );
+  });
+
+  it("says when the comparison appears", () => {
+    expect(comparisonCaption({ state: "early", visibleFromDay: 7 })).toBe(
+      "ההשוואה לחודש הקודם תופיע מה־7 בחודש",
+    );
   });
 });
 

@@ -34,6 +34,7 @@ export { toAgorot } from "./agorot";
 export * from "./insights";
 export * from "./month-metrics";
 export * from "./month-to-date";
+export * from "./history-coverage";
 
 export type AnalyticsTransaction = {
   chargedAmount: number;

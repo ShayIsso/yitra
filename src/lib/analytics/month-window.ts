@@ -19,7 +19,6 @@ export function monthIndex({ year, month }: { year: number; month: number }): nu
   return year * 12 + (month - 1);
 }
 
-/** The inverse of {@link monthIndex}. */
 export function monthAtIndex(index: number): { year: number; month: number } {
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };
 }

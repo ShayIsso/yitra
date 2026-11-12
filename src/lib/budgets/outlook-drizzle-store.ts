@@ -1,7 +1,8 @@
 import { eq, min } from "drizzle-orm";
 import { db } from "@/db";
 import { bankAccounts, bankCredentials, transactions } from "@/db/schema";
-import { getMonthTransactionDetails } from "@/lib/analytics";
+import { cache } from "react";
+import { getMonthTransactionDetails, type AccountHistoryStart } from "@/lib/analytics";
 import { drizzleRecurringStore } from "@/lib/recurring-detection";
 // Deep imports, as the other server readers of sync runs do: the sync barrel
 // loads the scraper.
@@ -17,11 +18,11 @@ import type { MonthOutlookStore } from "./outlook-store";
 /**
  * Each bank account's earliest stored transaction, with its credential.
  * Deleting a credential cascades to its accounts and their transactions, so
- * every account grouped here is a current one.
+ * every account grouped here is a current one. A whole-table aggregate, so it
+ * is read once per server render (React `cache`) however many readers ask;
+ * separate route requests each read it once.
  */
-export async function readAccountHistoryStarts(): Promise<
-  { credentialId: string; earliest: string }[]
-> {
+export const readAccountHistoryStarts = cache(async (): Promise<AccountHistoryStart[]> => {
   const rows = await db
     .select({ credentialId: bankAccounts.credentialId, earliest: min(transactions.date) })
     .from(transactions)
@@ -30,7 +31,7 @@ export async function readAccountHistoryStarts(): Promise<
   return rows.flatMap((r) =>
     r.earliest ? [{ credentialId: r.credentialId, earliest: r.earliest }] : [],
   );
-}
+});
 
 /** The month outlook's Drizzle store; the target read is the budgets module's own. */
 export function makeDrizzleMonthOutlookStore(
