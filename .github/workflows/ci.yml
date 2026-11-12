@@ -99,4 +99,10 @@ jobs:
         run: npm run db:migrate
 
       - name: Postgres suites
-        run: npx vitest run pg.test --no-file-parallelism
+        run: npx vitest run pg.test --no-file-parallelism --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/pg.json"
+
+      # describe.skipIf turns a drifted DB name or URL into a green all-skipped run.
+      - name: Fail if any Postgres suite was skipped
+        run: |
+          jq '{numTotalTests, numPendingTests, numTodoTests}' "$RUNNER_TEMP/pg.json"
+          jq -e '.numTotalTests > 0 and .numPendingTests == 0 and .numTodoTests == 0' "$RUNNER_TEMP/pg.json"
