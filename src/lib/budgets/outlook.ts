@@ -244,7 +244,15 @@ export function outlookMonthExpenses(rows: readonly OutlookRow[], month: YearMon
   return wholeMonthSummary(rows, month).expenses;
 }
 
-function isComplete(month: YearMonth, historyCompleteSince: string | null): boolean {
+/**
+ * Whether every connected credential's history covers all of `month`, from its
+ * first day (`historyCompleteSince`, see {@link MonthOutlookInput}). A month
+ * the first sync reached only part of is not a month to average or compare.
+ */
+export function isMonthHistoryComplete(
+  month: YearMonth,
+  historyCompleteSince: string | null,
+): boolean {
   return historyCompleteSince !== null && historyCompleteSince <= isoDay(month, 1);
 }
 
@@ -254,7 +262,7 @@ const ordinal = (month: YearMonth): number => month.year * 12 + month.month;
 function usualMonthOf(input: MonthOutlookInput): number | null {
   const full = input.history
     .filter((h) => ordinal(h.month) < ordinal(input.month))
-    .filter((h) => h.expenses > 0 && isComplete(h.month, input.historyCompleteSince))
+    .filter((h) => h.expenses > 0 && isMonthHistoryComplete(h.month, input.historyCompleteSince))
     .sort((a, b) => ordinal(b.month) - ordinal(a.month));
   if (full.length < THIN_HISTORY_MIN_FULL_MONTHS) return null;
   const used = full.slice(0, USUAL_MONTH_SPAN);

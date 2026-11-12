@@ -28,5 +28,12 @@ export default async function HomePage() {
     : compareMonths(oldest, current) > 0
       ? current
       : { year: oldest.year, month: oldest.month };
-  return <HomeScreen range={{ first, current }} categories={categories} banks={banks} />;
+  return (
+    <HomeScreen
+      range={{ first, current }}
+      categories={categories}
+      banks={banks}
+      hasTransactions={monthsWithData.length > 0}
+    />
+  );
 }

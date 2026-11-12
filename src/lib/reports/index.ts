@@ -29,6 +29,17 @@ export type {
   TrendsGroupSeries,
   TrendsYearRow,
 } from "./trends";
+export { buildHomeTrends, homeTrendRange } from "./home-trends";
+export type {
+  HomeTrends,
+  HomeTrendsInput,
+  HomeTrendRow,
+  HomeTrendTotals,
+  HomeTrendPoint,
+  HomeTrendComparison,
+  HomeCategoryTrend,
+  QuietCategory,
+} from "./home-trends";
 export { buildMonthlyReport } from "./monthly";
 export type {
   MonthlyReport,

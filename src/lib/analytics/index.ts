@@ -26,8 +26,14 @@ import {
   type RecapFact,
 } from "./insights";
 
-export { monthDateRange } from "./month-window";
+import { toAgorot } from "./agorot";
+import { monthToDateWindow } from "./month-to-date";
+
+export { monthDateRange, monthIndex, monthAtIndex } from "./month-window";
+export { toAgorot } from "./agorot";
 export * from "./insights";
+export * from "./month-metrics";
+export * from "./month-to-date";
 
 export type AnalyticsTransaction = {
   chargedAmount: number;
@@ -158,15 +164,6 @@ export type RecentTransaction = {
  */
 export function outflowContribution(chargedAmount: number): number {
   return -chargedAmount;
-}
-
-/**
- * Nets are rounded to agorot so float residue of rows that cancel (−10.1 −20.2
- * +30.3) is exactly 0 — never a phantom ₪0 bar, a red "₪0" or a "−0" — and so
- * leaves and month totals agree on what "net ≤ 0" means. `|| 0` folds −0 to 0.
- */
-export function toAgorot(amount: number): number {
-  return Math.round(amount * 100) / 100 || 0;
 }
 
 /**
@@ -559,13 +556,13 @@ function cardDebitsFrom(balances: readonly AccountBalance[]): CardDebitFact[] {
   );
 }
 
-function dayOfMonth(isoDate: string): number {
-  return Number(isoDate.slice(8, 10));
-}
-
-/** Top-level (group or root-leaf) spend under the spend floor, group-first like the Dashboard. */
-function topLevelSpend(
-  rows: readonly InsightTransactionRow[],
+/**
+ * Group-first spend under the spend floor for any rows (groups with their
+ * floored leaves, root leaves alongside), named from `categories`. Flagged
+ * settlement lumps drop out through {@link computeCategoryNetSpend}.
+ */
+export function rollUpCategorySpend(
+  rows: readonly (AnalyticsTransaction & { categoryId: string | null })[],
   categories: readonly RollupCategory[],
 ): CategorySpendingNode[] {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -574,6 +571,21 @@ function topLevelSpend(
     return c ? [{ categoryId, categoryName: c.name, amount, color: c.color, icon: c.icon }] : [];
   });
   return rollUpSpendingByGroup(leaves, [...categories]);
+}
+
+/**
+ * Category spend of a month and of the month before over one window
+ * ({@link monthToDateWindow}): the comparison the insights and the home
+ * trends both draw their month-over-month category figures from.
+ */
+export function windowCategorySpend<R extends AnalyticsTransaction & { categoryId: string | null }>(
+  window: { month: readonly R[]; previous: readonly R[] },
+  categories: readonly RollupCategory[],
+): { month: CategorySpendingNode[]; previous: CategorySpendingNode[] } {
+  return {
+    month: rollUpCategorySpend(window.month, categories),
+    previous: rollUpCategorySpend(window.previous, categories),
+  };
 }
 
 function compareTopLevel(
@@ -647,7 +659,7 @@ function recapFact(
   // Category spend filters lumps itself; the row-level day and biggest-expense
   // reads below need the rows filtered here.
   const rows = excludeSettlementLumps(allRows);
-  const nodes = topLevelSpend(rows, sources.categories);
+  const nodes = rollUpCategorySpend(rows, sources.categories);
   const byCategoryTotal = nodes.reduce((sum, n) => sum + n.amount, 0);
   const top = nodes[0];
   const monthly = sources.upcoming.filter((c) => c.cadence === "monthly");
@@ -667,7 +679,7 @@ function recapFact(
           share: top.amount / byCategoryTotal,
         }
       : null,
-    biggestChange: biggestChangeOf(nodes, topLevelSpend(comparisonRows, sources.categories)),
+    biggestChange: biggestChangeOf(nodes, rollUpCategorySpend(comparisonRows, sources.categories)),
     mostExpensiveDay: mostExpensiveDayOf(rows),
     recurring: {
       count: monthly.length,
@@ -695,14 +707,11 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const position = monthPosition(month, today);
   const started = position.phase !== "not-started";
-  const throughDay = position.phase === "current" ? position.day : 31;
+  const window = monthToDateWindow(month, today, sources.rows) ?? { month: [], previous: [] };
   // Lumps are filtered here for the row-level biggest-expense read; category
-  // spend would drop them on its own.
-  const spendToDate = (rows: readonly InsightTransactionRow[]) =>
-    started ? excludeSettlementLumps(rows).filter((r) => dayOfMonth(r.date) <= throughDay) : [];
-  const monthRows = spendToDate(sources.rows.month);
-  const previousRows = spendToDate(sources.rows.previous);
-  const biggest = largestExpenseRow(monthRows);
+  // spend drops them on its own.
+  const biggest = largestExpenseRow(excludeSettlementLumps(window.month));
+  const spend = windowCategorySpend(window, categories);
 
   // A month still running has no story yet, so the recap tells last month's.
   const recap = !started
@@ -721,10 +730,7 @@ export function buildInsightFacts(sources: InsightSources): InsightFacts {
       categoryName: categoryById.get(b.categoryId)?.name ?? "",
     })),
     upcomingRecurring: sources.upcoming.map((c) => ({ ...c, amount: toAgorot(c.amount) })),
-    categoryChanges: compareTopLevel(
-      topLevelSpend(monthRows, categories),
-      topLevelSpend(previousRows, categories),
-    ),
+    categoryChanges: compareTopLevel(spend.month, spend.previous),
     biggestExpense: biggest && {
       transactionId: biggest.id,
       description: biggest.customDescription ?? biggest.description,
@@ -816,7 +822,18 @@ export async function getMonthTransactionDetails(
   month: number,
 ): Promise<MonthTransactionDetail[]> {
   const { from, to } = monthDateRange(year, month);
+  return getTransactionDetailsBetween(from, to);
+}
 
+/**
+ * {@link getMonthTransactionDetails} over an inclusive `[from, to]` range of
+ * whole months (YYYY-MM-DD on `transactions.date`): the same columns, join and
+ * coalescing, so a range read bucketed per month yields each month's own read.
+ */
+export async function getTransactionDetailsBetween(
+  from: string,
+  to: string,
+): Promise<MonthTransactionDetail[]> {
   const rows = await db
     .select({
       id: transactions.id,

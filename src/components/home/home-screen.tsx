@@ -3,7 +3,6 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DashboardPanel } from "@/components/dashboard-panel";
 import { awaitsCode } from "@/components/bank-status-view";
 import { monthKey } from "@/components/reports/format";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
@@ -39,6 +38,7 @@ import {
   type MonthRange,
 } from "./month";
 import { syncedAsOf, type OutlookResponse } from "./outlook-view";
+import { HomeTrends } from "./trends/home-trends";
 
 // Both dialogs open on demand only, so they stay out of the home route's first load.
 const OtpSheet = dynamic(() => import("@/components/sync-otp-sheet").then((m) => m.OtpSheet), {
@@ -81,6 +81,7 @@ export function HomeScreen({
   range: rangeProp,
   categories,
   banks,
+  hasTransactions,
 }: {
   /**
    * From the first month with data to the current one on the home calendar
@@ -90,6 +91,8 @@ export function HomeScreen({
   categories: Category[];
   /** Connected institutions (the registry still knows them), in sync order. */
   banks: HomeBank[];
+  /** Any transaction is stored; decided by the server, re-read by `router.refresh()`. */
+  hasTransactions: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -322,19 +325,31 @@ export function HomeScreen({
       )}
 
       {banks.length > 0 && (
-        <>
-          <InsightsSection month={month} refreshKey={sectionsKey} visible={sectionsShown} />
-          <DashboardPanel month={month} refreshKey={sectionsKey} visible={sectionsShown} />
-          <HomeSections
-            categories={categories}
-            month={month}
-            refreshKey={sectionsKey}
-            visible={sectionsShown}
-            lastSyncRuns={runs ?? NO_RUNS}
-            onMonthlyTargets={setTargets}
-            today={homeDay}
-          />
-        </>
+        <InsightsSection month={month} refreshKey={sectionsKey} visible={sectionsShown} />
+      )}
+
+      {/* No trend sections of ₪0 before anything is stored: a connected bank
+          that never imported anything gets the sections' onboarding instead. */}
+      {banks.length > 0 && hasTransactions && (
+        <HomeTrends
+          month={month}
+          range={range}
+          refreshKey={sectionsKey}
+          visible={sectionsShown}
+          onSelect={select}
+        />
+      )}
+
+      {banks.length > 0 && (
+        <HomeSections
+          categories={categories}
+          month={month}
+          refreshKey={sectionsKey}
+          visible={sectionsShown}
+          lastSyncRuns={runs ?? NO_RUNS}
+          onMonthlyTargets={setTargets}
+          today={homeDay}
+        />
       )}
 
       {otpBank && (

@@ -58,48 +58,66 @@ export function CategoryDot({ color }: { color: string }) {
 
 export type GoodDirection = "up" | "down" | "neutral";
 
+/** A change already worded by its caller: which way it moved and its signed label. */
+export type DeltaView = { direction: "up" | "down" | "flat"; label: string };
+
 /**
  * A change against a comparison period. Direction is carried by an arrow and a
  * sign, whether it is good by colour on top (never colour alone, ADR-0015), and
  * screen readers hear the verdict in words. A zero or absent base prints "—":
- * never a fabricated ∞% (computeYoyDelta).
+ * never a fabricated ∞% (computeYoyDelta). A caller that words the change
+ * itself (the home trends, whose changes the server computed) passes `change`.
  */
 export function DeltaChip({
-  current,
-  previous,
   good,
-  points = false,
   comparedTo,
   className,
+  ...figures
 }: {
-  current: number;
-  previous: number | null;
   good: GoodDirection;
-  /** Savings rate: the change is stated in percentage points, not relative percent. */
-  points?: boolean;
   /** Named comparison for screen readers, e.g. "אשתקד". */
   comparedTo: string;
   className?: string;
-}) {
-  const delta = computeYoyDelta(current, previous);
-  if (delta.pct === null) {
-    return (
-      <span className={cn("text-muted-foreground text-caption", className)}>
-        <span aria-hidden>—</span>
-        <span className="sr-only">אין נתון להשוואה מול {comparedTo}</span>
-      </span>
-    );
+} & (
+  | {
+      current: number;
+      previous: number | null;
+      /** Savings rate: the change is stated in percentage points, not relative percent. */
+      points?: boolean;
+    }
+  | { change: DeltaView }
+)) {
+  let view: DeltaView;
+  if ("change" in figures) {
+    view = figures.change;
+  } else {
+    const { current, previous, points = false } = figures;
+    const delta = computeYoyDelta(current, previous);
+    if (delta.pct === null) {
+      return (
+        <span className={cn("text-muted-foreground text-caption", className)}>
+          <span aria-hidden>—</span>
+          <span className="sr-only">אין נתון להשוואה מול {comparedTo}</span>
+        </span>
+      );
+    }
+    view = {
+      direction: delta.direction,
+      label:
+        delta.direction === "flat"
+          ? "ללא שינוי"
+          : points
+            ? formatPointsDelta(current - (previous ?? 0))
+            : formatSignedPercent(delta.pct),
+    };
   }
-  const label = points
-    ? formatPointsDelta(current - (previous ?? 0))
-    : formatSignedPercent(delta.pct);
   const verdict =
-    delta.direction === "flat" || good === "neutral"
+    view.direction === "flat" || good === "neutral"
       ? null
-      : delta.direction === good
+      : view.direction === good
         ? "good"
         : "bad";
-  const Arrow = delta.direction === "up" ? ArrowUpIcon : ArrowDownIcon;
+  const Arrow = view.direction === "up" ? ArrowUpIcon : ArrowDownIcon;
   return (
     <span
       className={cn(
@@ -108,8 +126,8 @@ export function DeltaChip({
         className,
       )}
     >
-      {delta.direction !== "flat" && <Arrow className="size-3.5" />}
-      <span>{delta.direction === "flat" ? "ללא שינוי" : label}</span>
+      {view.direction !== "flat" && <Arrow className="size-3.5" />}
+      <span>{view.label}</span>
       <span className="sr-only">
         {" "}
         מול {comparedTo}

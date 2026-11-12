@@ -33,8 +33,8 @@ import {
 } from "./pace";
 import { israelCalendarDay } from "@/lib/calendar";
 import type { MonthOutlook } from "./outlook";
-import { getMonthOutlookWithStore } from "./outlook-store";
-import { makeDrizzleMonthOutlookStore } from "./outlook-drizzle-store";
+import { getMonthOutlookWithStore, historyCompleteSince } from "./outlook-store";
+import { makeDrizzleMonthOutlookStore, readAccountHistoryStarts } from "./outlook-drizzle-store";
 
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
 export type { StoredBudget, BudgetWriteData, BudgetChanges, BudgetStore } from "./store";
@@ -61,6 +61,7 @@ export {
 export {
   monthOutlook,
   hasOutlookMonthStarted,
+  isMonthHistoryComplete,
   STALE_SYNC_AFTER_MS,
   THIN_HISTORY_MIN_FULL_MONTHS,
   type MonthOutlook,
@@ -69,6 +70,7 @@ export {
 } from "./outlook";
 export {
   getMonthOutlookWithStore,
+  historyCompleteSince,
   type MonthOutlookStore,
   type OutlookClock,
 } from "./outlook-store";
@@ -134,6 +136,15 @@ export async function getMonthOutlook(year: number, month: number): Promise<Mont
     { today: israelCalendarDay(now), now },
     makeDrizzleMonthOutlookStore(async () => (await getMonthlyTargets()).expenseTarget),
   );
+}
+
+/**
+ * From when every connected credential's history is present (YYYY-MM-DD), the
+ * month outlook's notion; null before any transaction is stored. A month is
+ * complete when this reaches its first day (`isMonthHistoryComplete`).
+ */
+export async function getHistoryCompleteSince(): Promise<string | null> {
+  return historyCompleteSince(await readAccountHistoryStarts());
 }
 
 /**

@@ -118,7 +118,7 @@ function recurringCharges(
  * a gap, while a newly connected credential does leave one until a full month
  * of it is stored.
  */
-function historyCompleteSince(
+export function historyCompleteSince(
   accountStarts: { credentialId: string; earliest: string }[],
 ): string | null {
   const credentialStart = new Map<string, string>();
