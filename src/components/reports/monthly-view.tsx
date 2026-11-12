@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowCircleDownIcon,
   ArrowCircleUpIcon,
@@ -29,7 +30,13 @@ import { buildFilterSearchParams } from "@/lib/transactions/filter-params";
 import type { ReportMonth, MonthlyReportWithVerdicts } from "@/lib/reports";
 import type { MonthlyReport, MonthlyReportNode, YoyValue } from "@/lib/reports/monthly";
 import type { MonthCloseVerdicts } from "@/lib/reports/month-close";
-import { formatInvestment, formatPercent, monthKey, monthLabel } from "./format";
+import {
+  formatInvestment,
+  formatPercent,
+  monthKey,
+  monthLabel,
+  parseReportMonthParam,
+} from "./format";
 import {
   CategoryDot,
   DeltaChip,
@@ -69,13 +76,16 @@ function csvHref(m: ReportMonth): string {
 
 export function MonthlyView() {
   const months = useJson<ReportMonth[]>("/api/reports/months");
-  const [pickedKey, setPickedKey] = React.useState<string | null>(null);
+  // The month lives in the URL (`?month=YYYY-MM`), so a link can open one
+  // (the home recap's "full report") and a pick survives the Trends tab and a
+  // reload. A month the list doesn't hold falls back to the default.
+  const linkedKey = parseReportMonthParam(useSearchParams().get("month"));
 
   const monthList = months.state.status === "ready" ? months.state.data : null;
   const selected = React.useMemo(() => {
     if (!monthList) return null;
-    return monthList.find((m) => monthKey(m) === pickedKey) ?? defaultMonth(monthList);
-  }, [monthList, pickedKey]);
+    return monthList.find((m) => monthKey(m) === linkedKey) ?? defaultMonth(monthList);
+  }, [monthList, linkedKey]);
 
   const report = useJson<MonthlyReportWithVerdicts>(
     selected ? `/api/reports/monthly?year=${selected.year}&month=${selected.month}` : null,
@@ -103,7 +113,14 @@ export function MonthlyView() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={monthKey(selected)} onValueChange={(v) => v && setPickedKey(v)}>
+        <Select
+          value={monthKey(selected)}
+          onValueChange={(v) => {
+            // The App Router syncs history.replaceState into useSearchParams
+            // without a server round trip.
+            if (v) window.history.replaceState(null, "", `/reports?month=${v}`);
+          }}
+        >
           <SelectTrigger
             aria-label="חודש הדוח"
             className="h-11 min-w-44 flex-1 sm:flex-none md:h-9"

@@ -27,11 +27,14 @@ import {
 /** A light action on the dark hero; the paper-on-teal pair is the hero's own AA pair. */
 export const HERO_BUTTON =
   "press bg-hero-foreground text-hero text-body inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 font-semibold outline-none hover:bg-hero-muted focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
-const HERO_QUIET_BUTTON =
+export const HERO_QUIET_BUTTON =
   "press text-body text-hero-foreground inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 outline-none hover:bg-hero-foreground/10 focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
 
-/** Hero money: whole shekels in the hero's own ink (pos/neg are not checked on the teal). */
-function HeroAmount(props: { amount: number; className?: string }) {
+/**
+ * Whole shekels in the surrounding ink. On the hero, pos/neg are not checked
+ * on the teal; on the home cards the sign is told in words.
+ */
+export function HeroAmount(props: { amount: number; className?: string }) {
   return <Amount {...props} colorize={false} fractionDigits={0} />;
 }
 

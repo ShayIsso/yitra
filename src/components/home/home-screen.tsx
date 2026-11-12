@@ -24,6 +24,7 @@ import {
 } from "./hero-states";
 import { ForecastChart } from "./forecast-chart";
 import { HeroBodySkeleton, HeroError, MonthHero } from "./month-hero";
+import { InsightsSection } from "./insights/insights-section";
 import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
 import { HomeSections } from "./sections/home-sections";
@@ -322,6 +323,7 @@ export function HomeScreen({
 
       {banks.length > 0 && (
         <>
+          <InsightsSection month={month} refreshKey={sectionsKey} visible={sectionsShown} />
           <DashboardPanel month={month} refreshKey={sectionsKey} visible={sectionsShown} />
           <HomeSections
             categories={categories}
