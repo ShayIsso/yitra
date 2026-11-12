@@ -10,7 +10,7 @@ import type { Category } from "@/lib/categories";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 import { FreshnessIndicator } from "./freshness-indicator";
 import { homeFreshness } from "./freshness";
-import { FirstSyncHero, type HomeBank } from "./first-sync-hero";
+import { CONNECTION_LOST, FirstSyncHero, type HomeBank } from "./first-sync-hero";
 import {
   ActiveBody,
   ClosedBody,
@@ -26,6 +26,7 @@ import {
   homeHref,
   monthParam,
   parseMonthParam,
+  sameMonth,
   shiftMonth,
   type HomeMonth,
 } from "./month";
@@ -38,11 +39,20 @@ const OtpSheet = dynamic(() => import("@/components/sync-otp-sheet").then((m) =>
 const TargetDialog = dynamic(() => import("./target-dialog"), { ssr: false });
 
 type OutlookLoad =
-  | { key: string; status: "ready"; data: OutlookResponse; receivedAt: number }
-  | { key: string; status: "error" };
+  | { key: string; month: HomeMonth; status: "ready"; data: OutlookResponse }
+  | { key: string; month: HomeMonth; status: "error" };
 
 /** How often the hero re-reads the outlook while a first sync runs that this tab doesn't drive. */
 const FIRST_SYNC_POLL_MS = 4000;
+
+/** Keeps "updated 5 minutes ago" moving while the page stays open. */
+const CLOCK_TICK_MS = 60_000;
+
+async function readJson<T>(url: string, signal: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json() as Promise<T>;
+}
 
 /**
  * The home screen (#317): month navigation, the month-outlook hero and, below
@@ -68,6 +78,8 @@ export function HomeScreen({
   const key = monthParam(month);
 
   const [outlook, setOutlook] = React.useState<OutlookLoad | null>(null);
+  /** The client clock, read only after mount (bug #193: no clock in the SSR path). */
+  const [nowMs, setNowMs] = React.useState<number | null>(null);
   const [runs, setRuns] = React.useState<SyncRunSummary[]>([]);
   const [retrying, setRetrying] = React.useState(false);
   /** Bumped whenever the data under the screen changed: a sync finished, a target was saved. */
@@ -87,26 +99,33 @@ export function HomeScreen({
 
   React.useEffect(() => {
     const controller = new AbortController();
-    const [year, m] = key.split("-").map(Number);
-    fetch(`/api/month-outlook?year=${year}&month=${m}`, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((data: OutlookResponse) =>
-        setOutlook({ key, status: "ready", data, receivedAt: Date.now() }),
-      )
+    const requested = parseMonthParam(key, currentMonth);
+    readJson<OutlookResponse>(
+      `/api/month-outlook?year=${requested.year}&month=${requested.month}`,
+      controller.signal,
+    )
+      .then((data) => {
+        setNowMs(Date.now());
+        setOutlook({ key, month: requested, status: "ready", data });
+      })
       .catch(() => {
-        if (!controller.signal.aborted) setOutlook({ key, status: "error" });
+        if (!controller.signal.aborted) setOutlook({ key, month: requested, status: "error" });
       })
       .finally(() => {
         if (!controller.signal.aborted) setRetrying(false);
       });
     return () => controller.abort();
-  }, [key, version, attempt]);
+  }, [key, currentMonth, version, attempt]);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   React.useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/sync-runs", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((data: SyncRunSummary[]) => setRuns(data))
+    readJson<SyncRunSummary[]>("/api/sync-runs", controller.signal)
+      .then(setRuns)
       // Freshness falls back to the outlook's own staleness; the hero still renders.
       .catch(() => {});
     return () => controller.abort();
@@ -114,7 +133,7 @@ export function HomeScreen({
 
   const live = stream.starting || stream.syncing;
   const current = outlook?.key === key ? outlook : null;
-  const shown = outlook?.status === "ready" ? outlook : null;
+  const shown = outlook?.status === "ready" && nowMs !== null ? { ...outlook, nowMs } : null;
   const firstSyncElsewhere =
     current?.status === "ready" &&
     current.data.state === "first-sync" &&
@@ -129,10 +148,10 @@ export function HomeScreen({
 
   const select = React.useCallback(
     (next: HomeMonth) => {
-      if (compareMonths(next, currentMonth) > 0) return;
+      if (compareMonths(next, currentMonth) > 0 || sameMonth(next, month)) return;
       window.history.pushState(null, "", homeHref(next, currentMonth));
     },
-    [currentMonth],
+    [currentMonth, month],
   );
 
   const codeBank =
@@ -150,11 +169,14 @@ export function HomeScreen({
     runs,
     asOf: data && "asOf" in data ? data.asOf : null,
     stale: data !== null && "stale" in data && data.stale,
-    nowMs: shown?.receivedAt ?? null,
+    nowMs,
     live: { syncing: live, codeBank },
   });
 
   const welcoming = data?.state === "no-connection" || data?.state === "first-sync";
+  // The sections below wait for the outlook: a first-run state has nothing to
+  // show there, and appending them after the hero settles shifts nothing.
+  const showSections = outlook !== null && !welcoming;
 
   return (
     <div className="flex flex-col gap-6">
@@ -193,7 +215,6 @@ export function HomeScreen({
           <div key={`${shown.key}:${shown.data.state}`} className="enter">
             {(() => {
               const o = shown.data;
-              const nowMs = shown.receivedAt;
               switch (o.state) {
                 case "no-connection":
                   return <NoConnectionBody />;
@@ -205,7 +226,7 @@ export function HomeScreen({
                   return (
                     <NoTargetBody
                       outlook={o}
-                      nowMs={nowMs}
+                      nowMs={shown.nowMs}
                       onSetTarget={() => setTargetOpen(true)}
                     />
                   );
@@ -213,20 +234,14 @@ export function HomeScreen({
                   return (
                     <ThinHistoryBody
                       outlook={o}
-                      nowMs={nowMs}
+                      nowMs={shown.nowMs}
                       onSetTarget={() => setTargetOpen(true)}
                     />
                   );
                 case "active":
-                  return <ActiveBody outlook={o} nowMs={nowMs} />;
+                  return <ActiveBody outlook={o} nowMs={shown.nowMs} />;
                 case "closed":
-                  return (
-                    <ClosedBody
-                      outlook={o}
-                      month={parseMonthParam(shown.key, currentMonth)}
-                      nowMs={nowMs}
-                    />
-                  );
+                  return <ClosedBody outlook={o} month={shown.month} nowMs={shown.nowMs} />;
               }
             })()}
           </div>
@@ -240,11 +255,13 @@ export function HomeScreen({
       )}
       {!welcoming && (stream.refusal || stream.connectionError) && (
         <p role="status" className="text-muted-foreground text-body -mt-3">
-          {stream.refusal ?? "החיבור לשרת נותק לפני שהסנכרון הסתיים. התנועות שכבר יובאו נשמרו."}
+          {stream.refusal ?? CONNECTION_LOST}
         </p>
       )}
 
-      {!welcoming && <DashboardPanel categories={categories} month={month} refreshKey={version} />}
+      {showSections && (
+        <DashboardPanel categories={categories} month={month} refreshKey={version} />
+      )}
 
       {otpBank && (
         <OtpSheet
@@ -259,18 +276,21 @@ export function HomeScreen({
         />
       )}
 
-      {targetOpen && data && (data.state === "no-target" || data.state === "thin-history") && (
-        <TargetDialog
-          month={month}
-          suggested={data.state === "no-target" ? data.suggestedTarget : null}
-          usualMonth={data.state === "no-target" ? data.usualMonth : null}
-          onClose={() => setTargetOpen(false)}
-          onSaved={() => {
-            setTargetOpen(false);
-            setVersion((v) => v + 1);
-          }}
-        />
-      )}
+      {targetOpen &&
+        shown &&
+        data &&
+        (data.state === "no-target" || data.state === "thin-history") && (
+          <TargetDialog
+            month={shown.month}
+            suggested={data.state === "no-target" ? data.suggestedTarget : null}
+            usualMonth={data.state === "no-target" ? data.usualMonth : null}
+            onClose={() => setTargetOpen(false)}
+            onSaved={() => {
+              setTargetOpen(false);
+              setVersion((v) => v + 1);
+            }}
+          />
+        )}
     </div>
   );
 }

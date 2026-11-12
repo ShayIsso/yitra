@@ -21,28 +21,26 @@ export type FreshnessInput = {
 };
 
 export type Freshness =
-  | { kind: "code-needed"; bank: string; prominent: true }
-  | { kind: "syncing"; prominent: false }
-  | { kind: "failed"; bank: string; prominent: true }
-  | { kind: "code-missed"; bank: string; prominent: true }
-  | { kind: "stale"; ageMs: number | null; prominent: true }
-  | { kind: "fresh"; ageMs: number | null; prominent: false }
-  | { kind: "unknown"; prominent: false };
+  | { kind: "code-needed"; bank: string }
+  | { kind: "syncing" }
+  | { kind: "failed"; bank: string }
+  | { kind: "code-missed"; bank: string }
+  | { kind: "stale"; ageMs: number | null }
+  | { kind: "fresh"; ageMs: number | null }
+  | { kind: "unknown" };
 
 export function homeFreshness({ runs, asOf, stale, nowMs, live }: FreshnessInput): Freshness {
-  if (live.codeBank !== null) return { kind: "code-needed", bank: live.codeBank, prominent: true };
-  if (live.syncing) return { kind: "syncing", prominent: false };
+  if (live.codeBank !== null) return { kind: "code-needed", bank: live.codeBank };
+  if (live.syncing) return { kind: "syncing" };
 
   const failed = runs.find((run) => run.status === "error");
-  if (failed) return { kind: "failed", bank: failed.bank, prominent: true };
+  if (failed) return { kind: "failed", bank: failed.bank };
   const missed = runs.find((run) => run.status === "otp_skipped");
-  if (missed) return { kind: "code-missed", bank: missed.bank, prominent: true };
+  if (missed) return { kind: "code-missed", bank: missed.bank };
 
-  if (asOf === null) return { kind: "unknown", prominent: false };
+  if (asOf === null) return { kind: "unknown" };
   const ageMs = nowMs === null ? null : nowMs - Date.parse(asOf);
-  return stale
-    ? { kind: "stale", ageMs, prominent: true }
-    : { kind: "fresh", ageMs, prominent: false };
+  return stale ? { kind: "stale", ageMs } : { kind: "fresh", ageMs };
 }
 
 const israelTime = new Intl.DateTimeFormat("he-IL", {

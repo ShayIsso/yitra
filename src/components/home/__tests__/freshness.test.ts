@@ -25,15 +25,14 @@ function input(over: Partial<FreshnessInput> = {}): FreshnessInput {
 
 describe("homeFreshness", () => {
   it("is quiet when the last sync is fresh", () => {
-    expect(homeFreshness(input())).toEqual({ kind: "fresh", ageMs: 3 * HOUR, prominent: false });
+    expect(homeFreshness(input())).toEqual({ kind: "fresh", ageMs: 3 * HOUR });
   });
 
-  it("is prominent once the outlook says the sync is stale", () => {
+  it("is stale once the outlook says so", () => {
     const asOf = new Date(NOW - 50 * HOUR).toISOString();
     expect(homeFreshness(input({ asOf, stale: true }))).toEqual({
       kind: "stale",
       ageMs: 50 * HOUR,
-      prominent: true,
     });
   });
 
@@ -45,7 +44,6 @@ describe("homeFreshness", () => {
     expect(homeFreshness(input({ runs, stale: true }))).toEqual({
       kind: "failed",
       bank: "max",
-      prominent: true,
     });
   });
 
@@ -54,7 +52,6 @@ describe("homeFreshness", () => {
     expect(homeFreshness(input({ runs }))).toEqual({
       kind: "code-missed",
       bank: "max",
-      prominent: true,
     });
   });
 
@@ -70,7 +67,6 @@ describe("homeFreshness", () => {
     const runs = [{ bank: "max", status: "error" as const }];
     expect(homeFreshness(input({ runs, live: { syncing: true, codeBank: null } }))).toEqual({
       kind: "syncing",
-      prominent: false,
     });
   });
 
@@ -78,7 +74,6 @@ describe("homeFreshness", () => {
     expect(homeFreshness(input({ live: { syncing: true, codeBank: "discount" } }))).toEqual({
       kind: "code-needed",
       bank: "discount",
-      prominent: true,
     });
   });
 
@@ -86,12 +81,11 @@ describe("homeFreshness", () => {
     expect(homeFreshness(input({ nowMs: null }))).toEqual({
       kind: "fresh",
       ageMs: null,
-      prominent: false,
     });
   });
 
   it("is unknown while there is no successful sync to measure", () => {
-    expect(homeFreshness(input({ asOf: null }))).toEqual({ kind: "unknown", prominent: false });
+    expect(homeFreshness(input({ asOf: null }))).toEqual({ kind: "unknown" });
   });
 });
 

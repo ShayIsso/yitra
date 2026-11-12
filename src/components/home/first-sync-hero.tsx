@@ -13,9 +13,12 @@ import { liveBankStatus, type BankStatusIcon } from "@/components/bank-status-vi
 import type { SyncStreamState } from "@/components/sync-stream";
 import { bankLabel } from "@/lib/bank-registry";
 import { cn } from "@/lib/utils";
+import { HERO_BUTTON } from "./hero-states";
 import type { OutlookOf } from "./outlook-view";
 
 export type HomeBank = { id: string; bankType: string; displayName: string };
+
+export const CONNECTION_LOST = "החיבור לשרת נותק לפני שהסנכרון הסתיים. התנועות שכבר יובאו נשמרו.";
 
 function Glyph({ icon }: { icon: BankStatusIcon }) {
   const className = "size-4 shrink-0";
@@ -141,17 +144,13 @@ export function FirstSyncHero({
       )}
       {stream.connectionError && (
         <p role="alert" className="text-body">
-          החיבור לשרת נותק לפני שהסנכרון הסתיים. התנועות שכבר יובאו נשמרו.
+          {CONNECTION_LOST}
         </p>
       )}
 
       {!live && !elsewhere && (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onStart}
-            className="press bg-hero-foreground text-hero text-body focus-visible:ring-hero-foreground/60 inline-flex min-h-11 items-center gap-2 rounded-lg px-5 font-semibold outline-none hover:opacity-90 focus-visible:ring-3"
-          >
+          <button type="button" onClick={onStart} className={HERO_BUTTON}>
             <ArrowsClockwiseIcon className="size-5" />
             {ours ? "לנסות שוב" : "התחלת הסנכרון הראשון"}
           </button>

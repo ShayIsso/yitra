@@ -26,9 +26,14 @@ import {
 
 /** A light action on the dark hero; the paper-on-teal pair is the hero's own AA pair. */
 export const HERO_BUTTON =
-  "press bg-hero-foreground text-hero text-body inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 font-semibold outline-none hover:opacity-90 focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
+  "press bg-hero-foreground text-hero text-body inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 font-semibold outline-none hover:bg-hero-muted focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
 const HERO_QUIET_BUTTON =
   "press text-body text-hero-foreground inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 outline-none hover:bg-hero-foreground/10 focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
+
+/** Hero money: whole shekels in the hero's own ink (pos/neg are not checked on the teal). */
+function HeroAmount(props: { amount: number; className?: string }) {
+  return <Amount {...props} colorize={false} fractionDigits={0} />;
+}
 
 function Figure({ amount, children }: { amount: number; children?: React.ReactNode }) {
   return (
@@ -113,12 +118,7 @@ function Equation({ outlook }: { outlook: ActiveOutlook }) {
                   {TERM_LABEL[t.term]}
                   {t.term === "due" && t.count > 0 && ` (${t.count})`}
                 </span>
-                <Amount
-                  amount={t.amount}
-                  colorize={false}
-                  fractionDigits={0}
-                  className="text-body font-semibold"
-                />
+                <HeroAmount amount={t.amount} className="text-body font-semibold" />
               </span>
             </li>
           ))}
@@ -159,7 +159,7 @@ export function ActiveBody({ outlook, nowMs }: { outlook: ActiveOutlook; nowMs: 
           "כל הוצאה נוספת החודש מגדילה את החריגה"
         ) : (
           <>
-            ≈ <Amount amount={outlook.perDay} colorize={false} fractionDigits={0} /> ליום
+            ≈ <HeroAmount amount={outlook.perDay} /> ליום
             <span className="text-hero-muted">
               {outlook.daysLeft === 1 ? " · היום האחרון בחודש" : ` · עוד ${outlook.daysLeft} ימים`}
             </span>
@@ -198,8 +198,7 @@ export function NoTargetBody({
       <SpentSoFar spent={outlook.spent} />
       {outlook.usualMonth !== null && (
         <p className="text-lead mt-3">
-          בחודש רגיל יוצאות אצלך בערך{" "}
-          <Amount amount={outlook.usualMonth} colorize={false} fractionDigits={0} />
+          בחודש רגיל יוצאות אצלך בערך <HeroAmount amount={outlook.usualMonth} />
         </p>
       )}
       <AsOf asOf={outlook.asOf} nowMs={nowMs} />
@@ -208,13 +207,8 @@ export function NoTargetBody({
           {outlook.suggestedTarget !== null ? (
             <>
               עוד אין יעד הוצאות חודשי. לפי החודשים האחרונים, יעד של{" "}
-              <Amount
-                amount={outlook.suggestedTarget}
-                colorize={false}
-                fractionDigits={0}
-                className="font-semibold"
-              />{" "}
-              נראה מתאים. עם יעד אפשר לראות כמה נשאר לך החודש.
+              <HeroAmount amount={outlook.suggestedTarget} className="font-semibold" /> נראה מתאים.
+              עם יעד אפשר לראות כמה נשאר לך החודש.
             </>
           ) : (
             "עוד אין יעד הוצאות חודשי. עם יעד אפשר לראות כמה נשאר לך החודש."
@@ -264,14 +258,7 @@ export function ThinHistoryBody({
 function ClosedSentence({ outlook, month }: { outlook: ClosedOutlook; month: HomeMonth }) {
   const verdict = closedVerdict(outlook);
   const name = monthName(month);
-  const by = (
-    <Amount
-      amount={Math.abs(verdict.net)}
-      colorize={false}
-      fractionDigits={0}
-      className="font-semibold"
-    />
-  );
+  const by = <HeroAmount amount={verdict.by} className="font-semibold" />;
   const head =
     verdict.balance === "surplus" ? (
       <>
@@ -290,22 +277,12 @@ function ClosedSentence({ outlook, month }: { outlook: ClosedOutlook; month: Hom
     verdict.target === null ? null : "over" in verdict.target ? (
       <>
         , וההוצאות עברו את היעד ב־
-        <Amount
-          amount={verdict.target.over}
-          colorize={false}
-          fractionDigits={0}
-          className="font-semibold"
-        />
+        <HeroAmount amount={verdict.target.over} className="font-semibold" />
       </>
     ) : (
       <>
         , וההוצאות נשארו בתוך היעד של{" "}
-        <Amount
-          amount={verdict.target.within}
-          colorize={false}
-          fractionDigits={0}
-          className="font-semibold"
-        />
+        <HeroAmount amount={verdict.target.within} className="font-semibold" />
       </>
     );
   return (
@@ -333,8 +310,8 @@ export function ClosedBody({
       <ClosedSentence outlook={outlook} month={month} />
       {!empty && (
         <p className="text-hero-muted text-body mt-1 tabular-nums">
-          הכנסות <Amount amount={outlook.income} colorize={false} fractionDigits={0} /> · הוצאות{" "}
-          <Amount amount={outlook.expenses} colorize={false} fractionDigits={0} />
+          הכנסות <HeroAmount amount={outlook.income} /> · הוצאות{" "}
+          <HeroAmount amount={outlook.expenses} />
         </p>
       )}
       <AsOf asOf={outlook.asOf} nowMs={nowMs} />

@@ -1,3 +1,4 @@
+import { HEBREW_MONTHS } from "@/components/reports/format";
 import { israelCalendarDay } from "@/lib/calendar";
 
 /**
@@ -81,36 +82,6 @@ export function swipeStep(dx: number, dy: number): -1 | 0 | 1 {
   if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return 0;
   return dx > 0 ? 1 : -1;
 }
-
-export const HEBREW_MONTHS = [
-  "ינואר",
-  "פברואר",
-  "מרץ",
-  "אפריל",
-  "מאי",
-  "יוני",
-  "יולי",
-  "אוגוסט",
-  "ספטמבר",
-  "אוקטובר",
-  "נובמבר",
-  "דצמבר",
-] as const;
-
-export const HEBREW_MONTHS_SHORT = [
-  "ינו׳",
-  "פבר׳",
-  "מרץ",
-  "אפר׳",
-  "מאי",
-  "יוני",
-  "יולי",
-  "אוג׳",
-  "ספט׳",
-  "אוק׳",
-  "נוב׳",
-  "דצמ׳",
-] as const;
 
 export function monthName(m: HomeMonth): string {
   return HEBREW_MONTHS[m.month - 1];

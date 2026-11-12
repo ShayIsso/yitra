@@ -10,11 +10,10 @@ const PILL =
   "press text-body inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
 
 /** Coral is attention only (ADR-0015): the stale, failed and code states, with ink text. */
-const LOUD = "bg-attention text-attention-foreground font-medium hover:opacity-90";
+const LOUD = "bg-attention text-attention-foreground font-medium";
 const QUIET = "text-hero-muted hover:bg-hero-foreground/10 hover:text-hero-foreground";
 
 export type FreshnessActions = {
-  /** Starts a sync from the home screen. */
   onSyncNow: () => void;
   /** Reopens the code prompt the live run is waiting on. */
   onEnterCode: () => void;

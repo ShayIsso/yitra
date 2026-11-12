@@ -108,7 +108,7 @@ export function HeroError({ retrying, onRetry }: { retrying: boolean; onRetry: (
   return (
     <div role="alert" className="flex flex-col items-start gap-4">
       <div className="flex items-start gap-3">
-        <WarningCircleIcon weight="fill" className="text-attention mt-0.5 size-5 shrink-0" />
+        <WarningCircleIcon weight="fill" className="mt-0.5 size-5 shrink-0" />
         <div className="flex flex-col gap-1">
           <p className="text-lead font-medium">לא הצלחנו לטעון את תמונת החודש</p>
           <p className="text-hero-muted text-body">ייתכן שזו תקלה זמנית. שאר המסך לא נפגע.</p>

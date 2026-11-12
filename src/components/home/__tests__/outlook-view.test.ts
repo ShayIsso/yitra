@@ -23,13 +23,13 @@ function closed(over: Partial<ClosedOutlook> = {}): ClosedOutlook {
 
 describe("closedVerdict", () => {
   it("says more came in than went out", () => {
-    expect(closedVerdict(closed())).toEqual({ balance: "surplus", net: 3000, target: null });
+    expect(closedVerdict(closed())).toEqual({ balance: "surplus", by: 3000, target: null });
   });
 
   it("says more went out than came in", () => {
     expect(closedVerdict(closed({ income: 8000, net: -1000 }))).toMatchObject({
       balance: "deficit",
-      net: -1000,
+      by: 1000,
     });
   });
 

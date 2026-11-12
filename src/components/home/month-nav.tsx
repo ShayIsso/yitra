@@ -1,9 +1,9 @@
 "use client";
 
 import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
+import { HEBREW_MONTHS_SHORT } from "@/components/reports/format";
 import { cn } from "@/lib/utils";
 import {
-  HEBREW_MONTHS_SHORT,
   compareMonths,
   monthName,
   monthWindow,

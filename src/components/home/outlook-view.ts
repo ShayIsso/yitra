@@ -1,4 +1,4 @@
-import type { MonthOutlook } from "@/lib/budgets/outlook";
+import type { MonthOutlook } from "@/lib/budgets";
 
 /**
  * The month outlook as `/api/month-outlook` sends it: dates arrive as ISO
@@ -16,7 +16,8 @@ export type ClosedOutlook = OutlookOf<"closed">;
 
 export type ClosedVerdict = {
   balance: "surplus" | "deficit" | "even" | "empty";
-  net: number;
+  /** How far income and expenses ended apart: the net's size, its sign told in words. */
+  by: number;
   target: null | { over: number } | { within: number };
 };
 
@@ -32,7 +33,7 @@ export function closedVerdict(o: ClosedOutlook): ClosedVerdict {
           : "even";
   const target =
     o.target === null ? null : o.overBy !== null ? { over: o.overBy } : { within: o.target };
-  return { balance, net: o.net, target };
+  return { balance, by: Math.abs(o.net), target };
 }
 
 export type EquationTerm =

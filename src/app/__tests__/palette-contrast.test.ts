@@ -80,6 +80,8 @@ const FILL_PAIRS: [text: string, fill: string][] = [
   ["--emerald-foreground", "--emerald"],
   ["--hero-foreground", "--hero"],
   ["--hero-muted", "--hero"],
+  // The hero's light action on hover (home/hero-states.tsx).
+  ["--hero", "--hero-muted"],
   ["--sidebar-foreground", "--sidebar"],
   ["--sidebar-primary-foreground", "--sidebar-primary"],
   ["--sidebar-accent-foreground", "--sidebar-accent"],
