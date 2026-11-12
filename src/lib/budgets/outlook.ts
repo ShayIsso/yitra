@@ -193,6 +193,9 @@ export type MonthOutlook =
       net: number;
       target: number | null;
       overBy: number | null;
+      /** A closed month still stands on the last sync: its rows can arrive days late. */
+      asOf: Date;
+      stale: boolean;
     };
 
 /**
@@ -367,6 +370,8 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
   }
 
   const { month, today, target } = input;
+  const asOf = input.lastSuccessfulSyncAt;
+  const stale = input.now.getTime() - asOf.getTime() > STALE_SYNC_AFTER_MS;
 
   if (isMonthClosed(month, today)) {
     const summary = wholeMonthSummary(input.rows, month);
@@ -378,6 +383,8 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
       target,
       overBy:
         target !== null && summary.expenses > target ? toAgorot(summary.expenses - target) : null,
+      asOf,
+      stale,
     };
   }
 
@@ -388,8 +395,6 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
 
   const counted = countedRows(input.rows, month, today);
   const spent = computeMonthlySummary(counted).expenses;
-  const asOf = input.lastSuccessfulSyncAt;
-  const stale = input.now.getTime() - asOf.getTime() > STALE_SYNC_AFTER_MS;
   const usualMonth = usualMonthOf(input);
 
   if (target === null) {

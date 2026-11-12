@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BankBadge } from "@/components/bank-badge";
@@ -30,32 +29,16 @@ import type {
   MonthlyTargetsData,
   SavingsTargetStatus,
 } from "@/lib/budgets";
+import type { HomeMonth } from "@/components/home/month";
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
-import { PaceHero, PaceHeroSkeleton } from "@/components/dashboard/pace-hero";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
 import { OnboardingPath } from "@/components/dashboard/onboarding-path";
-import { SyncFreshnessPill } from "@/components/dashboard/sync-freshness-pill";
 import { TrendMiniChart } from "@/components/dashboard/trend-mini-chart";
 import { TopMerchantsCard } from "@/components/dashboard/top-merchants-card";
 import {
   UpcomingChargesCard,
   type UpcomingCharge,
 } from "@/components/dashboard/upcoming-charges-card";
-
-const HEBREW_MONTHS = [
-  "ינואר",
-  "פברואר",
-  "מרץ",
-  "אפריל",
-  "מאי",
-  "יוני",
-  "יולי",
-  "אוגוסט",
-  "ספטמבר",
-  "אוקטובר",
-  "נובמבר",
-  "דצמבר",
-];
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -219,10 +202,21 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-export function DashboardPanel({ categories }: { categories: Category[] }) {
-  const now = new Date();
-  const [year, setYear] = React.useState(now.getFullYear());
-  const [month, setMonth] = React.useState(now.getMonth() + 1);
+/**
+ * The old dashboard's sections below the home hero (#317), for the month the
+ * home screen selected. Each later home ticket (#318–#321) replaces part of it.
+ * `refreshKey` changes when the home screen knows the data changed (a target
+ * saved, a sync finished).
+ */
+export function DashboardPanel({
+  categories,
+  month: { year, month },
+  refreshKey,
+}: {
+  categories: Category[];
+  month: HomeMonth;
+  refreshKey: number;
+}) {
   const [data, setData] = React.useState<DashboardData>(EMPTY_DASHBOARD_DATA);
   const [loading, setLoading] = React.useState(true);
 
@@ -232,25 +226,7 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
     fetchDashboardData(year, month)
       .then(setData)
       .finally(() => setLoading(false));
-  }, [year, month]);
-
-  function prevMonth() {
-    if (month === 1) {
-      setMonth(12);
-      setYear((y) => y - 1);
-    } else {
-      setMonth((m) => m - 1);
-    }
-  }
-
-  function nextMonth() {
-    if (month === 12) {
-      setMonth(1);
-      setYear((y) => y + 1);
-    } else {
-      setMonth((m) => m + 1);
-    }
-  }
+  }, [year, month, refreshKey]);
 
   const {
     summary,
@@ -321,44 +297,12 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
 
   return (
     <div className="space-y-6">
-      {/*
-       * .stagger is scoped to this month-nav block only — it doesn't depend on
-       * `loading`, so this wrapper's children never remount on the month-strip
-       * refetch below. (The sync freshness pill lives *inside* the month-nav
-       * child, so it doesn't occupy a stagger position of its own.) The data
-       * slots past this point DO remount every refetch (the loading ternary
-       * swaps their JSX), so they stay unanimated (#202).
-       */}
-      <div className="stagger space-y-6">
-        {/* Header — month navigation + sync-freshness pill */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-bold tracking-tight">לוח בקרה</h2>
-          {/* Stacked on phones: the pill's text grows after mount, and side by side
-              it would wrap the row and shift the page below (CLS). */}
-          <div className="flex items-center gap-3 max-sm:flex-col max-sm:items-start">
-            <SyncFreshnessPill runs={lastSyncRuns} />
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={nextMonth} aria-label="חודש הבא">
-                <ChevronRight className="size-4" />
-              </Button>
-              <span className="min-w-32 text-center text-sm font-medium">
-                {HEBREW_MONTHS[month - 1]} {year}
-              </span>
-              <Button variant="outline" size="icon" onClick={prevMonth} aria-label="חודש קודם">
-                <ChevronLeft className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {!loading && <OnboardingPath facts={onboardingFacts} />}
 
       {loading ? (
         <div className="space-y-6">
-          {/* Pace hero + KPI band skeletons keep the loaded rows' heights, so
-              the swap to content does not shift the page (CLS). */}
-          <PaceHeroSkeleton />
+          {/* KPI band skeletons keep the loaded rows' heights, so the swap to
+              content does not shift the page (CLS). */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {KPI_LABELS.map((label) => (
               <KpiTile key={label} label={label}>
@@ -400,8 +344,6 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
       ) : (
         <div className="space-y-6 transition-opacity duration-150">
           {/* ── Monthly band — everything below is scoped to the month strip ── */}
-
-          <PaceHero pace={budgetsSummary.expenseTargetPace} />
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <KpiTile label={KPI_LABELS[0]}>

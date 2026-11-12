@@ -106,7 +106,9 @@ type Tint = {
  * (ui/button.tsx, ui/badge.tsx), the budget chips (budget-status-card.tsx),
  * the toast variants (ui/toast.tsx), the amber count badges, on the hero
  * the entry screens' sheen, current step and control hover
- * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx), and the sand
+ * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx) and the home
+ * hero's chips, notes and the equation's result term at /15
+ * (home/hero-states.tsx), and the sand
  * washes under the reports' expanded group rows (/40) and the subscriptions'
  * alert panels (/70).
  */
@@ -124,10 +126,15 @@ const TINTS: Tint[] = [
   { text: "--emerald", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
   { text: "--foreground", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
   { text: "--foreground", tint: "--warning", alphas: { light: [0.15], dark: [0.15] } },
-  ...["--hero-foreground", "--hero-muted"].map((text) => ({
+  ...(
+    [
+      ["--hero-foreground", [0.1, 0.15]],
+      ["--hero-muted", [0.1]],
+    ] as const
+  ).map(([text, alphas]) => ({
     text,
     tint: "--hero-foreground",
-    alphas: { light: [0.1], dark: [0.1] },
+    alphas: { light: [...alphas], dark: [...alphas] },
     surfaces: ["--hero"],
   })),
   { text: "--foreground", tint: "--muted", alphas: { light: [0.4, 0.7], dark: [0.4, 0.7] } },
