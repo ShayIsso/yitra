@@ -8,12 +8,11 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui
 import { formatPercent, monthLabel } from "@/components/reports/format";
 import { previousMonth, type RecapFact } from "@/lib/analytics/insights";
 import { cn } from "@/lib/utils";
-import { HERO_BUTTON } from "../hero-states";
+import { HERO_BUTTON, HERO_QUIET_BUTTON } from "../hero-states";
 import { monthName } from "../month";
 import { recapSlides, type RecapSlide } from "./recap-slides";
 
-const QUIET_BUTTON =
-  "press text-body text-hero-foreground inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 outline-none hover:bg-hero-foreground/10 focus-visible:ring-3 focus-visible:ring-hero-foreground/60 disabled:opacity-40";
+const QUIET_BUTTON = cn(HERO_QUIET_BUTTON, "justify-center disabled:opacity-40");
 
 /** Hero money: whole shekels in the hero's own ink (pos/neg are not checked on the teal). */
 function Money({ amount, className }: { amount: number; className?: string }) {
@@ -59,10 +58,8 @@ export default function RecapStory({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (next) setIndex(0);
-      }}
+      onOpenChange={onOpenChange}
+      // Each opening starts the story from its first card.
       onOpenChangeComplete={(next) => {
         if (!next) setIndex(0);
       }}
@@ -85,8 +82,8 @@ export default function RecapStory({
             <span
               key={s.kind}
               className={cn(
-                "h-1 flex-1 rounded-full transition-colors duration-200",
-                i <= at ? "bg-hero-foreground" : "bg-hero-foreground/25",
+                "bg-hero-foreground h-1 flex-1 rounded-full transition-opacity duration-200",
+                i > at && "opacity-25",
               )}
             />
           ))}

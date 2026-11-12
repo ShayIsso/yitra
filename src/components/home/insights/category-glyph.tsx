@@ -12,6 +12,7 @@ import {
   HeartIcon,
   HouseIcon,
   MoneyIcon,
+  PiggyBankIcon,
   PlusCircleIcon,
   ReceiptIcon,
   RepeatIcon,
@@ -25,7 +26,9 @@ type DuotoneGlyph = typeof DotsThreeCircleIcon;
 /**
  * `categories.icon` stores a Lucide name (src/db/taxonomy.ts); the redesign
  * draws its Phosphor counterpart in duotone, the category-mark weight
- * (ADR-0015 "Icons"). A name outside the taxonomy gets a neutral mark.
+ * (ADR-0015 "Icons"). Covers the seeded taxonomy plus the picker's names the
+ * icon manifest already carries; any other picker name (Plane, Car, …) gets
+ * the neutral mark until the manifest grows to cover it.
  */
 const CATEGORY_GLYPHS: Record<string, DuotoneGlyph> = {
   ArrowLeftRight: ArrowsLeftRightIcon,
@@ -39,6 +42,8 @@ const CATEGORY_GLYPHS: Record<string, DuotoneGlyph> = {
   HandCoins: HandCoinsIcon,
   Heart: HeartIcon,
   Home: HouseIcon,
+  MoreHorizontal: DotsThreeCircleIcon,
+  PiggyBank: PiggyBankIcon,
   Receipt: ReceiptIcon,
   Repeat: RepeatIcon,
   ShoppingBag: ShoppingBagIcon,
@@ -49,6 +54,7 @@ const CATEGORY_GLYPHS: Record<string, DuotoneGlyph> = {
 
 export function CategoryGlyph({ icon, className }: { icon: string; className?: string }) {
   const glyph = Object.hasOwn(CATEGORY_GLYPHS, icon) ? CATEGORY_GLYPHS[icon] : DotsThreeCircleIcon;
-  // createElement, not a JSX tag: the glyph is a module-level constant picked by name.
+  // createElement: a JSX tag on a component picked at render trips react-hooks/static-components,
+  // although every candidate is a module-level constant.
   return createElement(glyph, { weight: "duotone", className });
 }

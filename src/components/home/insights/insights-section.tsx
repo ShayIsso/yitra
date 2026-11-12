@@ -112,11 +112,15 @@ function ScrollButtons({ row }: { row: HTMLDivElement }) {
     };
     measure();
     row.addEventListener("scroll", measure, { passive: true });
-    const observer = new ResizeObserver(measure);
-    observer.observe(row);
+    const resized = new ResizeObserver(measure);
+    resized.observe(row);
+    // A refresh can add or drop cards without resizing the row itself.
+    const changed = new MutationObserver(measure);
+    changed.observe(row, { childList: true });
     return () => {
       row.removeEventListener("scroll", measure);
-      observer.disconnect();
+      resized.disconnect();
+      changed.disconnect();
     };
   }, [row]);
 
@@ -125,7 +129,8 @@ function ScrollButtons({ row }: { row: HTMLDivElement }) {
     const card = row.firstElementChild?.getBoundingClientRect().width ?? row.clientWidth;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // Toward the last card is leftwards in RTL.
-    row.scrollBy({ left: -direction * (card + 12), behavior: reduce ? "auto" : "smooth" });
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+    row.scrollBy({ left: -direction * (card + gap), behavior: reduce ? "auto" : "smooth" });
   };
   return (
     <div className="hidden gap-1 md:flex">
@@ -243,7 +248,10 @@ function RecapCard({
         "press bg-hero text-hero-foreground focus-visible:ring-ring/50 flex flex-col rounded-xl p-4 text-start outline-none focus-visible:ring-3",
       )}
     >
-      <span className="ring-hero-foreground/40 ring-offset-hero grid size-11 place-items-center rounded-full ring-2 ring-offset-2">
+      <span
+        aria-hidden="true"
+        className="ring-hero-foreground/40 ring-offset-hero grid size-11 place-items-center rounded-full ring-2 ring-offset-2"
+      >
         <span className="text-caption font-semibold">
           {HEBREW_MONTHS_SHORT[recap.month.month - 1]}
         </span>
@@ -251,11 +259,6 @@ function RecapCard({
       <span className="text-caption text-hero-muted mt-auto">סיכום חודשי</span>
       <span className="text-lead font-semibold">
         {name} {recap.month.year}, בקצרה
-      </span>
-      <span aria-hidden="true" className="mt-2 flex gap-1">
-        {Array.from({ length: 6 }, (_, i) => (
-          <span key={i} className="bg-hero-foreground/30 h-0.5 flex-1 rounded-full" />
-        ))}
       </span>
     </button>
   );
