@@ -1,0 +1,114 @@
+import type { ActiveOutlook } from "./outlook-view";
+
+/**
+ * The month forecast chart's reading of an active outlook (#318). It picks
+ * and indexes the series `monthOutlook` returned; it never computes money.
+ */
+export type ForecastView = {
+  /** Day of the month the outlook stands on: the actual series' last day. */
+  today: number;
+  daysInMonth: number;
+  target: number;
+  /** Cumulative net spend, index 0 = day 1, through today. */
+  actual: readonly number[];
+  /** Cumulative projected spend, index 0 = today, through the last day. */
+  projected: readonly number[];
+  /** Where the month lands. */
+  total: number;
+  basis: NonNullable<ActiveOutlook["projectionBasis"]>;
+  /** The day the projection first exceeds the target (`crossingDate`), or null. */
+  crossingDay: number | null;
+  /** Heading over the target: the projection crosses it, or the month is already over. */
+  atRisk: boolean;
+};
+
+export function forecastView(o: ActiveOutlook): ForecastView | null {
+  const p = o.projection;
+  if (p === null) return null;
+  const today = p.actual.length;
+  return {
+    today,
+    daysInMonth: today + p.projected.length - 1,
+    target: o.target,
+    actual: p.actual,
+    projected: p.projected,
+    total: p.total,
+    basis: o.projectionBasis ?? "this-month-pace",
+    crossingDay: o.crossingDate === null ? null : Number(o.crossingDate.slice(8, 10)),
+    atRisk: o.crossingDate !== null || o.overBy !== null,
+  };
+}
+
+export type ForecastPoint = { day: number; amount: number; kind: "actual" | "projected" };
+
+/**
+ * Cumulative spend on `day`. Today reads the actual series: on the month's
+ * last day the projection's first point already holds the late charges it
+ * lands today, which haven't been spent.
+ */
+export function forecastPoint(v: ForecastView, day: number): ForecastPoint {
+  return day <= v.today
+    ? { day, amount: v.actual[day - 1], kind: "actual" }
+    : { day, amount: v.projected[day - v.today], kind: "projected" };
+}
+
+const KEY_STEP: Record<string, number> = {
+  // The time axis runs right-to-left (newest on the left), so left is later.
+  ArrowLeft: 1,
+  ArrowRight: -1,
+  ArrowUp: 1,
+  ArrowDown: -1,
+  PageUp: 7,
+  PageDown: -7,
+};
+
+/** The day a key moves the scrub to from `day`, or null for a key that doesn't scrub. */
+export function scrubDay(v: ForecastView, day: number, key: string): number | null {
+  if (key === "Home") return 1;
+  if (key === "End") return v.daysInMonth;
+  const step = KEY_STEP[key];
+  if (step === undefined) return null;
+  return Math.min(v.daysInMonth, Math.max(1, day + step));
+}
+
+/** Headroom above the highest of the target and the series, so neither touches the top. */
+const HEADROOM = 1.1;
+
+export type PlotBox = { width: number; height: number; top: number; bottom: number };
+
+export type ForecastGeometry = {
+  x: (day: number) => number;
+  y: (amount: number) => number;
+  actualPath: string;
+  projectedPath: string;
+};
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/**
+ * Pixel geometry for a plot `width` × `height`. Day 1 sits at the right edge:
+ * the time axis reads right-to-left like every time chart in the app.
+ */
+export function forecastGeometry(v: ForecastView, box: PlotBox): ForecastGeometry {
+  const { width, height, top, bottom } = box;
+  const series = [...v.actual, ...v.projected];
+  const max = Math.max(v.target, ...series, 1) * HEADROOM;
+  const min = Math.min(0, ...series);
+  const plot = height - top - bottom;
+  const x = (day: number) => round1(width - ((day - 1) / (v.daysInMonth - 1)) * width);
+  const y = (amount: number) => round1(top + ((max - amount) / (max - min)) * plot);
+  const path = (amounts: readonly number[], firstDay: number) =>
+    amounts.map((a, i) => `${i === 0 ? "M" : "L"}${x(firstDay + i)},${y(a)}`).join(" ");
+  return {
+    x,
+    y,
+    actualPath: path(v.actual, 1),
+    projectedPath: path(v.projected, v.today),
+  };
+}
+
+/** The day under a pointer `offsetFromRight` pixels from the plot's right edge. */
+export function dayAtOffset(v: ForecastView, offsetFromRight: number, width: number): number {
+  const fraction = Math.min(1, Math.max(0, offsetFromRight / width));
+  return Math.round(fraction * (v.daysInMonth - 1)) + 1;
+}

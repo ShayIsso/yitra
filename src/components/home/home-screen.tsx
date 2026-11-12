@@ -21,6 +21,7 @@ import {
   NoTargetBody,
   ThinHistoryBody,
 } from "./hero-states";
+import { ForecastChart } from "./forecast-chart";
 import { HeroBodySkeleton, HeroError, MonthHero } from "./month-hero";
 import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
@@ -296,6 +297,12 @@ export function HomeScreen({
         <p role="status" className="text-muted-foreground text-body -mt-3">
           {stream.refusal ?? CONNECTION_LOST}
         </p>
+      )}
+
+      {shown?.outlook.state === "active" && !(outlook.failed && !outlook.current) && (
+        <div key={monthKey(shown.month)} className="enter">
+          <ForecastChart outlook={shown.outlook} month={shown.month} busy={!outlook.current} />
+        </div>
       )}
 
       {banks.length > 0 && (

@@ -166,9 +166,17 @@ describe.each([
 
 /**
  * Non-text marks (WCAG 1.4.11, 3:1): the coral status glyphs on the hero
- * (a failed bank or a code request in the first sync, home/first-sync-hero.tsx).
+ * (a failed bank or a code request in the first sync, home/first-sync-hero.tsx),
+ * and the month forecast's lines on its card (home/forecast-chart.tsx): actual
+ * spend, the target, the projected path (teal, or attention when at risk).
  */
-const MARK_PAIRS: [mark: string, surface: string][] = [["--attention", "--hero"]];
+const MARK_PAIRS: [mark: string, surface: string][] = [
+  ["--attention", "--hero"],
+  ["--foreground", "--card"],
+  ["--muted-foreground", "--card"],
+  ["--primary", "--card"],
+  ["--attention-text", "--card"],
+];
 
 /** Translucent marks: the hero's focus ring is hero-foreground at /60. */
 const MARK_TINTS: [mark: string, alpha: number, surface: string][] = [
