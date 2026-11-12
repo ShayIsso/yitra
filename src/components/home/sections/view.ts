@@ -7,6 +7,7 @@ import type { BudgetVerdict } from "@/lib/budgets";
 import type { OnboardingPathFacts } from "@/lib/onboarding/path";
 import type { Cadence } from "@/lib/recurring-detection";
 import type { SyncRunStatus } from "@/lib/sync/runs";
+import { toLocalDate } from "@/components/transactions/days";
 import { transactionsHref } from "@/lib/transactions/view-params";
 
 /** `/api/attention-counts`: four independent queue sizes. */
@@ -65,17 +66,8 @@ export type UpcomingWhen = { late: true } | { late: false; inDays: number };
 
 const MS_PER_DAY = 86_400_000;
 
-/**
- * A YYYY-MM-DD calendar date as a local Date, never via `new Date(string)`,
- * which parses it as UTC midnight and shows the previous day west of Greenwich.
- */
-export function localDate(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
 function dayIndex(iso: string): number {
-  const date = localDate(iso);
+  const date = toLocalDate(iso);
   return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / MS_PER_DAY;
 }
 
@@ -91,6 +83,18 @@ export function upcomingWhen(projectedDate: string, today: string): UpcomingWhen
   return { late: false, inDays: Math.round(dayIndex(projectedDate) - dayIndex(today)) };
 }
 
+/**
+ * A not-late charge's day in words up to a week ahead (Hebrew has a dual for
+ * two days); null past that, where the date itself reads better.
+ */
+export function relativeDayLabel(inDays: number): string | null {
+  if (inDays === 0) return "היום";
+  if (inDays === 1) return "מחר";
+  if (inDays === 2) return "בעוד יומיים";
+  if (inDays <= 7) return `בעוד ${inDays} ימים`;
+  return null;
+}
+
 export type UpcomingRow = UpcomingCharge & { when: UpcomingWhen };
 
 /** The endpoint's order (earliest first, so late charges lead), capped. */
@@ -104,15 +108,17 @@ export function upcomingList(
   return { rows, hidden: Math.max(0, charges.length - UPCOMING_SHOWN) };
 }
 
+export type BalanceTone = { tone: "unknown" } | { tone: "neutral" | "negative"; balance: number };
+
 /** Balances read neutral; only a negative one is flagged (and never by colour alone). */
-export function balanceTone(balance: number | null): "neutral" | "negative" | "unknown" {
-  if (balance === null) return "unknown";
-  return balance < 0 ? "negative" : "neutral";
+export function balanceTone(balance: number | null): BalanceTone {
+  if (balance === null) return { tone: "unknown" };
+  return { tone: balance < 0 ? "negative" : "neutral", balance };
 }
 
 /** A card account's next debit day, as an unpadded "day.month". */
 export function debitDayHint(isoDate: string): string {
-  const date = localDate(isoDate);
+  const date = toLocalDate(isoDate);
   return `${date.getDate()}.${date.getMonth() + 1}`;
 }
 
@@ -152,11 +158,18 @@ export function merchantBarPercents<T extends { amount: number }>(
   return merchants.map((m) => Math.max(0, Math.min(100, (m.amount / max) * 100)));
 }
 
+/** Some institution's latest run succeeded (the runs are last-per-bank). */
+export function anyRunSucceeded(runs: readonly { status: SyncRunStatus }[]): boolean {
+  return runs.some((run) => run.status === "success");
+}
+
 /**
- * The onboarding path's facts, or null while one is unknown (the nudge stays
- * out rather than guess). The sections mount only with a connected
+ * The onboarding path's facts, or null while one is still loading (the nudge
+ * stays out rather than guess). The sections mount only with a connected
  * institution. Balances exist only once a sync landed, so they cover a bank
- * whose latest run failed after an earlier success (the runs are last-per-bank).
+ * whose latest run failed after an earlier success (the runs are
+ * last-per-bank). A failed balances read is passed as [] (known unknown), so
+ * the setup steps still show when the first sync failed.
  */
 export function onboardingFacts(
   attention: AttentionCounts | null,
@@ -164,7 +177,7 @@ export function onboardingFacts(
   runs: readonly { status: SyncRunStatus }[],
 ): OnboardingPathFacts | null {
   if (attention === null) return null;
-  const ran = runs.some((run) => run.status === "success");
+  const ran = anyRunSucceeded(runs);
   if (!ran && balances === null) return null;
   return {
     hasCredential: true,

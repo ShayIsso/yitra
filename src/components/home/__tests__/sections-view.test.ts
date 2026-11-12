@@ -7,6 +7,7 @@ import {
   goalFillPercent,
   merchantBarPercents,
   onboardingFacts,
+  relativeDayLabel,
   upcomingList,
   upcomingWhen,
   UPCOMING_SHOWN,
@@ -74,6 +75,26 @@ describe("upcomingWhen", () => {
   });
 });
 
+describe("relativeDayLabel", () => {
+  it("names today and tomorrow", () => {
+    expect(relativeDayLabel(0)).toBe("היום");
+    expect(relativeDayLabel(1)).toBe("מחר");
+  });
+
+  it("uses the Hebrew dual for two days", () => {
+    expect(relativeDayLabel(2)).toBe("בעוד יומיים");
+  });
+
+  it("counts days up to a week ahead", () => {
+    expect(relativeDayLabel(3)).toBe("בעוד 3 ימים");
+    expect(relativeDayLabel(7)).toBe("בעוד 7 ימים");
+  });
+
+  it("leaves anything further to the date itself", () => {
+    expect(relativeDayLabel(8)).toBeNull();
+  });
+});
+
 describe("upcomingList", () => {
   it("keeps the endpoint's order and flags each row's lateness", () => {
     const { rows } = upcomingList(
@@ -99,13 +120,13 @@ describe("upcomingList", () => {
 
 describe("balanceTone", () => {
   it("is neutral for zero and positive balances and negative below zero", () => {
-    expect(balanceTone(0)).toBe("neutral");
-    expect(balanceTone(1520.4)).toBe("neutral");
-    expect(balanceTone(-0.5)).toBe("negative");
+    expect(balanceTone(0)).toEqual({ tone: "neutral", balance: 0 });
+    expect(balanceTone(1520.4)).toEqual({ tone: "neutral", balance: 1520.4 });
+    expect(balanceTone(-0.5)).toEqual({ tone: "negative", balance: -0.5 });
   });
 
   it("is unknown when the bank reported no balance", () => {
-    expect(balanceTone(null)).toBe("unknown");
+    expect(balanceTone(null)).toEqual({ tone: "unknown" });
   });
 });
 
@@ -201,6 +222,14 @@ describe("onboardingFacts", () => {
 
   it("is unknown when no run succeeded and the balances are not known yet", () => {
     expect(onboardingFacts(NO_COUNTS, null, failed)).toBeNull();
+  });
+
+  it("still shows the setup steps when the balances read failed (passed as [])", () => {
+    expect(onboardingFacts(NO_COUNTS, [], failed)).toEqual({
+      hasCredential: true,
+      hasSuccessfulSync: false,
+      uncategorizedCount: 0,
+    });
   });
 
   it("reports no first sync when no run succeeded and nothing was stored", () => {

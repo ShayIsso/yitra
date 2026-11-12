@@ -7,6 +7,7 @@ import { settingsSectionHref } from "@/components/settings/sections";
 import { Card } from "@/components/ui/card";
 // Not the module's index: its DB-backed exports must not enter a client bundle.
 import {
+  ONBOARDING_PATH_STEPS,
   deriveOnboardingPath,
   shouldShowOnboardingPath,
   type OnboardingPathFacts,
@@ -24,8 +25,7 @@ const STEP_DEFS: Record<OnboardingPathStepId, LinkTarget> = {
 };
 
 /** Setup steps still open, while the first two aren't done (`shouldShowOnboardingPath`). */
-function OnboardingPath({ facts }: { facts: OnboardingPathFacts | null }) {
-  if (facts === null) return null;
+function OnboardingPath({ facts }: { facts: OnboardingPathFacts }) {
   const steps = deriveOnboardingPath(facts);
   if (!shouldShowOnboardingPath(steps)) return null;
   return (
@@ -67,20 +67,42 @@ function OnboardingPath({ facts }: { facts: OnboardingPathFacts | null }) {
 /**
  * What waits for the owner (uncategorized rows, AI suggestions, subscription
  * anomalies, reconciliation groups), each a link to its filtered view, with
- * the setup path above it while setup is unfinished.
+ * the setup path above it while setup is unfinished. The two land together:
+ * the skeleton stays until the setup facts are known too, so the path never
+ * pushes the list (and everything below it) down after it drew.
  */
 export function AttentionSection({
   load,
   onboarding,
+  expectOnboarding,
 }: {
   load: SectionLoad<AttentionCounts>;
+  /** Null while a fact is still loading. */
   onboarding: OnboardingPathFacts | null;
+  /**
+   * No run has succeeded yet, so the setup card will almost surely show: the
+   * skeleton reserves its room (only stored balances could still hide it).
+   */
+  expectOnboarding: boolean;
 }) {
+  const together: SectionLoad<{ counts: AttentionCounts; onboarding: OnboardingPathFacts }> = {
+    ...load,
+    data: load.data !== null && onboarding !== null ? { counts: load.data, onboarding } : null,
+    last: null,
+  };
   return (
     <Section title="דורש טיפול">
-      <OnboardingPath facts={onboarding} />
-      <SectionBody load={load} what="מה שדורש טיפול" skeleton={<AttentionSkeleton />}>
-        {(counts) => <AttentionList counts={counts} />}
+      <SectionBody
+        load={together}
+        what="מה שדורש טיפול"
+        skeleton={<AttentionSkeleton onboarding={expectOnboarding} />}
+      >
+        {(data) => (
+          <>
+            <OnboardingPath facts={data.onboarding} />
+            <AttentionList counts={data.counts} />
+          </>
+        )}
       </SectionBody>
     </Section>
   );
@@ -119,17 +141,39 @@ function AttentionList({ counts }: { counts: AttentionCounts }) {
   );
 }
 
-function AttentionSkeleton() {
+/** The setup card's shape: its title and one 44px line per step. */
+function OnboardingSkeleton() {
   return (
-    <ListCard>
-      {[0, 1].map((i) => (
-        <li key={i} className={ROW}>
-          <span className="bg-muted size-7 shrink-0 animate-pulse rounded-full" />
-          <span className="text-body flex-1">
-            <Bone className="w-36" />
-          </span>
-        </li>
-      ))}
-    </ListCard>
+    <Card className="gap-2 p-4">
+      <p className="text-body">
+        <Bone className="w-28" />
+      </p>
+      <ol className="flex flex-col">
+        {ONBOARDING_PATH_STEPS.map((id) => (
+          <li key={id} className="text-body flex min-h-11 items-center gap-2">
+            <span className="bg-muted size-5 shrink-0 animate-pulse rounded-full" />
+            <Bone className="w-40" />
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+function AttentionSkeleton({ onboarding }: { onboarding: boolean }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {onboarding && <OnboardingSkeleton />}
+      <ListCard>
+        {[0, 1].map((i) => (
+          <li key={i} className={ROW}>
+            <span className="bg-muted size-7 shrink-0 animate-pulse rounded-full" />
+            <span className="text-body flex-1">
+              <Bone className="w-36" />
+            </span>
+          </li>
+        ))}
+      </ListCard>
+    </div>
   );
 }

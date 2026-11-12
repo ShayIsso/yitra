@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckCircleIcon, GaugeIcon, WarningCircleIcon } from "@/components/icons";
 import { VERDICT_LABEL } from "@/components/budget-status-card";
+import { CategoryDot } from "@/components/category-dot";
 import { settingsSectionHref } from "@/components/settings/sections";
 import { Amount } from "@/components/ui/amount";
 import { Card } from "@/components/ui/card";
@@ -93,13 +94,7 @@ function RingTile({ status, category }: { status: BudgetStatus; category: Catego
       </div>
       <div className="flex min-w-0 flex-1 flex-col items-start">
         <p className="text-body flex w-full min-w-0 items-center gap-1.5 font-semibold">
-          {category && (
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: category.color }}
-            />
-          )}
+          {category && <CategoryDot color={category.color} />}
           <span className="truncate">{category?.name ?? "—"}</span>
         </p>
         <p className="text-caption text-muted-foreground">

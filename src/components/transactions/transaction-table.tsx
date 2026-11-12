@@ -11,14 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
-import {
-  AiMarker,
-  CategoryPicker,
-  RowMarks,
-  SuggestionChip,
-  TransactionAmount,
-  displayName,
-} from "./row-parts";
+import { AiMarker, CategoryPicker, RowMarks, SuggestionChip, TransactionAmount } from "./row-parts";
+import { displayName } from "./row-basics";
 import type { TransactionActions } from "./use-transaction-actions";
 import type { Transaction } from "./types";
 import { shortDay } from "./days";

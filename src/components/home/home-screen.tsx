@@ -9,6 +9,7 @@ import { monthKey } from "@/components/reports/format";
 import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import type { MonthlyTargetsData } from "@/lib/budgets";
 import type { Category } from "@/lib/categories";
+import { israelCalendarDay } from "@/lib/calendar";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 import { firstSyncRunEnded, runsSignature } from "./first-sync-watch";
 import { FreshnessIndicator } from "./freshness-indicator";
@@ -256,6 +257,7 @@ export function HomeScreen({
       : null;
   const sectionsShown = answered && !welcoming;
   const sectionsKey = `${version}:${sectionsNudge}`;
+  const homeDay = nowMs === null ? null : israelCalendarDay(new Date(nowMs));
 
   return (
     <div className="flex flex-col gap-6">
@@ -325,6 +327,7 @@ export function HomeScreen({
             visible={sectionsShown}
             lastSyncRuns={runs ?? []}
             onMonthlyTargets={setTargets}
+            today={homeDay}
           />
         </>
       )}

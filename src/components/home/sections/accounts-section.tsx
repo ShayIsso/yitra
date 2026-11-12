@@ -11,8 +11,8 @@ import { ListCard, ListSkeleton, ROW, Section, SectionBody, SectionEmpty } from 
 import { balanceTone, debitDayHint } from "./view";
 
 function Balance({ balance }: { balance: number | null }) {
-  const tone = balanceTone(balance);
-  if (balance === null || tone === "unknown") {
+  const view = balanceTone(balance);
+  if (view.tone === "unknown") {
     return (
       <span className="text-body text-muted-foreground shrink-0">
         <span aria-hidden="true">—</span>
@@ -23,16 +23,18 @@ function Balance({ balance }: { balance: number | null }) {
   return (
     <span className="flex shrink-0 flex-col items-end text-end">
       <Amount
-        amount={balance}
+        amount={view.balance}
         colorize={false}
         fractionDigits={0}
         className={cn(
           "text-body font-semibold whitespace-nowrap",
-          tone === "negative" && "text-neg",
+          view.tone === "negative" && "text-neg",
         )}
       />
       {/* Red is never the only signal: the minus sign and this word carry it too. */}
-      {tone === "negative" && <span className="text-caption text-neg font-medium">במינוס</span>}
+      {view.tone === "negative" && (
+        <span className="text-caption text-neg font-medium">במינוס</span>
+      )}
     </span>
   );
 }

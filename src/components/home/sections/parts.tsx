@@ -62,16 +62,16 @@ export function SectionBody<T>({
   /** Completes "לא הצלחנו לטעון את …". */
   what: string;
   skeleton: React.ReactNode;
-  children: (data: T, today: string) => React.ReactNode;
+  children: (data: T) => React.ReactNode;
 }) {
-  if (load.data !== null && load.today !== null) return <>{children(load.data, load.today)}</>;
+  if (load.data !== null) return <>{children(load.data)}</>;
   if (load.failed) {
     return <SectionError what={what} retrying={load.pending} onRetry={load.retry} />;
   }
   return <div aria-hidden="true">{skeleton}</div>;
 }
 
-/** One section's load failure: calm, with a retry for that section alone. */
+/** A home section's load failure: calm, with a retry for that section alone. */
 export function SectionError({
   what,
   retrying,

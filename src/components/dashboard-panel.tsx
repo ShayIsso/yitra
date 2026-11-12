@@ -2,8 +2,6 @@
 
 import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowsClockwiseIcon, WarningCircleIcon } from "@/components/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Amount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
@@ -11,6 +9,7 @@ import { SpendingBreakdown } from "@/components/spending-breakdown";
 import type { MonthlySummary, CategorySpendingNode } from "@/lib/analytics";
 import type { HomeMonth } from "@/components/home/month";
 import { useMonthLoad } from "@/components/home/month-load";
+import { SectionError } from "@/components/home/sections/parts";
 import { monthKey } from "@/components/reports/format";
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
 import { TrendMiniChart } from "@/components/dashboard/trend-mini-chart";
@@ -94,7 +93,11 @@ export const DashboardPanel = React.memo(function DashboardPanel({
   if (!visible) return null;
   if (data === null) {
     return load.failed ? (
-      <SectionsLoadError retrying={load.pending} onRetry={() => setAttempt((a) => a + 1)} />
+      <SectionError
+        what="שאר הנתונים של החודש"
+        retrying={load.pending}
+        onRetry={() => setAttempt((a) => a + 1)}
+      />
     ) : (
       <DashboardSkeleton />
     );
@@ -174,30 +177,6 @@ function DashboardSections({ data }: { data: DashboardData }) {
         <TrendMiniChart months={trend} />
       </div>
     </div>
-  );
-}
-
-/** The sections' own load failure: calm, with a retry for them alone. */
-function SectionsLoadError({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
-  return (
-    <Card
-      role="alert"
-      className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <p className="text-body flex items-center gap-2">
-        <WarningCircleIcon weight="fill" className="text-attention-text size-5 shrink-0" />
-        לא הצלחנו לטעון את שאר הנתונים של החודש.
-      </p>
-      <Button
-        variant="outline"
-        className="h-11 gap-1.5 md:h-9"
-        disabled={retrying}
-        onClick={onRetry}
-      >
-        <ArrowsClockwiseIcon className="size-4" />
-        {retrying ? "טוען..." : "נסה שוב"}
-      </Button>
-    </Card>
   );
 }
 
