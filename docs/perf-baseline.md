@@ -160,7 +160,8 @@ Deterministic invented data ending on the day it runs: two connected
 institutions (one bank account, one card), 13 months of transactions (salary,
 rent, subscriptions, investment deposit, groceries, cafés, fuel, and so on,
 about 480 rows), four uncategorized rows, three budgets, an expense and a
-savings target, one savings goal, three confirmed recurring charges and a
-successful sync six hours earlier. Every merchant name and amount is made up.
+savings target, one savings goal, four confirmed recurring charges (rent and
+three subscriptions) and a successful sync six hours earlier. Every merchant
+name and amount is made up.
 The script refuses any database not named as throwaway and any database that
 already holds credentials or transactions.
