@@ -302,15 +302,15 @@ describe("approving an own-account transfer (P3)", () => {
 });
 
 describe("undoing an approved own-account transfer", () => {
-  it("clears both legs and re-runs the rules on each", async () => {
+  it("clears both legs and releases each through the undo path", async () => {
     const cleared: string[] = [];
-    const recategorized: string[] = [];
+    const recategorized: { id: string; intent: string }[] = [];
     const { store } = storeOf({});
     store.clearRows = async (ids) => {
       cleared.push(...ids);
     };
-    store.setCategory = async (id) => {
-      recategorized.push(id);
+    store.setCategory = async (id, _categoryId, intent) => {
+      recategorized.push({ id, intent });
     };
     const members = [
       row({ id: "out", reconciliationGroupId: "p3", chargedAmount: -2500 }),
@@ -320,6 +320,9 @@ describe("undoing an approved own-account transfer", () => {
     await undoTransaction("out", members, store);
 
     expect(cleared.sort()).toEqual(["in", "out"]);
-    expect(recategorized.sort()).toEqual(["in", "out"]);
+    expect(recategorized.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: "in", intent: "undo" },
+      { id: "out", intent: "undo" },
+    ]);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { sql, eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { approveGroup, rejectGroup } from "../inbox-ops";
+import { approveGroup, rejectGroup, undoTransaction } from "../inbox-ops";
 import { drizzleInboxStore } from "../inbox-store";
 import { drizzleSuspectedTransferRouter } from "../suspected-transfer";
 
@@ -213,6 +213,20 @@ describe.skipIf(!isThrowaway)("the suspected-transfer inbox on Postgres", () => 
         expect(leg.categoryId).toBe(transferCategoryId);
         expect(leg.categorySource).toBe("user");
         expect(leg.reconciliationConfirmedAt).not.toBeNull();
+      }
+    });
+
+    it("undoing the approved pair releases both legs' internal-transfer category", async () => {
+      await addIncomingLeg();
+      await approveGroup(GROUP, drizzleInboxStore);
+
+      await undoTransaction(ROW, await drizzleInboxStore.getGroupMembers(GROUP), drizzleInboxStore);
+
+      for (const id of [ROW, INCOMING]) {
+        expect(await storedLeg(id)).toMatchObject({
+          categoryId: null,
+          reconciliationGroupId: null,
+        });
       }
     });
 
