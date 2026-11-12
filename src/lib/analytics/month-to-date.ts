@@ -16,7 +16,7 @@ function cutoff(
   month: InsightMonth,
   today: string,
 ): {
-  basis: MonthToDateWindow<unknown>["basis"];
+  basis: MonthToDateBasis;
   counts: (row: { date: string }) => boolean;
 } | null {
   const position = monthPosition(month, today);
@@ -39,8 +39,11 @@ export function countedThroughToday<R extends { date: string }>(
   return cut ? rows.filter(cut.counts) : [];
 }
 
+/** A running month is compared through today, a closed month whole. */
+export type MonthToDateBasis = "month-to-date" | "whole-month";
+
 export type MonthToDateWindow<R> = {
-  basis: "month-to-date" | "whole-month";
+  basis: MonthToDateBasis;
   /** The month's rows that count. */
   month: R[];
   /** The month before's rows over the same days. */

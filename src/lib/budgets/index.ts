@@ -136,11 +136,7 @@ export async function getMonthOutlook(year: number, month: number): Promise<Mont
   );
 }
 
-/**
- * Each bank account's earliest stored transaction with its credential: what
- * history coverage is judged from (`@/lib/analytics` history-coverage), the
- * same read the month outlook makes.
- */
+/** The month outlook's coverage read, for other readers of history coverage. */
 export const getAccountHistoryStarts = readAccountHistoryStarts;
 
 /**

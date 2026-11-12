@@ -1,5 +1,5 @@
 import type { MonthChange } from "@/lib/analytics/month-metrics";
-import type { HomeTrendComparison } from "@/lib/reports/home-trends";
+import type { CategoryChange, HomeTrendComparison } from "@/lib/reports/home-trends";
 import { toAgorot } from "@/lib/analytics/agorot";
 import {
   formatPointsDelta,
@@ -45,9 +45,7 @@ export function rateChangeView(points: number): DeltaView {
  * baseline to rise from; one that did is never new, though a running month's
  * change is month-to-date and may find nothing yet on those days.
  */
-export function categoryChangeView(
-  change: MonthChange & { previous: number; previousWhole: number },
-): DeltaView {
+export function categoryChangeView(change: CategoryChange): DeltaView {
   if (change.previousWhole <= 0) return { direction: "flat", label: "חדש" };
   return changeView(change);
 }
@@ -70,10 +68,7 @@ export function comparisonCaption(comparison: HomeTrendComparison): string {
 export function comparisonLabel({
   basis,
   previousMonth,
-}: {
-  basis: "month-to-date" | "whole-month";
-  previousMonth: { year: number; month: number };
-}): string {
+}: Pick<Extract<HomeTrendComparison, { state: "shown" }>, "basis" | "previousMonth">): string {
   const name = monthName(previousMonth);
   return basis === "month-to-date" ? `אותם ימים ב${name}` : name;
 }

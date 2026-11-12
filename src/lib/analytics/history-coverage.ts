@@ -51,14 +51,17 @@ export function isMonthHistoryComplete(month: Month, since: string | null): bool
  * starts: no credential's history may begin inside them, where the first
  * sync may have reached it only part-way (a mid-month edge reads as a drop).
  * A credential whose history begins after both months has no rows in either,
- * so it cannot skew the comparison and does not hold it back.
+ * so it cannot skew the comparison and does not hold it back. `through`
+ * (YYYY-MM-DD) is the last day the comparison counts: today for a running
+ * month, whose rows dated ahead do not count yet; `later`'s last day otherwise.
  */
 export function isComparisonHistoryComplete(
   earlier: Month,
   later: Month,
   accountStarts: readonly AccountHistoryStart[],
+  through: string = monthDateRange(later.year, later.month).to,
 ): boolean {
   const from = monthDateRange(earlier.year, earlier.month).from;
-  const to = monthDateRange(later.year, later.month).to;
+  const to = through;
   return credentialStarts(accountStarts).every((start) => start <= from || start > to);
 }

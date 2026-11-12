@@ -56,4 +56,10 @@ describe("isComparisonHistoryComplete", () => {
     // The month it first appears in is ambiguous (a sync edge looks the same), so it waits.
     expect(isComparisonHistoryComplete(OCTOBER, NOVEMBER, [bank, dormant])).toBe(false);
   });
+
+  it("ignores a first row dated after the day a running month is counted through", () => {
+    // The card's only row is an installment the bank lists for Nov 20.
+    const ahead = { credentialId: "card", earliest: "2026-11-20" };
+    expect(isComparisonHistoryComplete(OCTOBER, NOVEMBER, [bank, ahead], "2026-11-12")).toBe(true);
+  });
 });

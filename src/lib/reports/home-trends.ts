@@ -16,6 +16,7 @@ import {
   type CategorySpendingNode,
   type InsightMonth,
   type MonthChange,
+  type MonthToDateBasis,
   type MonthToDateWindow,
   type RollupCategory,
   type TransactionWithCategory,
@@ -63,7 +64,7 @@ export type HomeTrendComparison =
        * A month still running is compared through today against the month
        * before through the same day; a closed month against the whole month.
        */
-      basis: "month-to-date" | "whole-month";
+      basis: MonthToDateBasis;
       previousMonth: InsightMonth;
       income: MonthChange;
       expenses: MonthChange;
@@ -82,6 +83,13 @@ export type HomeTrendComparison =
   /** The month before holds no rows: nothing to compare with. */
   | { state: "no-history" };
 
+/**
+ * A category against the month before. `previous` is over the same window as
+ * the change (month-to-date for a running month); `previousWhole` is the whole
+ * month before, which decides whether the category is new.
+ */
+export type CategoryChange = MonthChange & { previous: number; previousWhole: number };
+
 /** One category of the ranked list: a group with its leaves, a root leaf, or a leaf in a group. */
 export type HomeCategoryTrend = {
   categoryId: string;
@@ -94,13 +102,8 @@ export type HomeCategoryTrend = {
   share: number;
   /** Spend per month, aligned to `HomeTrends.months`; null for a month with no rows at all. */
   series: (number | null)[];
-  /**
-   * Against the month before; null while the comparison is not shown.
-   * `previous` is over the same window as the change (month-to-date for a
-   * running month); `previousWhole` is the whole month before, which decides
-   * whether the category is new.
-   */
-  change: (MonthChange & { previous: number; previousWhole: number }) | null;
+  /** Against the month before; null while the comparison is not shown. */
+  change: CategoryChange | null;
   /** Its leaves for a group, ranked; empty otherwise. */
   children: HomeCategoryTrend[];
 };
@@ -199,7 +202,13 @@ function rowsByMonth(rows: readonly HomeTrendRow[]): (m: InsightMonth) => HomeTr
 }
 
 function isComparable(input: HomeTrendsInput): boolean {
-  return isComparisonHistoryComplete(previousMonth(input.month), input.month, input.historyStarts);
+  const { to } = monthDateRange(input.month.year, input.month.month);
+  return isComparisonHistoryComplete(
+    previousMonth(input.month),
+    input.month,
+    input.historyStarts,
+    input.today < to ? input.today : to,
+  );
 }
 
 function monthOverMonth(
@@ -257,13 +266,14 @@ function seriesById(trend: TrendsReport): Map<string, (number | null)[]> {
 function rankCategories(
   trend: TrendsReport,
   spend: { month: CategorySpendingNode[]; previous: CategorySpendingNode[] },
-  previousWhole: (() => CategorySpendingNode[]) | null,
+  compared: boolean,
+  previousWhole: () => CategorySpendingNode[],
 ) {
   const nodes = spend.month;
   const total = toAgorot(nodes.reduce((sum, n) => sum + n.amount, 0));
   const series = seriesById(trend);
-  const previous = previousWhole && amountsById(spend.previous);
-  const whole = previousWhole && amountsById(previousWhole());
+  const previous = compared ? amountsById(spend.previous) : null;
+  const whole = compared ? amountsById(previousWhole()) : null;
 
   const trendOf = (n: CategorySpendingNode | Omit<CategorySpendingNode, "children">) => {
     const amount = toAgorot(n.amount);
@@ -359,7 +369,7 @@ export function buildHomeTrends(input: HomeTrendsInput): HomeTrends {
     selectedIndex,
     totals,
     comparison,
-    categories: rankCategories(trend, spend, comparison.state === "shown" ? previousWhole : null),
+    categories: rankCategories(trend, spend, comparison.state === "shown", previousWhole),
     quiet: quietCategories(input, comparison, spend.month, previousWhole),
   };
 }
