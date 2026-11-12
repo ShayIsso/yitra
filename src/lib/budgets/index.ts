@@ -34,7 +34,7 @@ import {
 import { israelCalendarDay } from "@/lib/calendar";
 import type { MonthOutlook } from "./outlook";
 import { getMonthOutlookWithStore } from "./outlook-store";
-import { makeDrizzleMonthOutlookStore } from "./outlook-drizzle-store";
+import { makeDrizzleMonthOutlookStore, readAccountHistoryStarts } from "./outlook-drizzle-store";
 
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
 export type { StoredBudget, BudgetWriteData, BudgetChanges, BudgetStore } from "./store";
@@ -135,6 +135,9 @@ export async function getMonthOutlook(year: number, month: number): Promise<Mont
     makeDrizzleMonthOutlookStore(async () => (await getMonthlyTargets()).expenseTarget),
   );
 }
+
+/** The month outlook's coverage read, for other readers of history coverage. */
+export const getAccountHistoryStarts = readAccountHistoryStarts;
 
 /**
  * Pace verdict for every budget in `month`. Each budget evaluates independently

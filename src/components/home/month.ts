@@ -1,4 +1,5 @@
 import { HEBREW_MONTHS, monthKey, type YearMonth } from "@/components/reports/format";
+import { monthAtIndex, monthIndex } from "@/lib/analytics/month-window";
 import { OUTLOOK_FIRST_YEAR } from "@/lib/budgets/outlook-range";
 import { israelCalendarDay } from "@/lib/calendar";
 
@@ -10,15 +11,8 @@ import { israelCalendarDay } from "@/lib/calendar";
  */
 export type HomeMonth = YearMonth;
 
-const ordinal = (m: HomeMonth): number => m.year * 12 + (m.month - 1);
-
-const fromOrdinal = (index: number): HomeMonth => ({
-  year: Math.floor(index / 12),
-  month: (index % 12) + 1,
-});
-
 export function compareMonths(a: HomeMonth, b: HomeMonth): number {
-  return ordinal(a) - ordinal(b);
+  return monthIndex(a) - monthIndex(b);
 }
 
 export function sameMonth(a: HomeMonth, b: HomeMonth): boolean {
@@ -26,7 +20,7 @@ export function sameMonth(a: HomeMonth, b: HomeMonth): boolean {
 }
 
 export function shiftMonth(m: HomeMonth, delta: number): HomeMonth {
-  return fromOrdinal(ordinal(m) + delta);
+  return monthAtIndex(monthIndex(m) + delta);
 }
 
 export const HOME_MONTH_PARAM = "month";

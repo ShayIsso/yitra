@@ -5,6 +5,7 @@
  * outlook's spend agrees with them.
  */
 import { monthDateRange } from "@/lib/analytics";
+import { historyCompleteSince, type AccountHistoryStart } from "@/lib/analytics/history-coverage";
 import { isBankType } from "@/lib/bank-registry";
 import {
   projectSeries,
@@ -31,7 +32,7 @@ export type MonthOutlookStore = {
   /** Every transaction dated in the calendar month. */
   loadMonth(month: YearMonth): Promise<OutlookRow[]>;
   /** Each bank account's earliest stored transaction (YYYY-MM-DD), with its credential. */
-  accountHistoryStarts(): Promise<{ credentialId: string; earliest: string }[]>;
+  accountHistoryStarts(): Promise<AccountHistoryStart[]>;
   expenseTarget(): Promise<number | null>;
   /** Non-canceled series and the money-out evidence that judges their liveness (ADR-0012). */
   recurring(): Promise<{
@@ -108,29 +109,6 @@ function recurringCharges(
     });
   });
   return charges;
-}
-
-/**
- * From when every connected credential's history is present: each credential
- * reaches back to its earliest transaction on any of its accounts, and the
- * install to the latest of those. Per credential, not per account: a
- * replacement card under the same login starts a new account without leaving
- * a gap, while a newly connected credential does leave one until a full month
- * of it is stored.
- */
-function historyCompleteSince(
-  accountStarts: { credentialId: string; earliest: string }[],
-): string | null {
-  const credentialStart = new Map<string, string>();
-  for (const { credentialId, earliest } of accountStarts) {
-    const known = credentialStart.get(credentialId);
-    if (known === undefined || earliest < known) credentialStart.set(credentialId, earliest);
-  }
-  let latest: string | null = null;
-  for (const start of credentialStart.values()) {
-    if (latest === null || start > latest) latest = start;
-  }
-  return latest;
 }
 
 /**

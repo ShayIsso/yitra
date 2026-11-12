@@ -25,6 +25,7 @@ import {
   type AnalyticsTransaction,
   type ReconciliationRole,
 } from "@/lib/analytics";
+import { isMonthHistoryComplete } from "@/lib/analytics/history-coverage";
 import { israelCalendarDay } from "@/lib/calendar";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 import { isSyncStale } from "./staleness";
@@ -244,17 +245,13 @@ export function outlookMonthExpenses(rows: readonly OutlookRow[], month: YearMon
   return wholeMonthSummary(rows, month).expenses;
 }
 
-function isComplete(month: YearMonth, historyCompleteSince: string | null): boolean {
-  return historyCompleteSince !== null && historyCompleteSince <= isoDay(month, 1);
-}
-
 const ordinal = (month: YearMonth): number => month.year * 12 + month.month;
 
 /** Mean of the latest complete prior months with expense data, or null when history is thin. */
 function usualMonthOf(input: MonthOutlookInput): number | null {
   const full = input.history
     .filter((h) => ordinal(h.month) < ordinal(input.month))
-    .filter((h) => h.expenses > 0 && isComplete(h.month, input.historyCompleteSince))
+    .filter((h) => h.expenses > 0 && isMonthHistoryComplete(h.month, input.historyCompleteSince))
     .sort((a, b) => ordinal(b.month) - ordinal(a.month));
   if (full.length < THIN_HISTORY_MIN_FULL_MONTHS) return null;
   const used = full.slice(0, USUAL_MONTH_SPAN);

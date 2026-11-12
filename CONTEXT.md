@@ -45,6 +45,8 @@ Savings Rate  = Net Savings / Total Income × 100
 
 Investment, transfer, and ignore are excluded from both. If a calculation produces a different number, it's wrong.
 
+A **comparable savings rate** is the Savings Rate only where it describes the month: there is none when Total Income is zero or negative (never a "0%"), and none beyond ±100% (spending more than twice what came in, or a net-refund month saving more than came in), where it measures the income base, not the month. The home screen shows "—" with the reason in words. `comparableSavingsRate` in `src/lib/analytics/month-metrics.ts` owns the rule (#320).
+
 ### `net outflow` — load-bearing
 
 Total Expenses and investment deployment are **net**, never absolute: each row contributes `−chargedAmount`, so an outflow adds and an inflow (refund, returned check, reversal, money back from an investment account) **subtracts** from its own category type. A refund lowers Total Expenses and so raises Net Savings. Investment deployment is deposits minus withdrawals and is **negative** in a net-withdrawal month. `income` stays a plain signed sum. One exported helper owns the sign convention — `outflowContribution` in `src/lib/analytics` — and every expense/investment aggregation goes through it; budgets read category spend from analytics' `computeCategoryNetSpend` rather than restating either rule (#304). Absolute value stays correct only for amount _matching_ (recurring detection, transaction-matching, reconciliation), never for totals.

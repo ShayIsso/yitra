@@ -95,6 +95,19 @@ const SIGNED_INTEGER = new Intl.NumberFormat("he-IL", {
   maximumFractionDigits: 0,
 });
 
+const SIGNED_ILS = new Intl.NumberFormat("he-IL", {
+  style: "currency",
+  currency: "ILS",
+  signDisplay: "exceptZero",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+/** A change in whole shekels (−880 → "-880 ₪"), sign anchored for RTL. */
+export function formatSignedILS(amount: number): string {
+  return SIGNED_ILS.format(Math.round(amount) || 0);
+}
+
 /** A change in percentage points (savings rate), sign anchored for RTL. */
 export function formatPointsDelta(points: number): string {
   return `${SIGNED_INTEGER.format(Math.round(points) || 0)} נק׳`;

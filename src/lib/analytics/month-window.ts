@@ -13,3 +13,12 @@ export function monthDateRange(year: number, month: number): { from: string; to:
   const to = `${year}-${mm}-${String(lastDay).padStart(2, "0")}`;
   return { from, to };
 }
+
+/** A calendar month as a count of months, so month arithmetic is integer arithmetic. */
+export function monthIndex({ year, month }: { year: number; month: number }): number {
+  return year * 12 + (month - 1);
+}
+
+export function monthAtIndex(index: number): { year: number; month: number } {
+  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
+}

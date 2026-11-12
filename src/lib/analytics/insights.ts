@@ -8,17 +8,13 @@
  * `@/lib/analytics`, whose index pulls the DB client into the bundle.
  */
 import type { Cadence } from "@/lib/recurring-detection";
+import { toAgorot } from "./agorot";
 import { monthDateRange } from "./month-window";
 
 export type InsightMonth = { year: number; month: number };
 
 export function previousMonth({ year, month }: InsightMonth): InsightMonth {
   return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
-}
-
-/** Sums of amounts that each fit in agorot, so float residue never reaches a figure or a threshold. */
-function roundAgorot(amount: number): number {
-  return Math.round(amount * 100) / 100 || 0;
 }
 
 /** An upcoming card-account debit, from the account's next-debit estimate. */
@@ -183,7 +179,7 @@ function cardDebitInsight(debits: CardDebitFact[]): Insight | null {
   const cards = [...debits].sort((a, b) => a.date.localeCompare(b.date));
   return {
     kind: "card-debit",
-    total: roundAgorot(cards.reduce((sum, c) => sum + c.amount, 0)),
+    total: toAgorot(cards.reduce((sum, c) => sum + c.amount, 0)),
     date: cards[0].date,
     cards,
   };
@@ -252,7 +248,7 @@ function upcomingRecurringInsight(
   if (due.length === 0) return null;
   return {
     kind: "upcoming-recurring",
-    total: roundAgorot(due.reduce((sum, c) => sum + c.amount, 0)),
+    total: toAgorot(due.reduce((sum, c) => sum + c.amount, 0)),
     charges: due,
   };
 }
@@ -266,7 +262,7 @@ export const CATEGORY_JUMP_MIN_INCREASE = 100;
 function categoryJumpInsight(changes: CategoryChangeFact[]): Insight | null {
   let jump: { fact: CategoryChangeFact; change: number } | null = null;
   for (const fact of changes) {
-    const change = roundAgorot(fact.amount - fact.previous);
+    const change = toAgorot(fact.amount - fact.previous);
     if (fact.previous <= 0 || change < CATEGORY_JUMP_MIN_INCREASE) continue;
     if (!jump || change > jump.change) jump = { fact, change };
   }
