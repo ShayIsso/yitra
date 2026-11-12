@@ -55,6 +55,9 @@ const TargetDialog = dynamic(() => import("./target-dialog"), { ssr: false });
 const FIRST_SYNC_POLL_MS = 4000;
 const FIRST_SYNC_SAFETY_TICKS = 8;
 
+/** One empty list, so the memoized sections see a stable prop until the runs arrive. */
+const NO_RUNS: SyncRunSummary[] = [];
+
 /** Keeps "updated 5 minutes ago" and staleness moving while the page stays open. */
 const CLOCK_TICK_MS = 60_000;
 
@@ -325,7 +328,7 @@ export function HomeScreen({
             month={month}
             refreshKey={sectionsKey}
             visible={sectionsShown}
-            lastSyncRuns={runs ?? []}
+            lastSyncRuns={runs ?? NO_RUNS}
             onMonthlyTargets={setTargets}
             today={homeDay}
           />

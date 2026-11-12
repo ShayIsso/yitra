@@ -79,10 +79,7 @@ export function AttentionSection({
   load: SectionLoad<AttentionCounts>;
   /** Null while a fact is still loading. */
   onboarding: OnboardingPathFacts | null;
-  /**
-   * No run has succeeded yet, so the setup card will almost surely show: the
-   * skeleton reserves its room (only stored balances could still hide it).
-   */
+  /** The setup card will almost surely show, so the skeleton reserves its room. */
   expectOnboarding: boolean;
 }) {
   const together: SectionLoad<{ counts: AttentionCounts; onboarding: OnboardingPathFacts }> = {

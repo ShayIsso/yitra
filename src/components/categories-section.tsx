@@ -73,7 +73,7 @@ import {
   deleteCategoryAction,
 } from "@/app/actions/categories";
 import { getCategoryBudgetAction } from "@/app/actions/budgets";
-import { CategoryDot } from "@/components/grouped-category-select-items";
+import { CategoryDot } from "@/components/category-dot";
 import {
   AddButton,
   RowAction,

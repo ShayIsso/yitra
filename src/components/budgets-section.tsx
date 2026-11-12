@@ -27,7 +27,8 @@ import {
   applyActionErrors,
 } from "@/components/ui/form";
 import { Amount } from "@/components/ui/amount";
-import { CategoryDot, FilterCategorySelectItems } from "@/components/grouped-category-select-items";
+import { CategoryDot } from "@/components/category-dot";
+import { FilterCategorySelectItems } from "@/components/grouped-category-select-items";
 // Value import from the pure hierarchy module (no DB dependency) — prior art
 // categories-section.tsx does the same to keep the client bundle off "@/lib/categories"'s
 // Drizzle-backed index.ts.

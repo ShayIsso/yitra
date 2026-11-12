@@ -11,7 +11,6 @@ import type { SectionLoad } from "./load";
 /** Where a section's link goes, and what it says. */
 export type LinkTarget = { label: string; href: string };
 
-/** A teal text link with a trailing caret, 44px tall. */
 function SectionLink({ target, className }: { target: LinkTarget; className?: string }) {
   return (
     <Link

@@ -13,8 +13,6 @@ import { CategoryDot } from "@/components/category-dot";
 import { SelectGroup, SelectItem, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
 
-export { CategoryDot };
-
 function LeafSelectItem({ leaf, indent }: { leaf: Category; indent?: string }) {
   return (
     <SelectItem value={leaf.id} className={indent}>

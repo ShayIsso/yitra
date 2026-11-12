@@ -16,7 +16,12 @@ import { GoalsSection, type GoalsLadder } from "./goals-section";
 import { ANY_MONTH, useSectionLoad } from "./load";
 import { MerchantsSection } from "./merchants-section";
 import { UpcomingSection, type UpcomingForecast } from "./upcoming-section";
-import { anyRunSucceeded, onboardingFacts, type AttentionCounts } from "./view";
+import {
+  expectsOnboarding,
+  onboardingBalances,
+  onboardingFacts,
+  type AttentionCounts,
+} from "./view";
 
 type BudgetsSummaryResponse = BudgetsSummary & { monthlyTargets: MonthlyTargetsData };
 
@@ -100,9 +105,8 @@ export const HomeSections = React.memo(function HomeSections({
   if (!visible) return null;
   // Client-only from here (the sections never draw on the server).
   const day = today ?? israelCalendarDay(new Date());
-  // A failed balances read is a known unknown ([]), as the onboarding facts
-  // expect; the next re-read tries it again.
-  const balances = accounts.data ?? (accounts.failed ? [] : null);
+  // The next re-read tries a failed balances read again.
+  const balances = onboardingBalances(accounts.data, accounts.failed);
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
@@ -115,7 +119,7 @@ export const HomeSections = React.memo(function HomeSections({
           <AttentionSection
             load={attention}
             onboarding={onboardingFacts(attention.data, balances, lastSyncRuns)}
-            expectOnboarding={!anyRunSucceeded(lastSyncRuns)}
+            expectOnboarding={expectsOnboarding(lastSyncRuns)}
           />
           <UpcomingSection load={upcoming} today={day} />
           <AccountsSection load={accounts} />

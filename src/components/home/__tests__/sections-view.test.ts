@@ -6,6 +6,9 @@ import {
   debitDayHint,
   goalFillPercent,
   merchantBarPercents,
+  expectsOnboarding,
+  moreChargesLabel,
+  onboardingBalances,
   onboardingFacts,
   relativeDayLabel,
   upcomingList,
@@ -234,5 +237,40 @@ describe("onboardingFacts", () => {
 
   it("reports no first sync when no run succeeded and nothing was stored", () => {
     expect(onboardingFacts(NO_COUNTS, [], failed)?.hasSuccessfulSync).toBe(false);
+  });
+});
+
+describe("moreChargesLabel", () => {
+  it("is singular for one hidden charge and counts the rest", () => {
+    expect(moreChargesLabel(1)).toBe("עוד חיוב אחד");
+    expect(moreChargesLabel(3)).toBe("עוד 3 חיובים");
+  });
+});
+
+describe("onboardingBalances", () => {
+  it("passes an answer through", () => {
+    expect(onboardingBalances([{}], false)).toEqual([{}]);
+  });
+
+  it("reads a failed read as known-empty, so the setup facts can still be judged", () => {
+    expect(onboardingBalances(null, true)).toEqual([]);
+  });
+
+  it("is unknown while the read is pending", () => {
+    expect(onboardingBalances(null, false)).toBeNull();
+  });
+});
+
+describe("expectsOnboarding", () => {
+  it("expects the setup card when runs are known and none succeeded", () => {
+    expect(expectsOnboarding([{ status: "error" }, { status: "otp_skipped" }])).toBe(true);
+  });
+
+  it("does not once any run succeeded", () => {
+    expect(expectsOnboarding([{ status: "error" }, { status: "success" }])).toBe(false);
+  });
+
+  it("does not when the runs are unknown (a failed read hands [])", () => {
+    expect(expectsOnboarding([])).toBe(false);
   });
 });

@@ -95,6 +95,11 @@ export function relativeDayLabel(inDays: number): string | null {
   return null;
 }
 
+/** The link under a capped upcoming list (singular for one). */
+export function moreChargesLabel(hidden: number): string {
+  return hidden === 1 ? "עוד חיוב אחד" : `עוד ${hidden} חיובים`;
+}
+
 export type UpcomingRow = UpcomingCharge & { when: UpcomingWhen };
 
 /** The endpoint's order (earliest first, so late charges lead), capped. */
@@ -156,6 +161,24 @@ export function merchantBarPercents<T extends { amount: number }>(
   const max = Math.max(0, ...merchants.map((m) => m.amount));
   if (max <= 0) return merchants.map(() => 0);
   return merchants.map((m) => Math.max(0, Math.min(100, (m.amount / max) * 100)));
+}
+
+/**
+ * The balances the onboarding facts read: the answer, [] once the read
+ * failed (known unknown, as the old panel had it), or null while it loads.
+ */
+export function onboardingBalances<T>(data: T[] | null, failed: boolean): T[] | null {
+  return data ?? (failed ? [] : null);
+}
+
+/**
+ * The setup card will almost surely show: runs are known and none
+ * succeeded (only stored balances could still hide it). An empty list is a
+ * failed runs read here, since a connection with no run at all is the
+ * hero's first-sync state, which hides the sections.
+ */
+export function expectsOnboarding(runs: readonly { status: SyncRunStatus }[]): boolean {
+  return runs.length > 0 && !anyRunSucceeded(runs);
 }
 
 /** Some institution's latest run succeeded (the runs are last-per-bank). */

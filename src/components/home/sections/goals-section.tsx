@@ -4,12 +4,11 @@ import * as React from "react";
 import { PiggyBankIcon, WarningCircleIcon } from "@/components/icons";
 import { settingsSectionHref } from "@/components/settings/sections";
 import { Amount } from "@/components/ui/amount";
+import type { GoalPaceVerdict } from "@/lib/goals";
 import { cn } from "@/lib/utils";
 import type { SectionLoad } from "./load";
 import { Bone, ListCard, Section, SectionBody, SectionEmpty } from "./parts";
 import { goalFillPercent } from "./view";
-
-export type GoalPaceVerdict = "ahead-or-on-pace" | "behind-pace" | "no-deadline";
 
 /** `/api/goals`: the goal ladder (CONTEXT.md "goal ladder"), computed server-side. */
 export type GoalsLadder = {

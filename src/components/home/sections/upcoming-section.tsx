@@ -8,7 +8,13 @@ import { CADENCE_LABELS } from "@/components/cadence-labels";
 import { toLocalDate } from "@/components/transactions/days";
 import type { SectionLoad } from "./load";
 import { Bone, ListCard, ListSkeletonRows, ROW, Section, SectionBody, SectionEmpty } from "./parts";
-import { relativeDayLabel, upcomingList, type UpcomingCharge, type UpcomingWhen } from "./view";
+import {
+  moreChargesLabel,
+  relativeDayLabel,
+  upcomingList,
+  type UpcomingCharge,
+  type UpcomingWhen,
+} from "./view";
 
 export type UpcomingForecast = { upcoming: UpcomingCharge[]; total: number };
 
@@ -20,7 +26,7 @@ function dateLabel(iso: string): string {
 
 const TOTAL_ROW = "bg-muted text-body flex min-h-11 items-center justify-between gap-3 px-4 py-2";
 
-/** The hero's word for it ("שמאחרים להגיע"), so the two never describe a late charge differently. */
+/** The hero's equation note says "שמאחרים להגיע"; keep the two worded alike. */
 const LATE_LABEL = "מאחר להגיע";
 
 function When({ when, date }: { when: UpcomingWhen; date: string }) {
@@ -110,7 +116,7 @@ function UpcomingList({ forecast, today }: { forecast: UpcomingForecast; today: 
             href="/subscriptions"
             className="press text-body text-primary hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 items-center justify-center gap-1 px-4 font-semibold outline-none focus-visible:ring-3 focus-visible:ring-inset"
           >
-            {hidden === 1 ? "עוד חיוב אחד" : `עוד ${hidden} חיובים`}
+            {moreChargesLabel(hidden)}
             <CaretLeftIcon className="size-4" />
           </Link>
         </li>

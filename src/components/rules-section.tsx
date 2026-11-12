@@ -42,10 +42,8 @@ import { cn } from "@/lib/utils";
 // client bundle, per Next's module-not-found trace on Node builtins.
 import { firstAssignableCategoryId } from "@/lib/categories/hierarchy";
 import type { Category, CategoryTreeNode } from "@/lib/categories";
-import {
-  CategoryDot,
-  GroupedCategorySelectItems,
-} from "@/components/grouped-category-select-items";
+import { CategoryDot } from "@/components/category-dot";
+import { GroupedCategorySelectItems } from "@/components/grouped-category-select-items";
 import {
   AddButton,
   RowAction,
