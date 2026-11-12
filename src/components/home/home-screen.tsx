@@ -21,6 +21,7 @@ import {
   NoTargetBody,
   ThinHistoryBody,
 } from "./hero-states";
+import { ForecastChart } from "./forecast-chart";
 import { HeroBodySkeleton, HeroError, MonthHero } from "./month-hero";
 import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
@@ -245,6 +246,13 @@ export function HomeScreen({
   // And once the runs are known (or known unknown), so the onboarding card
   // above the sections never lands after them and pushes them down.
   const answered = (outlook.data !== null || outlook.failed) && runs !== null;
+  /** The outlook failed for the month shown: the hero shows its error, the chart nothing. */
+  const outlookFailed = outlook.failed && !outlook.current;
+  const busy = outlook.pending && !outlook.current && !outlook.failed && shown !== null;
+  const forecast =
+    shown?.outlook.state === "active" || shown?.outlook.state === "thin-history"
+      ? shown.outlook
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -255,7 +263,7 @@ export function HomeScreen({
 
       <MonthHero
         month={month}
-        busy={outlook.pending && !outlook.current && !outlook.failed && shown !== null}
+        busy={busy}
         onStep={(delta) => select(shiftMonth(month, delta))}
         indicator={
           !welcoming && (
@@ -267,7 +275,7 @@ export function HomeScreen({
           )
         }
       >
-        {outlook.failed && !outlook.current ? (
+        {outlookFailed ? (
           <HeroError retrying={outlook.pending} onRetry={() => setOutlookNudge((n) => n + 1)} />
         ) : shown === null ? (
           <HeroBodySkeleton />
@@ -296,6 +304,12 @@ export function HomeScreen({
         <p role="status" className="text-muted-foreground text-body -mt-3">
           {stream.refusal ?? CONNECTION_LOST}
         </p>
+      )}
+
+      {shown && forecast && !outlookFailed && (
+        <div key={monthKey(shown.month)} className="enter">
+          <ForecastChart outlook={forecast} month={shown.month} busy={busy} />
+        </div>
       )}
 
       {banks.length > 0 && (

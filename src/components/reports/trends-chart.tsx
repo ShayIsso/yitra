@@ -2,14 +2,13 @@
 
 import * as React from "react";
 import { Amount } from "@/components/ui/amount";
+import { useMeasuredSize } from "@/components/use-measured-size";
 import { cn } from "@/lib/utils";
 import type { TrendsMonthPoint } from "@/lib/reports/trends";
 import { HEBREW_MONTHS, HEBREW_MONTHS_SHORT, formatAxisTick } from "./format";
 import { layoutTrendsChart } from "./trends-chart-layout";
 
-// Fixed pixel height; the width is MEASURED so the SVG coordinate space is 1:1
-// with rendered pixels at any screen size (#170: a constant viewBox letterboxes
-// on wide screens, preserveAspectRatio="none" stretches strokes into ellipses).
+// Fixed pixel height; the width is measured (`useMeasuredSize`).
 const HEIGHT = 236;
 const FRAME = { height: HEIGHT, axisGutter: 44, endPad: 4, plotTop: 10, plotBottom: 192 };
 const MIN_LABEL_SPACING = 30;
@@ -33,19 +32,6 @@ function barPath(x: number, w: number, baseY: number, valueY: number): string {
   ].join(" ");
 }
 
-function useMeasuredWidth<T extends HTMLElement>() {
-  const ref = React.useRef<T | null>(null);
-  const [width, setWidth] = React.useState(0);
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => setWidth(entries[0]?.contentRect.width ?? 0));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width] as const;
-}
-
 /**
  * Income and expenses as lines, net savings as bars around zero, one ₪ axis.
  * Time runs right to left (oldest at the right edge). Point, tap, or focus the
@@ -53,7 +39,7 @@ function useMeasuredWidth<T extends HTMLElement>() {
  * table view beside it, so the tooltip never gates a figure.
  */
 export function TrendsChart({ points }: { points: TrendsMonthPoint[] }) {
-  const [ref, width] = useMeasuredWidth<HTMLDivElement>();
+  const [ref, { width }] = useMeasuredSize<HTMLDivElement>();
   const [active, setActive] = React.useState<number | null>(null);
   const n = points.length;
   const layout = React.useMemo(

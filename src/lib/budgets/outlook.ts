@@ -28,16 +28,10 @@ import {
 import { israelCalendarDay } from "@/lib/calendar";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
 import { isSyncStale } from "./staleness";
+import { THIN_HISTORY_MIN_FULL_MONTHS } from "./thin-history";
 
 export { STALE_SYNC_AFTER_MS } from "./staleness";
-
-/**
- * History is thin below this many complete prior months with expense data: no
- * "usual month", no suggested target, no projection. A month counts as
- * complete only when stored data reaches back to its first day — a partial
- * month would understate the usual month.
- */
-export const THIN_HISTORY_MIN_FULL_MONTHS = 1;
+export { THIN_HISTORY_MIN_FULL_MONTHS } from "./thin-history";
 
 /** "Usual month" averages at most this many of the latest complete prior months. */
 export const USUAL_MONTH_SPAN = 3;

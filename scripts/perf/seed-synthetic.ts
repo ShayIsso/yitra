@@ -164,6 +164,9 @@ const FIXED_MONTHLY = [
   },
 ] as const;
 
+/** The fixed expenses seeded as confirmed recurring series; the investment deposit is not spend. */
+const RECURRING_CATEGORIES: ReadonlySet<string> = new Set(["מנויים", "דיור ושכירות"]);
+
 function firstInstitutionOfKind(kind: BankKind): string {
   const entry = enabledBankEntries().find((e) => e.kind === kind);
   if (!entry) throw new Error(`The bank registry has no ${kind} institution`);
@@ -293,8 +296,11 @@ async function main() {
 
   const nextMonthDay = (d: number) =>
     isoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, d)));
+  // Every fixed monthly expense is a confirmed series, rent included: the month
+  // outlook takes recurring charges out of this month's pace, so a fixed charge
+  // left unconfirmed is read as daily spend and inflates the projection.
   await db.insert(recurringExpenses).values(
-    FIXED_MONTHLY.filter((f) => f.amount < 0 && f.category === "מנויים").map((f) => ({
+    FIXED_MONTHLY.filter((f) => f.amount < 0 && RECURRING_CATEGORIES.has(f.category)).map((f) => ({
       patternFingerprint: `perf:${f.description}:monthly`,
       merchant: f.description.toLowerCase(),
       categoryId: catId(f.category),
