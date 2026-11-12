@@ -77,6 +77,8 @@ const FILL_PAIRS: [text: string, fill: string][] = [
   // Teal link and badge text (reports table toggle, "new" subscription badge).
   ["--primary", "--card"],
   ["--primary", "--background"],
+  // A teal list link on its hover fill (home/sections upcoming "more" row).
+  ["--primary", "--muted"],
   ["--emerald-foreground", "--emerald"],
   ["--hero-foreground", "--hero"],
   ["--hero-muted", "--hero"],

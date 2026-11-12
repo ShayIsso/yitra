@@ -25,6 +25,7 @@ import { ForecastChart } from "./forecast-chart";
 import { HeroBodySkeleton, HeroError, MonthHero } from "./month-hero";
 import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
+import { HomeSections } from "./sections/home-sections";
 import {
   HOME_MONTH_PARAM,
   homeHref,
@@ -314,6 +315,14 @@ export function HomeScreen({
 
       {banks.length > 0 && (
         <DashboardPanel
+          month={month}
+          refreshKey={`${version}:${sectionsNudge}`}
+          visible={answered && !welcoming}
+        />
+      )}
+
+      {banks.length > 0 && (
+        <HomeSections
           categories={categories}
           month={month}
           refreshKey={`${version}:${sectionsNudge}`}
