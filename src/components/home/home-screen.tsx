@@ -35,6 +35,7 @@ import {
   type MonthRange,
 } from "./month";
 import { syncedAsOf, type OutlookResponse } from "./outlook-view";
+import { HomeTrends } from "./trends/home-trends";
 
 // Both dialogs open on demand only, so they stay out of the home route's first load.
 const OtpSheet = dynamic(() => import("@/components/sync-otp-sheet").then((m) => m.OtpSheet), {
@@ -296,6 +297,16 @@ export function HomeScreen({
         <p role="status" className="text-muted-foreground text-body -mt-3">
           {stream.refusal ?? CONNECTION_LOST}
         </p>
+      )}
+
+      {banks.length > 0 && (
+        <HomeTrends
+          month={month}
+          range={range}
+          refreshKey={`${version}:${sectionsNudge}`}
+          visible={answered && !welcoming}
+          onSelect={select}
+        />
       )}
 
       {banks.length > 0 && (

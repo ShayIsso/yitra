@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Wallet } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowsClockwiseIcon, WarningCircleIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,9 @@ import { BankBadge } from "@/components/bank-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
-import { cn } from "@/lib/utils";
-import { SpendingBreakdown } from "@/components/spending-breakdown";
 import type { Category } from "@/lib/categories";
 import type {
   MonthlySummary,
-  CategorySpendingNode,
   AccountBalance,
   RecentTransaction,
   TopMerchant,
@@ -33,19 +30,13 @@ import type {
 import type { HomeMonth } from "@/components/home/month";
 import { useMonthLoad } from "@/components/home/month-load";
 import { monthKey } from "@/components/reports/format";
-import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
 import { OnboardingPath } from "@/components/dashboard/onboarding-path";
-import { TrendMiniChart } from "@/components/dashboard/trend-mini-chart";
 import { TopMerchantsCard } from "@/components/dashboard/top-merchants-card";
 import {
   UpcomingChargesCard,
   type UpcomingCharge,
 } from "@/components/dashboard/upcoming-charges-card";
-
-function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
-}
 
 type BudgetsSummaryResponse = {
   budgets: BudgetStatus[];
@@ -63,7 +54,6 @@ const EMPTY_BUDGETS_SUMMARY: BudgetsSummaryResponse = {
 
 type DashboardData = {
   summary: MonthlySummary | null;
-  spending: CategorySpendingNode[];
   balances: AccountBalance[];
   recent: RecentTransaction[];
   upcomingCharges: UpcomingCharge[];
@@ -75,7 +65,6 @@ type DashboardData = {
   monthlyTargets: MonthlyTargetsData | null;
   attention: AttentionCounts | null;
   topMerchants: TopMerchant[];
-  trend: TrendsMonthPoint[];
 };
 
 type GoalsResponse = {
@@ -93,7 +82,6 @@ async function fetchDashboardData(
   const get = (url: string) => fetch(url, { signal });
   const [
     summaryRes,
-    spendingRes,
     balancesRes,
     recentRes,
     upcomingRes,
@@ -101,10 +89,8 @@ async function fetchDashboardData(
     budgetsSummaryRes,
     attentionRes,
     topMerchantsRes,
-    trendRes,
   ] = await Promise.all([
     get(`/api/analytics/monthly?year=${year}&month=${month}`),
-    get(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
     get(`/api/analytics/balances`),
     // 8, not 15: the A′ layout puts the recent list in a half-width column
     // beside Upcoming, and a 15-row column dwarfs it. "צפה בהכל" carries the rest.
@@ -114,12 +100,10 @@ async function fetchDashboardData(
     get(`/api/budgets-summary?year=${year}&month=${month}`),
     get(`/api/attention-counts`),
     get(`/api/analytics/top-merchants?year=${year}&month=${month}`),
-    get(`/api/reports/trends?range=12`),
   ]);
 
   const [
     summary,
-    spending,
     balances,
     recent,
     upcomingData,
@@ -127,10 +111,8 @@ async function fetchDashboardData(
     budgetsSummary,
     attention,
     topMerchants,
-    trendReport,
   ] = await Promise.all([
     summaryRes.ok ? summaryRes.json() : null,
-    spendingRes.ok ? spendingRes.json() : [],
     balancesRes.ok ? balancesRes.json() : [],
     recentRes.ok ? recentRes.json() : [],
     upcomingRes.ok ? upcomingRes.json() : { upcoming: [], total: 0 },
@@ -140,12 +122,10 @@ async function fetchDashboardData(
       : EMPTY_BUDGETS_SUMMARY,
     attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
     topMerchantsRes.ok ? topMerchantsRes.json() : [],
-    trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
   ]);
 
   return {
     summary,
-    spending,
     balances,
     recent,
     upcomingCharges: upcomingData.upcoming ?? [],
@@ -156,7 +136,6 @@ async function fetchDashboardData(
     monthlyTargets: budgetsSummaryRes.ok ? budgetsSummary.monthlyTargets : null,
     attention,
     topMerchants,
-    trend: trendReport?.months ?? [],
   };
 }
 
@@ -167,21 +146,6 @@ async function fetchDashboardData(
 function formatDebitDateHint(isoDate: string): string {
   const [, month, day] = isoDate.split("-").map(Number);
   return `${day}.${month}`;
-}
-
-const SAVINGS_RATE_LABEL = "אחוז חיסכון";
-/** The KPI band's tile labels, in order; the loading skeleton renders the same tiles. */
-const KPI_LABELS = ["הכנסות", "הוצאות", "חיסכון נטו", SAVINGS_RATE_LABEL] as const;
-
-function KpiTile({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-muted-foreground text-sm font-medium">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
 }
 
 /**
@@ -220,7 +184,7 @@ export const DashboardPanel = React.memo(function DashboardPanel({
   const load = useMonthLoad(monthKey(month), `${refreshKey}:${attempt}`, (signal) =>
     // A microtask later: child effects run before their parent's, and the
     // home screen's outlook request (the hero, first on screen) must not
-    // queue behind these eleven on the browser's per-host connection limit.
+    // queue behind these on the browser's per-host connection limit.
     Promise.resolve().then(() => fetchDashboardData(year, monthNumber, signal)),
   );
   const data = load.current ? load.data : null;
@@ -259,7 +223,6 @@ function DashboardSections({
 }) {
   const {
     summary,
-    spending,
     balances,
     recent,
     upcomingCharges,
@@ -269,7 +232,6 @@ function DashboardSections({
     budgetsSummary,
     attention,
     topMerchants,
-    trend,
   } = data;
 
   // Budgets only ever attach to expense-type categories (src/lib/budgets
@@ -293,18 +255,14 @@ function DashboardSections({
 
   // A brand-new account returns a zeroed summary object (not null), so checking
   // `summary === null` alone never fires. Treat an all-zero summary as empty too;
-  // the other clauses (no balances/recent/spending/upcoming) keep an existing user
+  // the other clauses (no balances/recent/upcoming) keep an existing user
   // viewing a quiet month out of this branch — they still have bank balances.
   const summaryIsEmpty =
     summary === null ||
     (summary.income === 0 && summary.expenses === 0 && summary.investmentTotal === 0);
 
   const hasNoData =
-    summaryIsEmpty &&
-    spending.length === 0 &&
-    balances.length === 0 &&
-    recent.length === 0 &&
-    upcomingCharges.length === 0;
+    summaryIsEmpty && balances.length === 0 && recent.length === 0 && upcomingCharges.length === 0;
 
   // Balances only appear once a sync has landed, so they cover the bank whose
   // latest run errored after an earlier success (the runs list is last-per-bank).
@@ -336,78 +294,7 @@ function DashboardSections({
         </Card>
       ) : (
         <div className="space-y-6 transition-opacity duration-150">
-          {/* ── Monthly band — everything below is scoped to the month strip ── */}
-
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiTile label={KPI_LABELS[0]}>
-              {summary ? (
-                <Amount amount={summary.income} fractionDigits={0} className="text-2xl font-bold" />
-              ) : (
-                <p className="text-2xl font-bold">—</p>
-              )}
-            </KpiTile>
-
-            <KpiTile label={KPI_LABELS[1]}>
-              {summary ? (
-                // summary.expenses is net outflow, positive for money out (CONTEXT.md
-                // "net outflow"), so sign-driven colorize would read it as positive
-                // money and go emerald. Expenses are money-out: force the --neg token.
-                // A net-refund month (expenses < 0) is not money-out, so it stays neutral.
-                <Amount
-                  amount={summary.expenses}
-                  fractionDigits={0}
-                  colorize={false}
-                  className={cn("text-2xl font-bold", summary.expenses > 0 && "text-neg")}
-                />
-              ) : (
-                <p className="text-2xl font-bold">—</p>
-              )}
-            </KpiTile>
-
-            <KpiTile label={KPI_LABELS[2]}>
-              {summary ? (
-                <Amount
-                  amount={summary.netSavings}
-                  fractionDigits={0}
-                  className="text-2xl font-bold"
-                />
-              ) : (
-                <p className="text-2xl font-bold">—</p>
-              )}
-            </KpiTile>
-
-            <KpiTile label={SAVINGS_RATE_LABEL}>
-              <p
-                className={`text-2xl font-bold ${
-                  summary && summary.savingsRate >= 0 ? "text-pos" : "text-neg"
-                }`}
-              >
-                {summary ? formatPercent(summary.savingsRate) : "—"}
-              </p>
-              {summary && (
-                <div className="bg-muted mt-2 h-2 overflow-hidden rounded-full">
-                  <div
-                    className="bg-bar-strong h-full rounded-full transition-all"
-                    style={{ width: `${Math.min(Math.max(summary.savingsRate, 0), 100)}%` }}
-                  />
-                </div>
-              )}
-            </KpiTile>
-          </div>
-
           <AttentionCounters counts={attention} />
-
-          {/* Spending breakdown — group-first with drill-down (BGR5 #162). Sits
-              directly above budgets so the two monthly spend views are adjacent
-              (#108 gate adjudication). */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">הוצאות לפי קטגוריה</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SpendingBreakdown nodes={spending} />
-            </CardContent>
-          </Card>
 
           {/* Budgets — pace chips + targets headline (BGR9 #166). #205 dropped
               the spend-vs-ceiling headline from this card, giving the pace
@@ -539,11 +426,7 @@ function DashboardSections({
             </div>
           </div>
 
-          {/* Bottom band — secondary, backward-looking (full trend on דוחות) */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <TrendMiniChart months={trend} />
-            <TopMerchantsCard merchants={topMerchants} />
-          </div>
+          <TopMerchantsCard merchants={topMerchants} />
         </div>
       )}
     </div>
@@ -577,25 +460,6 @@ function SectionsLoadError({ retrying, onRetry }: { retrying: boolean; onRetry: 
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      {/* KPI band skeletons keep the loaded rows' heights, so the swap to
-          content does not shift the page (CLS). */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {KPI_LABELS.map((label) => (
-          <KpiTile key={label} label={label}>
-            <Skeleton className="h-8 w-28" />
-            {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
-          </KpiTile>
-        ))}
-      </div>
-      {/* Breakdown skeleton */}
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-40" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
-        </CardContent>
-      </Card>
       {/* Recent transactions skeleton */}
       <div className="space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (

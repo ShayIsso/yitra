@@ -10,7 +10,7 @@
  *
  * Status vs. category-identity, by form not color (prototype-gate follow-up,
  * #166): category identity is always a filled dot (the app-wide convention —
- * see spending-breakdown.tsx's `CategoryDot`); a budget's pace verdict is
+ * see `CategoryDot` in components/reports/parts.tsx); a budget's pace verdict is
  * always a bordered pill (chip), never a dot, so the two can never be
  * mistaken for each other even though both use the same status palette.
  */

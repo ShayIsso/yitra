@@ -28,6 +28,7 @@ import {
 
 export { monthDateRange } from "./month-window";
 export * from "./insights";
+export * from "./month-metrics";
 
 export type AnalyticsTransaction = {
   chargedAmount: number;
