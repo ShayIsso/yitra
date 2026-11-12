@@ -8,9 +8,9 @@ import type { OtpSheetProps } from "@/components/sync-otp-sheet";
 
 type Institution = { readonly bankType: string; readonly displayName: string };
 
-export type OtpPrompt<I extends Institution> = {
+export type OtpPrompt = {
   /** The institution the run is waiting on for a code, if any. */
-  readonly institution: I | null;
+  readonly institution: Institution | null;
   /** Props for `<OtpSheet>`, or null while no code is awaited. */
   readonly sheet: OtpSheetProps | null;
   /** The institution whose prompt the owner closed while its code is still awaited. */
@@ -25,36 +25,35 @@ export type OtpPrompt<I extends Institution> = {
  * hides it (the bank keeps waiting until its window runs out), and the
  * institution's row offers the way back in while it is closed.
  */
-export function useOtpPrompt<I extends Institution>(
-  institutions: readonly I[],
+export function useOtpPrompt(
+  institutions: readonly Institution[],
   stream: SyncStreamState,
   actions: {
     readonly setOtpDraft: (bank: string, code: string) => void;
     readonly submitOtp: (bank: string) => unknown;
   },
-): OtpPrompt<I> {
+): OtpPrompt {
   const [closedBank, setClosedBank] = useState<string | null>(null);
   const institution =
     institutions.find((i) => awaitsCode(stream.bankStates[i.bankType], stream.otp[i.bankType])) ??
     null;
-  const bank = institution?.bankType ?? null;
+  const reopen = () => setClosedBank(null);
+  if (!institution) return { institution, sheet: null, closedFor: null, reopen };
+  const bank = institution.bankType;
 
   return {
     institution,
-    sheet:
-      institution && bank
-        ? {
-            open: closedBank !== bank,
-            bankType: bank,
-            displayName: institution.displayName,
-            code: stream.otpDrafts[bank] ?? "",
-            countdown: stream.otp[bank],
-            onCodeChange: (code) => actions.setOtpDraft(bank, code),
-            onSubmit: () => void actions.submitOtp(bank),
-            onDismiss: () => setClosedBank(bank),
-          }
-        : null,
-    closedFor: bank !== null && closedBank === bank ? bank : null,
-    reopen: () => setClosedBank(null),
+    sheet: {
+      open: closedBank !== bank,
+      bankType: bank,
+      displayName: institution.displayName,
+      code: stream.otpDrafts[bank] ?? "",
+      countdown: stream.otp[bank],
+      onCodeChange: (code) => actions.setOtpDraft(bank, code),
+      onSubmit: () => void actions.submitOtp(bank),
+      onDismiss: () => setClosedBank(bank),
+    },
+    closedFor: closedBank === bank ? bank : null,
+    reopen,
   };
 }

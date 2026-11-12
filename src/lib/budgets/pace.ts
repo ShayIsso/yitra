@@ -32,8 +32,6 @@ export const REASSURE_MARGIN = 0.2;
 /** `comfortably-under` is muted through this day-of-month so an early, sparse month never over-reassures. */
 export const MUTE_THROUGH_DAY = 7;
 
-export type { BudgetVerdict };
-
 /** Where `today` sits inside a budget's month. `dayOfMonth` is 0 before the month, `daysInMonth` after it. */
 export type MonthElapsed = {
   dayOfMonth: number;

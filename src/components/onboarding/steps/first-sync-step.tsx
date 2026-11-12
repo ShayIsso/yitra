@@ -53,8 +53,6 @@ const LEAVE_WARNING = "הסנכרון עדיין פועל, ויציאה מהדף
 
 const NOTHING_OBSERVED: ReadonlySet<string> = new Set();
 
-const NONE_CONNECTED: readonly ConnectedInstitution[] = [];
-
 const SECONDARY_ACTION = { variant: "outline", size: "lg", className: "min-h-11 px-4" } as const;
 
 /**
@@ -182,7 +180,7 @@ export function FirstSyncBody({
   onOtpChange,
   onOtpSubmit,
 }: FirstSyncBodyProps) {
-  const otp = useOtpPrompt(load.status === "ready" ? load.connected : NONE_CONNECTED, stream, {
+  const otp = useOtpPrompt(load.status === "ready" ? load.connected : [], stream, {
     setOtpDraft: onOtpChange,
     submitOtp: onOtpSubmit,
   });

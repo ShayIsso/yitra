@@ -20,7 +20,7 @@ export const metadata: Metadata = {
  * from the stored preference, falling back to the OS `prefers-color-scheme`.
  * Doing this in a mount effect instead would paint light first and flash on a
  * dark load, and diverge from SSR markup (hydration mismatch) — #109 line-item
- * 4. The key is the toggle's own, interpolated as a JSON string literal.
+ * 4.
  */
 const themeScript = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`;
 

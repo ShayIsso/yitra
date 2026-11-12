@@ -149,8 +149,9 @@ function SheetHandle({ onDismiss }: { onDismiss: () => void }) {
       data-slot="dialog-sheet-handle"
       className="flex h-6 shrink-0 cursor-grab touch-none justify-center pt-2.5 md:hidden"
       onPointerDown={(e) => {
-        // One finger drives the sheet; a second touch or button is ignored.
-        if (!e.isPrimary || drag.current) return;
+        // One finger (or the main mouse button) drives the sheet; a second
+        // touch, another button or a press mid-drag is ignored.
+        if (!e.isPrimary || e.button !== 0 || drag.current) return;
         const popup = e.currentTarget.closest<HTMLElement>("[data-slot=dialog-content]");
         if (!popup) return;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -183,6 +184,13 @@ function SheetHandle({ onDismiss }: { onDismiss: () => void }) {
         const current = end(e);
         if (current) settle(current.popup, false);
       }}
+      // Capture lost without a pointerup (the element re-rendered away, the
+      // browser took the gesture): settle back rather than leave the sheet
+      // displaced and the handle stuck mid-drag.
+      onLostPointerCapture={(e) => {
+        const current = end(e);
+        if (current) settle(current.popup, false);
+      }}
     >
       <span className="bg-muted-foreground/40 h-1 w-9 rounded-full" />
     </div>
@@ -212,7 +220,7 @@ function DialogContent({
         data-slot="dialog-content"
         data-close-button={showCloseButton ? "" : undefined}
         className={cn(
-          // A fixed frame: the handle on top, the body scrolls beneath it.
+          // The frame does not scroll, so the handle stays in reach; the body does.
           "bg-popover text-popover-foreground ring-foreground/10 fixed z-50 flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden text-sm ring-1 outline-none",
           // Sheet (< md)
           "inset-x-0 bottom-0 rounded-t-xl duration-200",
@@ -232,8 +240,9 @@ function DialogContent({
             actions in the sheet, one row from md). */}
         <div data-slot="dialog-body" className={cn(BODY, bodyClassName)}>
           {children}
-          {/* In the body, so it scrolls away with the header it belongs to
-              instead of floating over the fields scrolled beneath it. */}
+          {/* In the body, as before the handle existed: it scrolls away with the
+              header it belongs to. Pinned in the frame, it sat over the fields
+              scrolled beneath it. Escape and a backdrop press still close. */}
           {showCloseButton && (
             <DialogPrimitive.Close
               data-slot="dialog-close"

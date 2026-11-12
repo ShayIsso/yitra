@@ -36,6 +36,7 @@ import type { MonthOutlook } from "./outlook";
 import { getMonthOutlookWithStore } from "./outlook-store";
 import { makeDrizzleMonthOutlookStore, readAccountHistoryStarts } from "./outlook-drizzle-store";
 
+export type { BudgetVerdict } from "./verdict";
 export { DuplicateBudgetCategoryError, NonExpenseBudgetCategoryError } from "./errors";
 export type { StoredBudget, BudgetWriteData, BudgetChanges, BudgetStore } from "./store";
 export {
@@ -51,7 +52,6 @@ export {
   WARN_MARGIN,
   REASSURE_MARGIN,
   MUTE_THROUGH_DAY,
-  type BudgetVerdict,
   type BudgetPace,
   type MonthElapsed,
   type SavingsTargetVerdict,
