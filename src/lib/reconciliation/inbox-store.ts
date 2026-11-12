@@ -210,7 +210,12 @@ export const drizzleInboxStore: InboxStore = {
           and(
             eq(transactions.id, flip.txnId),
             eq(transactions.reconciliationGroupId, groupId),
-            undefined,
+            flip.keepUserCategory
+              ? or(
+                  isNull(transactions.categorySource),
+                  notInArray(transactions.categorySource, ["user", "memory"]),
+                )
+              : undefined,
           ),
         )
         .returning({ id: transactions.id });
