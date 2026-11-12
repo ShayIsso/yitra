@@ -3,29 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowElbowDownLeftIcon, MagnifyingGlassIcon } from "@/components/icons";
-import { homeMonthOf, type HomeMonth } from "@/components/home/month";
-import { useJson } from "@/components/reports/use-json";
+import type { MonthRange } from "@/components/home/month";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import {
-  firstMonthWithData,
-  groupCommands,
-  paletteCommands,
-  type PaletteCommand,
-} from "./commands";
 import { MAIN_CONTENT_ID } from "../nav";
-import { searchCommands } from "./search";
-
-/**
- * The first month with data, which floors the month commands; undefined until
- * the months answer arrives, null when it failed or holds none. Re-read on
- * every open: a first sync can add a year of months under a mounted palette.
- */
-function useMonthFloor(open: boolean): HomeMonth | null | undefined {
-  const { state } = useJson<unknown>(open ? "/api/reports/months" : null);
-  if (state.status === "loading") return undefined;
-  return state.status === "ready" ? firstMonthWithData(state.data) : null;
-}
+import { groupCommands, paletteCommands, type PaletteCommand } from "./commands";
+import { buildSearchIndex, search } from "./search";
 
 const optionId = (baseId: string, command: PaletteCommand) =>
   `${baseId}-${command.id.replace(/[^a-zA-Z0-9-]/g, "-")}`;
@@ -39,9 +22,12 @@ const optionId = (baseId: string, command: PaletteCommand) =>
 export default function CommandPalette({
   open,
   onOpenChange,
+  range,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The home screen's browsable months, from the server like the home page's own. */
+  range: MonthRange;
 }) {
   const router = useRouter();
   const baseId = React.useId();
@@ -51,7 +37,6 @@ export default function CommandPalette({
   const navigatedRef = React.useRef(false);
   const [query, setQuery] = React.useState("");
   const [activeId, setActiveId] = React.useState<string | null>(null);
-  const floor = useMonthFloor(open);
   React.useEffect(() => {
     if (open) navigatedRef.current = false;
   }, [open]);
@@ -65,18 +50,9 @@ export default function CommandPalette({
     }
   }
 
-  // The clock is read per open (a palette left mounted overnight must not offer yesterday's month).
-  const current = React.useMemo(() => (open ? homeMonthOf(new Date()) : null), [open]);
-  const commands = React.useMemo(() => {
-    if (!current) return [];
-    const all = paletteCommands({ current, first: floor ?? null });
-    return floor === undefined ? all.filter((c) => c.group !== "months") : all;
-  }, [current, floor]);
-
-  const sections = React.useMemo(
-    () => groupCommands(searchCommands(commands, query)),
-    [commands, query],
-  );
+  // Independent of `open`, so the list stays put while the dialog fades out.
+  const index = React.useMemo(() => buildSearchIndex(paletteCommands(range)), [range]);
+  const sections = React.useMemo(() => groupCommands(search(index, query)), [index, query]);
   const visible = React.useMemo(() => sections.flatMap((s) => s.commands), [sections]);
   const active = visible.find((c) => c.id === activeId) ?? visible[0] ?? null;
 
@@ -136,7 +112,7 @@ export default function CommandPalette({
             type="text"
             role="combobox"
             aria-label="חיפוש עמוד, חודש או תצוגת תנועות"
-            aria-expanded="true"
+            aria-expanded={visible.length > 0}
             aria-controls={listboxId}
             aria-autocomplete="list"
             aria-activedescendant={active ? optionId(baseId, active) : undefined}

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import type { MonthRange } from "@/components/home/month";
 import { MAIN_CONTENT_ID } from "./nav";
 import { PaletteLauncher } from "./palette/launcher";
 import { BrandLink } from "./parts";
@@ -19,9 +20,12 @@ import { TabBar } from "./tab-bar";
  */
 export function AppShell({
   pendingReconCount,
+  monthRange,
   children,
 }: {
   pendingReconCount: number;
+  /** The home screen's browsable months; the command palette offers the recent ones. */
+  monthRange: MonthRange;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -49,7 +53,7 @@ export function AppShell({
         </div>
       </main>
       <TabBar pathname={pathname} pendingReconCount={pendingReconCount} />
-      <PaletteLauncher />
+      <PaletteLauncher monthRange={monthRange} />
     </div>
   );
 }

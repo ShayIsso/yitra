@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   homeHref,
+  homeMonthRange,
   homeMonthOf,
   isBrowsable,
   monthWindow,
@@ -50,6 +51,25 @@ describe("isBrowsable", () => {
   it("refuses a month before the first or after the current one", () => {
     expect(isBrowsable({ year: 2025, month: 2 }, RANGE)).toBe(false);
     expect(isBrowsable({ year: 2026, month: 12 }, RANGE)).toBe(false);
+  });
+});
+
+describe("homeMonthRange", () => {
+  it("runs from the oldest month with data to the current month", () => {
+    const months = [NOV, { year: 2026, month: 2 }, FIRST];
+    expect(homeMonthRange(months, NOV)).toEqual({ first: FIRST, current: NOV });
+  });
+
+  it("does not rely on the months arriving in order", () => {
+    expect(homeMonthRange([FIRST, NOV, { year: 2026, month: 2 }], NOV).first).toEqual(FIRST);
+  });
+
+  it("never starts after the current month, even when the only data is ahead of it", () => {
+    expect(homeMonthRange([{ year: 2027, month: 1 }], NOV)).toEqual({ first: NOV, current: NOV });
+  });
+
+  it("falls back to the outlook route's own floor when there is no data", () => {
+    expect(homeMonthRange([], NOV)).toEqual({ first: { year: 2000, month: 1 }, current: NOV });
   });
 });
 

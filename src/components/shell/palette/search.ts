@@ -20,38 +20,70 @@ function fold(text: string): string {
     .trim();
 }
 
-function tokenScore(token: string, text: string, weight: number): number {
-  if (` ${text}`.includes(` ${token}`)) return weight * 2;
-  return text.includes(token) ? weight : 0;
-}
+type Entry<T> = { item: T; label: string; keywords: string };
 
-/** 0 when some query word appears nowhere; otherwise higher for a better match. */
-function score(tokens: string[], phrase: string, command: Searchable): number {
-  const label = fold(command.label);
-  const keywords = [command.hint ?? "", ...(command.keywords ?? [])].map(fold).join(" ");
-  let total = label.startsWith(phrase) ? 4 : 0;
-  for (const token of tokens) {
-    const best = Math.max(tokenScore(token, label, 2), tokenScore(token, keywords, 1));
-    if (best === 0) return 0;
-    total += best;
-  }
-  return total;
+/** Items with their label and keywords folded once, so typing only folds the query. */
+export type SearchIndex<T> = readonly Entry<T>[];
+
+export function buildSearchIndex<T extends Searchable>(items: readonly T[]): SearchIndex<T> {
+  return items.map((item) => ({
+    item,
+    label: fold(item.label),
+    keywords: [item.hint ?? "", ...(item.keywords ?? [])].map(fold).join(" "),
+  }));
 }
 
 /**
- * The commands matching `query`, best first: every query word must occur in
- * the label or a keyword. A label starting with the query beats a word in it
- * starting with a query word, which beats a match inside a word; label beats
- * keyword; ties keep the given order. An empty query keeps every command in
- * the given order.
+ * How well one query word matches, best first: 0 a label word starts with
+ * it, 1 inside a label word, 2 a keyword word starts with it, 3 inside a
+ * keyword; null when it matches nowhere.
  */
-export function searchCommands<T extends Searchable>(commands: readonly T[], query: string): T[] {
+function tier(word: string, entry: Entry<unknown>): 0 | 1 | 2 | 3 | null {
+  const startsWord = (text: string) => ` ${text}`.includes(` ${word}`);
+  if (startsWord(entry.label)) return 0;
+  if (entry.label.includes(word)) return 1;
+  if (startsWord(entry.keywords)) return 2;
+  if (entry.keywords.includes(word)) return 3;
+  return null;
+}
+
+/**
+ * A match's rank, compared element by element: a label starting with the
+ * whole query first, then how many query words reached each tier, best tier
+ * first. Null when some query word matches nowhere.
+ */
+function rank(words: string[], phrase: string, entry: Entry<unknown>): number[] | null {
+  const counts = [0, 0, 0, 0];
+  for (const word of words) {
+    const t = tier(word, entry);
+    if (t === null) return null;
+    counts[t] += 1;
+  }
+  return [entry.label.startsWith(phrase) ? 1 : 0, ...counts];
+}
+
+function compareRanks(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return b[i] - a[i];
+  }
+  return 0;
+}
+
+/**
+ * The items matching `query`, best first: every query word must occur in the
+ * label or a keyword (hint included). A label starting with the query beats
+ * a label word starting with a query word, which beats a match inside a label
+ * word, which beats a keyword word starting with it, which beats a match
+ * inside a keyword; several words rank by how many reached each tier. Ties
+ * keep the given order, and an empty query keeps every item in that order.
+ */
+export function search<T>(index: SearchIndex<T>, query: string): T[] {
   const phrase = fold(query);
-  if (phrase === "") return [...commands];
-  const tokens = phrase.split(" ");
-  return commands
-    .map((command) => ({ command, score: score(tokens, phrase, command) }))
-    .filter((m) => m.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map((m) => m.command);
+  if (phrase === "") return index.map((e) => e.item);
+  const words = phrase.split(" ");
+  return index
+    .map((entry) => ({ entry, rank: rank(words, phrase, entry) }))
+    .filter((m): m is { entry: Entry<T>; rank: number[] } => m.rank !== null)
+    .sort((a, b) => compareRanks(a.rank, b.rank))
+    .map((m) => m.entry.item);
 }
