@@ -197,6 +197,8 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents
 
 Tests validate external behavior through public interfaces, not implementation details.
 
+`*.pg.test.ts` suites need a migrated throwaway Postgres (`YITRA_PG_TEST_URL`, DB name starting `yitra_wt`/`yitra_it`) and skip otherwise, so local `npm test` stays DB-free. CI's `pg-suites` job runs them serially against a service container.
+
 1. **Transactions** — Deduplication logic, pending→completed transitions.
 2. **Analytics** — Savings rate calculation, category type handling, edge cases.
 3. **Categories** — Rule priority matching, all match types.

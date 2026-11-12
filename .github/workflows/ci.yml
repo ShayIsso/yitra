@@ -55,3 +55,54 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The *.pg.test.ts suites skip without YITRA_PG_TEST_URL, so the job above never
+  # exercises invariants enforced only in SQL. They wipe shared tables
+  # (bank_credentials), hence a throwaway DB named for their prefix guard and
+  # serial execution.
+  pg-suites:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: yitra_it_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d yitra_it_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://ci:ci@localhost:5432/yitra_it_ci
+      YITRA_PG_TEST_URL: postgres://ci:ci@localhost:5432/yitra_it_ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Migrate throwaway database
+        run: npm run db:migrate
+
+      - name: Postgres suites
+        run: npx vitest run pg.test --no-file-parallelism --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/pg.json"
+
+      # describe.skipIf turns a drifted DB name or URL into a green all-skipped run.
+      - name: Fail if any Postgres suite was skipped
+        run: |
+          jq '{numTotalTests, numPendingTests, numTodoTests}' "$RUNNER_TEMP/pg.json"
+          jq -e '.numTotalTests > 0 and .numPendingTests == 0 and .numTodoTests == 0' "$RUNNER_TEMP/pg.json"
