@@ -16,6 +16,7 @@ import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { CategorySource } from "@/lib/merchant-memory";
 import type { InboxStore, InboxTransaction, TransferFlip } from "./inbox-ops";
 import type { RejectedPair } from "./rejected-pairs";
+import { SETTLEMENT_CATEGORY_NAME, TRANSFER_CATEGORY_NAME } from "./category-names";
 import { recordRejections } from "./rejection-writes";
 import type { CategoryRule } from "@/lib/categories/rules";
 
@@ -258,18 +259,24 @@ export const drizzleInboxStore: InboxStore = {
   async setCategory(
     txnId: string,
     categoryId: string | null,
-    releasable: { transferCategoryId: string | null },
+    intent: "reject" | "undo",
   ): Promise<void> {
     // Reconciliation re-runs the rule engine on split/edit rows, so a non-null
     // result is rule-sourced (ADR-0010); clearing resets provenance to NULL.
     // Memory is deliberately NOT consulted here in this slice (issue #135).
-    // The user/memory guard lives in the WHERE so a category chosen after the
-    // caller read the row still wins (#341).
+    // Matched by category name at write time: undo has already cleared the
+    // reconciliation columns, so nothing on the row says what wrote its category.
     const writable = or(
       isNull(transactions.categorySource),
       notInArray(transactions.categorySource, ["user", "memory"]),
-      releasable.transferCategoryId
-        ? eq(transactions.categoryId, releasable.transferCategoryId)
+      intent === "undo"
+        ? inArray(
+            transactions.categoryId,
+            db
+              .select({ id: categories.id })
+              .from(categories)
+              .where(inArray(categories.name, [TRANSFER_CATEGORY_NAME, SETTLEMENT_CATEGORY_NAME])),
+          )
         : undefined,
     );
     await db.transaction(async (tx) => {

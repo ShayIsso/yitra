@@ -9,6 +9,7 @@ import {
 import type { CategorySource } from "@/lib/merchant-memory";
 
 const TRANSFER = "cat-transfer";
+const SETTLEMENT = "cat-settlement";
 const RENT = "cat-rent";
 const RULE_RESULT = "cat-rule";
 
@@ -46,14 +47,15 @@ function storeOf(rows: InboxTransaction[]) {
     clearRows: async (ids) => {
       for (const id of ids) state.get(id)!.reconciliationGroupId = null;
     },
-    setCategory: async (id, categoryId, { transferCategoryId }) => {
+    setCategory: async (id, categoryId, intent) => {
       const r = state.get(id)!;
       const user = r.categorySource === "user" || r.categorySource === "memory";
-      if (user && r.categoryId !== transferCategoryId) return;
+      const released = intent === "undo" && [TRANSFER, SETTLEMENT].includes(r.categoryId ?? "");
+      if (user && !released) return;
       r.categoryId = categoryId;
       r.categorySource = categoryId === null ? null : "rule";
     },
-    getCategoryIdByName: async (n) => (n === "העברה פנימית" ? TRANSFER : null),
+    getCategoryIdByName: async () => null,
     getRulesOrderedByPriority: async () => [
       { id: "r", categoryId: RULE_RESULT, matchType: "contains", pattern: "משכנתא", priority: 0 },
     ],
@@ -105,6 +107,35 @@ describe("rows without a user category", () => {
     await undoTransaction("a", [a, b], store);
     expect(state.get("a")).toMatchObject({ categoryId: RULE_RESULT, categorySource: "rule" });
     expect(state.get("b")).toMatchObject({ categoryId: RULE_RESULT, categorySource: "rule" });
+  });
+
+  it("keep a user-labelled internal transfer on reject but release it on undo", async () => {
+    const mk = () => row("a", { categoryId: TRANSFER, categorySource: "user" });
+    const rejected = storeOf([mk()]);
+    await rejectGroup("g", rejected.store);
+    expect(rejected.state.get("a")).toMatchObject({ categoryId: TRANSFER, categorySource: "user" });
+
+    const undone = storeOf([mk()]);
+    await undoTransaction("a", [mk()], undone.store);
+    expect(undone.state.get("a")).toMatchObject({ categoryId: RULE_RESULT });
+  });
+
+  it("release a stale-memory settlement category on undo", async () => {
+    const lump = row("a", { categoryId: SETTLEMENT, categorySource: "memory" });
+    const { store, state } = storeOf([lump]);
+    await undoTransaction("a", [lump], store);
+    expect(state.get("a")).toMatchObject({ categoryId: RULE_RESULT, categorySource: "rule" });
+  });
+
+  it("fetch the rules once for a bulk reject", async () => {
+    const { store } = storeOf(
+      [row("a"), row("b", {}), row("c")].map((r, i) => ({ ...r, reconciliationGroupId: `g${i}` })),
+    );
+    let calls = 0;
+    const get = store.getRulesOrderedByPriority;
+    store.getRulesOrderedByPriority = async () => (calls++, get());
+    await rejectGroups(["g0", "g1", "g2"], store);
+    expect(calls).toBe(1);
   });
 
   it("release an approved transfer flip (user provenance) on undo", async () => {

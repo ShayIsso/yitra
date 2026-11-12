@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
 import type { ApplyResult, P3InterAccountCandidate } from "./types";
 import type { ReconciliationStore } from "./store";
+import { TRANSFER_CATEGORY_NAME } from "./category-names";
 
 const AUTO_APPLY_THRESHOLD = 0.95;
-const TRANSFER_CATEGORY_NAME = "העברה פנימית";
 
 export async function applyP3InterAccount(
   candidates: P3InterAccountCandidate[],
