@@ -1,6 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import type { MonthRange } from "@/components/home/month";
+import { MAIN_CONTENT_ID } from "./nav";
+import { PaletteLauncher } from "./palette/launcher";
 import { BrandLink } from "./parts";
 import { Rail } from "./rail";
 import { TabBar } from "./tab-bar";
@@ -17,9 +20,12 @@ import { TabBar } from "./tab-bar";
  */
 export function AppShell({
   pendingReconCount,
+  monthRange,
   children,
 }: {
   pendingReconCount: number;
+  /** The home screen's browsable months; the command palette offers the recent ones. */
+  monthRange: MonthRange;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -27,7 +33,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen flex-col">
       <a
-        href="#main-content"
+        href={`#${MAIN_CONTENT_ID}`}
         className="bg-card text-foreground ring-ring fixed start-3 top-3 z-50 -translate-y-24 rounded-lg px-4 py-3 font-medium ring-2 outline-none focus:translate-y-0"
       >
         דילוג לתוכן
@@ -37,7 +43,7 @@ export function AppShell({
         <BrandLink />
       </header>
       <main
-        id="main-content"
+        id={MAIN_CONTENT_ID}
         tabIndex={-1}
         className="min-w-0 flex-1 overflow-x-clip px-4 pt-2 pb-28 outline-none sm:px-6 md:ms-22 md:p-8"
       >
@@ -47,6 +53,7 @@ export function AppShell({
         </div>
       </main>
       <TabBar pathname={pathname} pendingReconCount={pendingReconCount} />
+      <PaletteLauncher monthRange={monthRange} />
     </div>
   );
 }
