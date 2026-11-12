@@ -1,3 +1,4 @@
+import type { HomeMonth } from "./month";
 import type { ActiveOutlook } from "./outlook-view";
 
 /**
@@ -5,6 +6,7 @@ import type { ActiveOutlook } from "./outlook-view";
  * and indexes the series `monthOutlook` returned; it never computes money.
  */
 export type ForecastView = {
+  month: HomeMonth;
   /** Day of the month the outlook stands on: the actual series' last day. */
   today: number;
   daysInMonth: number;
@@ -22,11 +24,12 @@ export type ForecastView = {
   atRisk: boolean;
 };
 
-export function forecastView(o: ActiveOutlook): ForecastView | null {
+export function forecastView(o: ActiveOutlook, month: HomeMonth): ForecastView | null {
   const p = o.projection;
   if (p === null) return null;
   const today = p.actual.length;
   return {
+    month,
     today,
     daysInMonth: today + p.projected.length - 1,
     target: o.target,
@@ -97,8 +100,14 @@ export function forecastGeometry(v: ForecastView, box: PlotBox): ForecastGeometr
   const plot = height - top - bottom;
   const x = (day: number) => round1(width - ((day - 1) / (v.daysInMonth - 1)) * width);
   const y = (amount: number) => round1(top + ((max - amount) / (max - min)) * plot);
-  const path = (amounts: readonly number[], firstDay: number) =>
-    amounts.map((a, i) => `${i === 0 ? "M" : "L"}${x(firstDay + i)},${y(a)}`).join(" ");
+  // A lone point (day 1's actual, the last day's projection) is drawn as a
+  // zero-length segment: with round caps SVG paints it as a dot, where a bare
+  // moveto paints nothing.
+  const path = (amounts: readonly number[], firstDay: number) => {
+    const points = amounts.map((a, i) => `${x(firstDay + i)},${y(a)}`);
+    if (points.length === 1) points.push(points[0]);
+    return points.map((p, i) => `${i === 0 ? "M" : "L"}${p}`).join(" ");
+  };
   return {
     x,
     y,
@@ -109,6 +118,7 @@ export function forecastGeometry(v: ForecastView, box: PlotBox): ForecastGeometr
 
 /** The day under a pointer `offsetFromRight` pixels from the plot's right edge. */
 export function dayAtOffset(v: ForecastView, offsetFromRight: number, width: number): number {
+  if (width <= 0) return v.today;
   const fraction = Math.min(1, Math.max(0, offsetFromRight / width));
   return Math.round(fraction * (v.daysInMonth - 1)) + 1;
 }

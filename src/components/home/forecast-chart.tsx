@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { ChartLineUpIcon, WarningCircleIcon } from "@/components/icons";
-import { HEBREW_MONTHS } from "@/components/reports/format";
 import { Amount, formatAmount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
 import {
@@ -14,7 +13,7 @@ import {
   type ForecastPoint,
   type ForecastView,
 } from "./forecast-view";
-import type { HomeMonth } from "./month";
+import { monthName, type HomeMonth } from "./month";
 import type { ActiveOutlook } from "./outlook-view";
 
 /*
@@ -29,17 +28,22 @@ const TICK_DAYS = [1, 8, 15, 22];
 /** A fixed tick this close to today gives way to today's own tick. */
 const TICK_CLEARANCE = 3;
 
-const BASIS_LABEL = {
-  "this-month-pace": "צפי",
-  "usual-month": "החודש הרגיל שלך",
+/** Early in the month the projection is mostly history: it is named so, not a prediction. */
+const BASIS_COPY = {
+  "this-month-pace": { mark: "צפי", crossing: "בקצב הזה", end: "צפי לסוף החודש" },
+  "usual-month": {
+    mark: "החודש הרגיל שלך",
+    crossing: "לפי החודש הרגיל שלך,",
+    end: "סוף החודש, לפי החודש הרגיל שלך",
+  },
 } as const;
 
-function dayLabel(day: number, month: HomeMonth): string {
-  return `${day} ב${HEBREW_MONTHS[month.month - 1]}`;
+function dayLabel(day: number, view: ForecastView): string {
+  return `${day} ב${monthName(view.month)}`;
 }
 
 function pointKind(point: ForecastPoint, view: ForecastView): string {
-  return point.kind === "actual" ? "בפועל" : BASIS_LABEL[view.basis];
+  return point.kind === "actual" ? "בפועל" : BASIS_COPY[view.basis].mark;
 }
 
 function useMeasuredSize<T extends HTMLElement>() {
@@ -74,7 +78,7 @@ export function ForecastChart({
   busy?: boolean;
 }) {
   const titleId = React.useId();
-  const view = forecastView(outlook);
+  const view = React.useMemo(() => forecastView(outlook, month), [outlook, month]);
   return (
     <section
       aria-labelledby={titleId}
@@ -87,7 +91,7 @@ export function ForecastChart({
       {view === null ? (
         <ThinHistory titleId={titleId} />
       ) : (
-        <Forecast view={view} month={month} titleId={titleId} />
+        <Forecast view={view} titleId={titleId} />
       )}
     </section>
   );
@@ -118,22 +122,11 @@ function ThinHistory({ titleId }: { titleId: string }) {
   );
 }
 
-function Forecast({
-  view,
-  month,
-  titleId,
-}: {
-  view: ForecastView;
-  month: HomeMonth;
-  titleId: string;
-}) {
-  const [scrub, setScrub] = React.useState<number | null>(null);
+function Forecast({ view, titleId }: { view: ForecastView; titleId: string }) {
+  const [scrubbed, setScrubbed] = React.useState<number | null>(null);
   const readoutId = React.useId();
-  // A refetch can shorten nothing within a month, but clamp anyway: the day
-  // must index the series the outlook just returned.
-  const scrubbed = scrub === null ? null : Math.min(scrub, view.daysInMonth);
   const point = forecastPoint(view, scrubbed ?? view.today);
-  const usual = view.basis === "usual-month";
+  const copy = BASIS_COPY[view.basis];
 
   return (
     <>
@@ -146,20 +139,14 @@ function Forecast({
         <p className="text-body flex items-start gap-2 text-pretty">
           <WarningCircleIcon weight="fill" className="text-attention-text mt-0.5 size-4 shrink-0" />
           <span>
-            {usual ? "לפי החודש הרגיל שלך, " : "בקצב הזה "}
-            היעד ייחצה{" "}
-            {view.crossingDay === view.today ? "היום" : `ב־${dayLabel(view.crossingDay, month)}`}
+            {copy.crossing} היעד ייחצה ב־{dayLabel(view.crossingDay, view)}
           </span>
         </p>
       )}
 
       <div id={readoutId} className="flex flex-col">
         <p className="text-muted-foreground text-caption">
-          {scrubbed === null
-            ? usual
-              ? "סוף החודש, לפי החודש הרגיל שלך"
-              : "צפי לסוף החודש"
-            : `${dayLabel(scrubbed, month)} · ${pointKind(point, view)}`}
+          {scrubbed === null ? copy.end : `${dayLabel(scrubbed, view)} · ${pointKind(point, view)}`}
         </p>
         <p className="text-lead font-semibold">
           {scrubbed === null ? (
@@ -177,11 +164,10 @@ function Forecast({
 
       <Plot
         view={view}
-        month={month}
         scrubbed={scrubbed}
         point={point}
         readoutId={readoutId}
-        onScrub={setScrub}
+        onScrub={setScrubbed}
       />
     </>
   );
@@ -189,18 +175,16 @@ function Forecast({
 
 function Plot({
   view,
-  month,
   scrubbed,
   point,
   readoutId,
   onScrub,
 }: {
   view: ForecastView;
-  month: HomeMonth;
   scrubbed: number | null;
   point: ForecastPoint;
   readoutId: string;
-  onScrub: (day: number | null) => void;
+  onScrub: React.Dispatch<React.SetStateAction<number | null>>;
 }) {
   const [ref, { width, height }] = useMeasuredSize<HTMLDivElement>();
   const geometry = React.useMemo(
@@ -234,13 +218,16 @@ function Plot({
         aria-valuemin={1}
         aria-valuemax={view.daysInMonth}
         aria-valuenow={point.day}
-        aria-valuetext={`${dayLabel(point.day, month)}: ${formatAmount(point.amount, "ILS", 0)}, ${pointKind(point, view)}`}
+        aria-valuetext={`${dayLabel(point.day, view)}: ${formatAmount(point.amount, "ILS", 0)}, ${pointKind(point, view)}`}
         onKeyDown={(e) => {
           const next = scrubDay(view, scrubbed ?? view.today, e.key);
           if (next === null) return;
           e.preventDefault();
           onScrub(next);
         }}
+        // Focus shows the day the slider reports, so the readout and the
+        // announced value never disagree.
+        onFocus={() => onScrub((day) => day ?? view.today)}
         onBlur={() => onScrub(null)}
         onPointerDown={(e) => {
           // Keep a touch drag on the plot even when it strays off it.
@@ -250,11 +237,9 @@ function Plot({
         onPointerMove={(e) => {
           if (e.pointerType === "mouse" || e.buttons > 0) onScrub(dayAt(e));
         }}
-        onPointerUp={(e) => {
-          if (e.pointerType !== "mouse") onScrub(null);
-        }}
         onPointerLeave={(e) => {
-          if (e.pointerType === "mouse") onScrub(null);
+          if (e.pointerType !== "mouse") return;
+          onScrub(e.currentTarget === document.activeElement ? view.today : null);
         }}
         onPointerCancel={() => onScrub(null)}
         className="focus-visible:ring-ring/50 relative h-28 w-full cursor-crosshair touch-pan-y rounded-lg outline-none select-none focus-visible:ring-3 sm:h-36"
@@ -276,19 +261,20 @@ function Plot({
               strokeDasharray="6 5"
             />
             <path
-              d={geometry.actualPath}
-              fill="none"
-              stroke="var(--foreground)"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            <path
               d={geometry.projectedPath}
               fill="none"
               stroke={view.atRisk ? "var(--attention-text)" : "var(--primary)"}
               strokeWidth={2.5}
               strokeDasharray="0.5 6"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            {/* Actual last: on day 1 its lone dot sits where the projection starts. */}
+            <path
+              d={geometry.actualPath}
+              fill="none"
+              stroke="var(--foreground)"
+              strokeWidth={2.5}
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -315,6 +301,7 @@ function Plot({
           </svg>
         )}
       </div>
+      {/* Physical `left`, not a logical inset: the ticks follow the SVG's pixel x. */}
       <div
         aria-hidden="true"
         className="text-muted-foreground text-caption relative h-4 tabular-nums"
@@ -355,7 +342,7 @@ function Legend({ view }: { view: ForecastView }) {
             view.atRisk ? "border-attention-text border-dotted" : "border-primary border-dotted"
           }
         />
-        {BASIS_LABEL[view.basis]}
+        {BASIS_COPY[view.basis].mark}
       </li>
       <li className="flex items-center gap-1.5">
         <Swatch className="border-muted-foreground border-dashed" />

@@ -246,6 +246,8 @@ export function HomeScreen({
   // And once the runs are known (or known unknown), so the onboarding card
   // above the sections never lands after them and pushes them down.
   const answered = (outlook.data !== null || outlook.failed) && runs !== null;
+  /** The outlook failed for the month shown: the hero shows its error, the chart nothing. */
+  const outlookFailed = outlook.failed && !outlook.current;
 
   return (
     <div className="flex flex-col gap-6">
@@ -268,7 +270,7 @@ export function HomeScreen({
           )
         }
       >
-        {outlook.failed && !outlook.current ? (
+        {outlookFailed ? (
           <HeroError retrying={outlook.pending} onRetry={() => setOutlookNudge((n) => n + 1)} />
         ) : shown === null ? (
           <HeroBodySkeleton />
@@ -299,7 +301,7 @@ export function HomeScreen({
         </p>
       )}
 
-      {shown?.outlook.state === "active" && !(outlook.failed && !outlook.current) && (
+      {shown?.outlook.state === "active" && !outlookFailed && (
         <div key={monthKey(shown.month)} className="enter">
           <ForecastChart outlook={shown.outlook} month={shown.month} busy={!outlook.current} />
         </div>
