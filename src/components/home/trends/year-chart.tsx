@@ -5,10 +5,10 @@ import { ChartLineUpIcon } from "@/components/icons";
 import { formatILS, HEBREW_MONTHS, HEBREW_MONTHS_SHORT } from "@/components/reports/format";
 import { cn } from "@/lib/utils";
 import type { HomeTrendPoint } from "@/lib/reports/home-trends";
-import { homeHref, isBrowsable, type HomeMonth, type MonthRange } from "../month";
+import { homeHref, isBrowsable, sameMonth, type HomeMonth, type MonthRange } from "../month";
 import { chartColumns } from "./trends-view";
 
-export const CHART_CARD =
+const CHART_CARD =
   "bg-card rounded-xl border border-[color:var(--card-border)] p-4 shadow-[var(--card-shadow)]";
 const PLOT = "flex h-48 items-stretch gap-0.5 sm:gap-1";
 /** Two fixed lines (legend, then the summary) at every width, so the skeleton matches. */
@@ -47,21 +47,19 @@ function Legend() {
 export function YearChart({
   months,
   selected,
-  current,
   range,
   onSelect,
 }: {
   months: HomeTrendPoint[];
   selected: HomeMonth;
-  /** The current calendar month: still running, so drawn faded and named partial. */
-  current: HomeMonth;
+  /** Browsable months; its current month is still running, so drawn faded and named partial. */
   range: MonthRange;
   onSelect: (month: HomeMonth) => void;
 }) {
   const columns = chartColumns(months);
   const withData = months.filter((m) => m.hasData);
   // A month still running has not ended in anything yet.
-  const ended = withData.filter((m) => m.year !== current.year || m.month !== current.month);
+  const ended = withData.filter((m) => !sameMonth(m, range.current));
   const positive = ended.filter((m) => m.netSavings > 0).length;
 
   return (
@@ -81,8 +79,8 @@ export function YearChart({
         <ol className={PLOT} aria-label="מעבר לחודש">
           {months.map((m, i) => {
             const month = { year: m.year, month: m.month };
-            const isSelected = m.year === selected.year && m.month === selected.month;
-            const partial = m.year === current.year && m.month === current.month;
+            const isSelected = sameMonth(month, selected);
+            const partial = sameMonth(month, range.current);
             const name = `${HEBREW_MONTHS[m.month - 1]} ${m.year}`;
             const body = (
               <>
@@ -142,7 +140,11 @@ export function YearChart({
                     {body}
                   </a>
                 ) : (
-                  <span aria-disabled className={cn(column, "w-full opacity-50")}>
+                  <span
+                    role="link"
+                    aria-disabled="true"
+                    className={cn(column, "w-full opacity-50")}
+                  >
                     {body}
                   </span>
                 )}

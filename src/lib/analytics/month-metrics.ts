@@ -13,7 +13,7 @@ export type MonthChange = {
 };
 
 /** Below this base a ratio is noise (₪20 → ₪900 is "+4,400%"), so the change is told in shekels. */
-export const MONTH_CHANGE_MIN_PERCENT_BASE = 200;
+const MONTH_CHANGE_MIN_PERCENT_BASE = 200;
 const MONTH_CHANGE_MAX_PERCENT = 1000;
 
 export function monthChange(current: number, previous: number): MonthChange {
@@ -30,7 +30,7 @@ export function monthChange(current: number, previous: number): MonthChange {
  * twice what came in (a sliver of interest against a normal month), or saving
  * more than came in (a net-refund month), is an artefact of the income base.
  */
-export const SAVINGS_RATE_COMPARABLE_LIMIT = 100;
+const SAVINGS_RATE_COMPARABLE_LIMIT = 100;
 
 /**
  * The savings rate (Net Savings / Total Income × 100, CLAUDE.md "Financial

@@ -126,6 +126,30 @@ describe("buildHomeTrends — month totals", () => {
   });
 });
 
+describe("buildHomeTrends — rows dated ahead of today", () => {
+  const rows = [
+    row("2026-03-01", "salary", 10000),
+    row("2026-03-04", "transport", -400),
+    // An installment the bank already lists for later this month.
+    row("2026-03-25", "transport", -900),
+  ];
+
+  it("leaves them out of a running month's figures: not spent yet", () => {
+    const trends = buildHomeTrends(input(MARCH, "2026-03-15", rows));
+    expect(trends.totals.expenses).toBe(400);
+    expect(trends.months[trends.selectedIndex].expenses).toBe(400);
+    const transport = trends.categories.rows[0];
+    expect(transport.amount).toBe(400);
+    expect(transport.series[trends.selectedIndex]).toBe(400);
+  });
+
+  it("counts them once the month has closed", () => {
+    const trends = buildHomeTrends(input(MARCH, "2026-04-02", rows));
+    expect(trends.totals.expenses).toBe(1300);
+    expect(trends.categories.rows[0].amount).toBe(1300);
+  });
+});
+
 describe("buildHomeTrends — month-over-month comparison", () => {
   const rows = [
     row("2026-02-01", "salary", 10000),
@@ -143,7 +167,6 @@ describe("buildHomeTrends — month-over-month comparison", () => {
     expect(comparison).toMatchObject({
       state: "shown",
       basis: "month-to-date",
-      throughDay: 15,
       previousMonth: FEBRUARY,
       income: { amount: 1000, percent: 10 },
       expenses: { amount: 1000, percent: 100 },
@@ -177,7 +200,6 @@ describe("buildHomeTrends — month-over-month comparison", () => {
     expect(comparison).toMatchObject({
       state: "shown",
       basis: "whole-month",
-      throughDay: null,
       previousMonth: { year: 2026, month: 1 },
       expenses: { amount: 2000, percent: 100 },
     });

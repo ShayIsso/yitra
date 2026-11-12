@@ -12,9 +12,9 @@ import { Sparkline } from "./sparkline";
 import { categoryChangeView } from "./trends-view";
 
 /** Rows shown before "more"; the skeleton draws the same number. */
-export const CATEGORY_ROWS_VISIBLE = 6;
+const CATEGORY_ROWS_VISIBLE = 6;
 
-export const CARD =
+const CARD =
   "bg-card overflow-hidden rounded-xl border border-[color:var(--card-border)] shadow-[var(--card-shadow)]";
 const ROW = "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2 text-start";
 

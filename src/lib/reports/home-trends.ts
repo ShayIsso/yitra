@@ -4,16 +4,15 @@ import {
   computeMonthlySummary,
   computeSpendingByCategory,
   isMonthOverMonthChangeVisible,
-  rollUpSpendingByGroup,
-  type CategorySpendingNode,
   monthChange,
   monthPosition,
   previousMonth,
+  rollUpSpendingByGroup,
   toAgorot,
   MONTH_OVER_MONTH_VISIBLE_FROM_DAY,
+  type CategorySpendingNode,
   type InsightMonth,
   type MonthChange,
-  type ReconciliationRole,
   type RollupCategory,
   type TransactionWithCategory,
 } from "@/lib/analytics";
@@ -25,7 +24,6 @@ export const HOME_TREND_MONTHS = 12;
 export type HomeTrendRow = TransactionWithCategory & {
   /** YYYY-MM-DD. */
   date: string;
-  reconciliationRole: ReconciliationRole | null;
 };
 
 export type HomeTrendsInput = {
@@ -58,8 +56,6 @@ export type HomeTrendComparison =
        * before through the same day; a closed month against the whole month.
        */
       basis: "month-to-date" | "whole-month";
-      /** The day of the month both sides run through; null for whole months. */
-      throughDay: number | null;
       previousMonth: InsightMonth;
       income: MonthChange;
       expenses: MonthChange;
@@ -83,9 +79,9 @@ export type HomeCategoryTrend = {
   amount: number;
   /** Of the list's by-category sum (CONTEXT.md "spend floor": never Total Expenses). */
   share: number;
-  /** Spend per month, aligned to `HomeTrends.months`. */
+  /** Spend per month, aligned to `HomeTrends.months`; null for a month with no rows at all. */
   series: (number | null)[];
-  /** Over the comparison window; null while the comparison is not shown. */
+  /** Against the month before; null while the comparison is not shown. */
   change: (MonthChange & { previous: number }) | null;
   /** Its leaves for a group, ranked; empty otherwise. */
   children: HomeCategoryTrend[];
@@ -149,31 +145,47 @@ function summaryTotals(rows: readonly HomeTrendRow[]): HomeTrendTotals {
 
 const dayOf = (row: HomeTrendRow) => Number(row.date.slice(8, 10));
 
+type MonthWindow = {
+  basis: "month-to-date" | "whole-month";
+  /** The selected month's rows that count. */
+  month: HomeTrendRow[];
+  /** The previous month's rows it is compared with. */
+  previous: HomeTrendRow[];
+};
+
 /**
- * The comparison window: a running month through today against the month
- * before through the same day, as the insights compare (rows dated after
- * today are not spent yet); a closed month against the whole month before.
+ * What the selected month counts and what it is compared with. A running
+ * month counts through today: a row dated ahead (an installment the bank
+ * already lists) is not spent yet, as in the month outlook. It is compared
+ * with the month before through the same day, as the insights compare. A
+ * closed month counts whole, against the whole month before.
  */
-function comparisonWindow(input: HomeTrendsInput) {
+function monthWindow(input: HomeTrendsInput): MonthWindow {
   const position = monthPosition(input.month, input.today);
-  const throughDay = position.phase === "current" ? position.day : null;
-  const upTo = (rows: readonly HomeTrendRow[]) =>
-    throughDay === null ? [...rows] : rows.filter((r) => dayOf(r) <= throughDay);
-  return { throughDay, month: upTo(input.rows.month), previous: upTo(input.rows.previous) };
+  if (position.phase !== "current") {
+    return { basis: "whole-month", month: input.rows.month, previous: input.rows.previous };
+  }
+  const upTo = (rows: readonly HomeTrendRow[]) => rows.filter((r) => dayOf(r) <= position.day);
+  return {
+    basis: "month-to-date",
+    month: upTo(input.rows.month),
+    previous: upTo(input.rows.previous),
+  };
 }
 
-function compareMonths(input: HomeTrendsInput): HomeTrendComparison {
+function compareMonths(
+  input: HomeTrendsInput,
+  window: MonthWindow,
+  current: HomeTrendTotals,
+): HomeTrendComparison {
   if (!isMonthOverMonthChangeVisible(input.month, input.today)) {
     return { state: "early", visibleFromDay: MONTH_OVER_MONTH_VISIBLE_FROM_DAY };
   }
   if (input.rows.previous.length === 0) return { state: "no-history" };
-  const window = comparisonWindow(input);
-  const current = summaryTotals(window.month);
   const previous = summaryTotals(window.previous);
   return {
     state: "shown",
-    basis: window.throughDay === null ? "whole-month" : "month-to-date",
-    throughDay: window.throughDay,
+    basis: window.basis,
     previousMonth: previousMonth(input.month),
     income: monthChange(current.income, previous.income),
     expenses: monthChange(current.expenses, previous.expenses),
@@ -222,17 +234,24 @@ function seriesById(trend: TrendsReport): Map<string, (number | null)[]> {
   return byId;
 }
 
-function rankCategories(input: HomeTrendsInput, compared: boolean, nodes: CategorySpendingNode[]) {
+function rankCategories(
+  input: HomeTrendsInput,
+  window: MonthWindow,
+  nodes: CategorySpendingNode[],
+  selectedIndex: number,
+  compared: boolean,
+) {
   const total = toAgorot(nodes.reduce((sum, n) => sum + n.amount, 0));
   const series = seriesById(input.trend);
-  const window = compared ? comparisonWindow(input) : null;
-  const current = window && amountsById(spendNodes(window.month, input.categories));
-  const previous = window && amountsById(spendNodes(window.previous, input.categories));
+  const previous = compared ? amountsById(spendNodes(window.previous, input.categories)) : null;
   const empty = knownSeries(input.trend, new Array<number>(input.trend.months.length).fill(0));
 
   const trendOf = (n: CategorySpendingNode | Omit<CategorySpendingNode, "children">) => {
     const amount = toAgorot(n.amount);
     const before = previous?.get(n.categoryId) ?? 0;
+    // The selected month's point is the figure beside it, counted the same way.
+    const line = [...(series.get(n.categoryId) ?? empty)];
+    line[selectedIndex] = amount;
     return {
       categoryId: n.categoryId,
       name: n.categoryName,
@@ -240,10 +259,8 @@ function rankCategories(input: HomeTrendsInput, compared: boolean, nodes: Catego
       icon: n.icon,
       amount,
       share: total > 0 ? amount / total : 0,
-      series: series.get(n.categoryId) ?? empty,
-      change: current
-        ? { previous: before, ...monthChange(current.get(n.categoryId) ?? 0, before) }
-        : null,
+      series: line,
+      change: previous ? { previous: before, ...monthChange(amount, before) } : null,
     };
   };
 
@@ -273,29 +290,32 @@ function quietCategories(input: HomeTrendsInput, nodes: CategorySpendingNode[]):
  * the month before, the twelve-month series behind the sparklines and the
  * income-versus-expense chart. Every figure comes from the analytics module's
  * pure functions: month totals are true nets, per-category figures sit under
- * the spend floor, and the day-of-month gating is the insight rules'.
+ * the spend floor, and the day-of-month gating is the insight rules'. The
+ * selected month's figures, its point in each series and its comparison all
+ * count the same rows ({@link monthWindow}).
  */
 export function buildHomeTrends(input: HomeTrendsInput): HomeTrends {
-  const months = input.trend.months.map((p) => ({
+  const window = monthWindow(input);
+  const totals = summaryTotals(window.month);
+  const selectedIndex = input.trend.months.findIndex(
+    (p) => p.year === input.month.year && p.month === input.month.month,
+  );
+  const months = input.trend.months.map((p, i) => ({
     year: p.year,
     month: p.month,
     hasData: p.hasData,
-    ...totalsOf(p),
+    ...(i === selectedIndex ? totals : totalsOf(p)),
   }));
-  const selectedIndex = months.findIndex(
-    (p) => p.year === input.month.year && p.month === input.month.month,
-  );
-  const { income, expenses, netSavings, investment, savingsRate } = months[selectedIndex];
-  const comparison = compareMonths(input);
-  const nodes = spendNodes(input.rows.month, input.categories);
+  const comparison = compareMonths(input, window, totals);
+  const nodes = spendNodes(window.month, input.categories);
   return {
     month: input.month,
     today: input.today,
     months,
     selectedIndex,
-    totals: { income, expenses, netSavings, investment, savingsRate },
+    totals,
     comparison,
-    categories: rankCategories(input, comparison.state === "shown", nodes),
+    categories: rankCategories(input, window, nodes, selectedIndex, comparison.state === "shown"),
     quiet: quietCategories(input, nodes),
   };
 }

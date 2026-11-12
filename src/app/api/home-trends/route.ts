@@ -35,7 +35,6 @@ const querySchema = z.object({
 const toRow = (r: MonthTransactionDetail): HomeTrendRow => ({
   ...toTransactionWithCategory(r),
   date: r.date,
-  reconciliationRole: r.reconciliationRole,
 });
 
 /**

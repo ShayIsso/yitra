@@ -3,10 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { SectionError } from "@/components/reports/parts";
-import { HEBREW_MONTHS, monthKey } from "@/components/reports/format";
+import { monthKey } from "@/components/reports/format";
 import type { HomeTrends as HomeTrendsData } from "@/lib/reports/home-trends";
 import { useMonthLoad } from "../month-load";
-import { shiftMonth, type HomeMonth, type MonthRange } from "../month";
+import { monthName, sameMonth, shiftMonth, type HomeMonth, type MonthRange } from "../month";
 import { CategoryList, CategoryListSkeleton } from "./category-list";
 import { StatTiles, StatTilesSkeleton } from "./stat-tiles";
 import { comparisonLabel } from "./trends-view";
@@ -96,7 +96,7 @@ export const HomeTrends = React.memo(function HomeTrends({
 
   const comparedTo = data?.comparison.state === "shown" ? comparisonLabel(data.comparison) : null;
   const previous = shiftMonth(month, -1);
-  const running = month.year === range.current.year && month.month === range.current.month;
+  const running = sameMonth(month, range.current);
 
   return (
     <>
@@ -143,8 +143,8 @@ export const HomeTrends = React.memo(function HomeTrends({
               quiet={data.quiet}
               quietLabel={
                 running
-                  ? `ב${HEBREW_MONTHS[previous.month - 1]} היו הוצאות גם על אלה, החודש עוד לא:`
-                  : `ב${HEBREW_MONTHS[previous.month - 1]} היו הוצאות גם על אלה, ב${HEBREW_MONTHS[month.month - 1]} לא:`
+                  ? `ב${monthName(previous)} היו הוצאות גם על אלה, החודש עוד לא:`
+                  : `ב${monthName(previous)} היו הוצאות גם על אלה, ב${monthName(month)} לא:`
               }
               selectedIndex={data.selectedIndex}
               comparedTo={comparedTo}
@@ -162,13 +162,7 @@ export const HomeTrends = React.memo(function HomeTrends({
           {failed ? (
             <SectionError what="שנים־עשר החודשים" onRetry={retry} />
           ) : data ? (
-            <YearChart
-              months={data.months}
-              selected={month}
-              current={range.current}
-              range={range}
-              onSelect={onSelect}
-            />
+            <YearChart months={data.months} selected={month} range={range} onSelect={onSelect} />
           ) : (
             <YearChartSkeleton />
           )}
