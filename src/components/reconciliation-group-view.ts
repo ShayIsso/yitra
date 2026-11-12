@@ -1,4 +1,5 @@
 import type { CategorySource } from "@/lib/merchant-memory";
+import { isOwnAccountTransfer } from "@/lib/reconciliation/own-account-transfer";
 
 /** One transaction of a pending reconciliation group, as the inbox page hands it over. */
 export type PendingMember = {
@@ -33,7 +34,13 @@ export type ReconciliationGroupView =
       details: PendingMember[];
       detailsTotal: number;
     }
-  | { kind: "transfer"; title: string; legs: [PendingMember, PendingMember] }
+  | {
+      kind: "transfer";
+      title: string;
+      legs: [PendingMember, PendingMember];
+      /** One leg out, one in (P3): approving re-types both. A P2 mirror shares a sign. */
+      ownAccount: boolean;
+    }
   | { kind: "suspected-transfer"; title: string; row: PendingMember }
   | { kind: "group"; title: string; count: number };
 
@@ -52,7 +59,12 @@ export function reconciliationGroupView(members: PendingMember[]): Reconciliatio
     };
   }
   if (pairs.length === 2) {
-    return { kind: "transfer", title: "העברה בין חשבונות", legs: [pairs[0], pairs[1]] };
+    return {
+      kind: "transfer",
+      title: "העברה בין חשבונות",
+      legs: [pairs[0], pairs[1]],
+      ownAccount: isOwnAccountTransfer(members),
+    };
   }
   if (pairs.length === 1 && members.length === 1) {
     return { kind: "suspected-transfer", title: "חשד להעברה בין חשבונות", row: pairs[0] };
@@ -85,6 +97,13 @@ export function suspectedTransferConsequence(row: PendingMember): string {
   const leaves = isCredit(row.chargedAmount) ? "בהכנסות" : "בהוצאות";
   return `לא נמצא צד שני להעברה. אישור יסמן את התנועה כהעברה פנימית, ולכן היא לא תיספר ${leaves}.`;
 }
+
+/**
+ * Mirrors `approveGroup` for a P3 pair: both legs become internal transfers
+ * whatever their category, so neither counts in income or expenses.
+ */
+export const OWN_ACCOUNT_TRANSFER_CONSEQUENCE =
+  "אישור יסמן את שתי התנועות כהעברה פנימית, ולכן שתיהן לא ייספרו בהכנסות ובהוצאות.";
 
 /**
  * Mirrors `approveGroups`, which skips an incoming suspected transfer on the

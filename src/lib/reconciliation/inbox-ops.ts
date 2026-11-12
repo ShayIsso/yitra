@@ -8,6 +8,7 @@ import { categorize, type CategoryRule } from "@/lib/categories/rules";
 import { bankKindOf } from "@/lib/bank-registry";
 import type { CategorySource } from "@/lib/merchant-memory";
 import { TRANSFER_CATEGORY_NAME } from "./category-names";
+import { isOwnAccountTransfer } from "./own-account-transfer";
 import { pairsToRecordOnReject, pairsToRecordOnUndo, type RejectedPair } from "./rejected-pairs";
 
 export type InboxTransaction = {
@@ -32,9 +33,9 @@ export type InboxGroup = {
 };
 
 /**
- * The one category write an approval makes: the transfer side of a
- * `transfer_pair` group becomes an internal transfer. The approval is the
- * user's decision, so it is recorded as `user` provenance, never `rule`.
+ * A category write an approval makes: a `transfer_pair` leg becomes an
+ * internal transfer. The approval is the user's decision, so it is recorded as
+ * `user` provenance, never `rule`.
  */
 export type TransferFlip = {
   txnId: string;
@@ -43,7 +44,7 @@ export type TransferFlip = {
   /**
    * Skip the flip if the row is `user`/`memory`-sourced at write time. Set for
    * a suspected transfer, so a category chosen after `approveGroup` read the
-   * members still wins; a pair flips regardless (see `transferFlipFor`).
+   * members still wins; a pair flips regardless (see `legsToFlip`).
    */
   keepUserCategory: boolean;
 };
@@ -54,8 +55,8 @@ export type ReleaseIntent = "reject" | "undo";
 export type InboxStore = {
   getGroupMembers(groupId: string): Promise<InboxTransaction[]>;
   getGroupMembersByIds(groupIds: string[]): Promise<Map<string, InboxTransaction[]>>;
-  /** Confirms every member of the group and applies `flip`, if any, in one transaction. */
-  confirmGroup(groupId: string, now: Date, flip: TransferFlip | null): Promise<void>;
+  /** Confirms every member of the group and applies `flips` in one transaction. */
+  confirmGroup(groupId: string, now: Date, flips: TransferFlip[]): Promise<void>;
   /** Clears the groups and persists `rejections` in the same transaction. */
   clearGroup(groupIds: string[], rejections?: RejectedPair[]): Promise<void>;
   /** Clears the rows and persists `rejections` in the same transaction. */
@@ -125,35 +126,47 @@ function isSingletonCredit(members: InboxTransaction[]): boolean {
   );
 }
 
-async function transferFlipFor(
+/** The legs an approval turns into internal transfers, and whether a `user`/`memory` category survives. */
+function legsToFlip(
   members: InboxTransaction[],
-  store: InboxStore,
-): Promise<TransferFlip | null> {
-  // P1 settlement group: the lump already carries the settlement category.
-  if (members.some((m) => m.reconciliationRole === "settlement_lump")) return null;
+): { legs: InboxTransaction[]; keepUserCategory: boolean } | null {
+  // Only a transfer_pair group is ever re-typed: P1 lumps already carry the
+  // settlement category, and leftover settlement details are real card charges.
+  if (!members.every((m) => m.reconciliationRole === "transfer_pair")) return null;
+
+  // Own-account transfer (P3): like a P2 mirror, the pair has a second leg to
+  // double-count against, so both legs flip whatever their source. Keeping a
+  // leg's category would bring the half-flip back, and a `memory` entry keyed
+  // on a `העברה מ…` descriptor can mislabel a credit as income (#342).
+  if (isOwnAccountTransfer(members)) return { legs: members, keepUserCategory: false };
 
   const bankSide = identifyBankSide(members);
   if (!bankSide) return null;
   // A suspected transfer has no second leg to double-count against, so a
   // category the user chose (or user-tier memory applied) after it was queued
-  // outranks the suspicion. A pair keeps its flip: a P2 mirror is one charge
-  // seen from two accounts, so without it the charge counts twice.
-  const keepUserCategory = members.length === 1;
-  if (
-    keepUserCategory &&
-    (bankSide.categorySource === "user" || bankSide.categorySource === "memory")
-  ) {
+  // outranks the suspicion (#303). A P2 mirror flips its bank side regardless:
+  // it is one charge seen from two accounts, so without it the charge counts twice.
+  const isSuspected = members.length === 1;
+  if (isSuspected && (bankSide.categorySource === "user" || bankSide.categorySource === "memory")) {
     return null;
   }
+  return { legs: [bankSide], keepUserCategory: isSuspected };
+}
 
-  const transferCategoryId = await store.getCategoryIdByName(TRANSFER_CATEGORY_NAME);
-  if (!transferCategoryId) return null;
-  return {
-    txnId: bankSide.id,
-    categoryId: transferCategoryId,
+async function transferFlipsFor(
+  members: InboxTransaction[],
+  store: InboxStore,
+): Promise<TransferFlip[]> {
+  const plan = legsToFlip(members);
+  if (!plan) return [];
+  const categoryId = await store.getCategoryIdByName(TRANSFER_CATEGORY_NAME);
+  if (!categoryId) return [];
+  return plan.legs.map((leg) => ({
+    txnId: leg.id,
+    categoryId,
     categorySource: "user",
-    keepUserCategory,
-  };
+    keepUserCategory: plan.keepUserCategory,
+  }));
 }
 
 async function approveMembers(
@@ -164,7 +177,7 @@ async function approveMembers(
   // Approving never writes merchant memory: a memory entry mapping a
   // "העברה מ…" key to an internal transfer would swallow every later credit
   // with that descriptor, salaries included (#303).
-  await store.confirmGroup(groupId, new Date(), await transferFlipFor(members, store));
+  await store.confirmGroup(groupId, new Date(), await transferFlipsFor(members, store));
 }
 
 export async function approveGroup(

@@ -88,10 +88,10 @@ describe("approveGroup — P1 settlement", () => {
 
     expect(result.error).toBeUndefined();
     expect(store.confirmGroup).toHaveBeenCalledOnce();
-    const [calledGroupId, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
+    const [calledGroupId, , flips] = vi.mocked(store.confirmGroup).mock.calls[0];
     expect(calledGroupId).toBe("group-1");
     // P1: no transfer category flip needed
-    expect(flip).toBeNull();
+    expect(flips).toEqual([]);
   });
 });
 
@@ -109,13 +109,15 @@ describe("approveGroup — P2 transfer_pair", () => {
 
     expect(result.error).toBeUndefined();
     expect(store.confirmGroup).toHaveBeenCalledOnce();
-    const [, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
-    expect(flip).toEqual({
-      txnId: "bank-1",
-      categoryId: "cat-transfer-id",
-      categorySource: "user",
-      keepUserCategory: false,
-    });
+    const [, , flips] = vi.mocked(store.confirmGroup).mock.calls[0];
+    expect(flips).toEqual([
+      {
+        txnId: "bank-1",
+        categoryId: "cat-transfer-id",
+        categorySource: "user",
+        keepUserCategory: false,
+      },
+    ]);
   });
 });
 
@@ -139,14 +141,16 @@ describe("approveGroup — suspected transfer (singleton, AI-step routing #148)"
 
     expect(result.error).toBeUndefined();
     expect(store.confirmGroup).toHaveBeenCalledOnce();
-    const [groupId, , flip] = vi.mocked(store.confirmGroup).mock.calls[0];
+    const [groupId, , flips] = vi.mocked(store.confirmGroup).mock.calls[0];
     expect(groupId).toBe("group-sus");
-    expect(flip).toEqual({
-      txnId: "sus-1",
-      categoryId: "cat-transfer-id",
-      categorySource: "user",
-      keepUserCategory: true,
-    });
+    expect(flips).toEqual([
+      {
+        txnId: "sus-1",
+        categoryId: "cat-transfer-id",
+        categorySource: "user",
+        keepUserCategory: true,
+      },
+    ]);
   });
 });
 

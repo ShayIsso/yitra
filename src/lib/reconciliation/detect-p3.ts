@@ -1,4 +1,5 @@
 import { amountsMatch, datesWithin, matchesTransferDescriptor } from "@/lib/transaction-matching";
+import { haveOppositeSigns } from "./own-account-transfer";
 import { NO_REJECTIONS, isRejected, type RejectedPairs } from "./rejected-pairs";
 import type { P3InterAccountCandidate, ReconciliationTransaction } from "./types";
 
@@ -40,9 +41,7 @@ export function detectP3InterAccount(
 
       if (isRejected(rejected, a.id, b.id)) continue;
 
-      // Must have opposite signs (one positive incoming, one negative outgoing)
-      if (a.chargedAmount === 0 || b.chargedAmount === 0) continue;
-      if (Math.sign(a.chargedAmount) === Math.sign(b.chargedAmount)) continue;
+      if (!haveOppositeSigns(a.chargedAmount, b.chargedAmount)) continue;
 
       // Absolute amounts must match within exact tolerance
       if (

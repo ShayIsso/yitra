@@ -3,6 +3,7 @@ import * as merchantMemory from "@/lib/merchant-memory";
 import {
   approveGroup,
   approveGroups,
+  undoTransaction,
   type InboxStore,
   type InboxTransaction,
   type TransferFlip,
@@ -43,12 +44,12 @@ function row(
 }
 
 function storeOf(groups: Record<string, InboxTransaction[]>) {
-  const confirmed: { groupId: string; flip: TransferFlip | null }[] = [];
+  const confirmed: { groupId: string; flips: TransferFlip[] }[] = [];
   const store: InboxStore = {
     getGroupMembers: async (groupId) => groups[groupId] ?? [],
     getGroupMembersByIds: async () => new Map(),
-    confirmGroup: async (groupId, _now, flip) => {
-      confirmed.push({ groupId, flip });
+    confirmGroup: async (groupId, _now, flips) => {
+      confirmed.push({ groupId, flips });
     },
     clearGroup: async () => {},
     clearRows: async () => {},
@@ -76,7 +77,7 @@ describe("approving a suspected transfer", () => {
 
       expect(await approveGroup("g", store)).toEqual({});
 
-      expect(confirmed).toEqual([{ groupId: "g", flip: null }]);
+      expect(confirmed).toEqual([{ groupId: "g", flips: [] }]);
     },
   );
 
@@ -89,12 +90,14 @@ describe("approving a suspected transfer", () => {
     expect(confirmed).toEqual([
       {
         groupId: "g",
-        flip: {
-          txnId: "out",
-          categoryId: TRANSFER_CATEGORY,
-          categorySource: "user",
-          keepUserCategory: true,
-        },
+        flips: [
+          {
+            txnId: "out",
+            categoryId: TRANSFER_CATEGORY,
+            categorySource: "user",
+            keepUserCategory: true,
+          },
+        ],
       },
     ]);
   });
@@ -105,12 +108,14 @@ describe("approving a suspected transfer", () => {
 
     await approveGroup("g", store);
 
-    expect(confirmed[0].flip).toEqual({
-      txnId: "out",
-      categoryId: TRANSFER_CATEGORY,
-      categorySource: "user",
-      keepUserCategory: true,
-    });
+    expect(confirmed[0].flips).toEqual([
+      {
+        txnId: "out",
+        categoryId: TRANSFER_CATEGORY,
+        categorySource: "user",
+        keepUserCategory: true,
+      },
+    ]);
   });
 
   it("writes no merchant memory", async () => {
@@ -143,12 +148,14 @@ describe("approving a two-leg transfer pair", () => {
     expect(confirmed).toEqual([
       {
         groupId: "pair",
-        flip: {
-          txnId: "bank",
-          categoryId: TRANSFER_CATEGORY,
-          categorySource: "user",
-          keepUserCategory: false,
-        },
+        flips: [
+          {
+            txnId: "bank",
+            categoryId: TRANSFER_CATEGORY,
+            categorySource: "user",
+            keepUserCategory: false,
+          },
+        ],
       },
     ]);
   });
@@ -198,5 +205,124 @@ describe("bulk approve", () => {
     expect(await approveGroup("g", store)).toEqual({});
 
     expect(confirmed.map((c) => c.groupId)).toEqual(["g"]);
+  });
+});
+
+describe("approving an own-account transfer (P3)", () => {
+  function ownAccountPair(overrides: Partial<InboxTransaction> = {}) {
+    const out = row({
+      id: "out",
+      reconciliationGroupId: "p3",
+      bankType: "discount",
+      chargedAmount: -2500,
+      reconciliationConfidence: 0.9,
+      ...overrides,
+    });
+    const incoming = row({
+      id: "in",
+      reconciliationGroupId: "p3",
+      bankType: "discount",
+      bankAccountId: "acct-2",
+      chargedAmount: 2500,
+      reconciliationConfidence: 0.9,
+      createdAt: new Date("2026-03-10T09:00:00Z"),
+    });
+    return [out, incoming];
+  }
+
+  it("flips both legs to internal transfers, each recorded as the user's decision", async () => {
+    const { store, confirmed } = storeOf({ p3: ownAccountPair() });
+
+    await approveGroup("p3", store);
+
+    const leg = (txnId: string) => ({
+      txnId,
+      categoryId: TRANSFER_CATEGORY,
+      categorySource: "user",
+      keepUserCategory: false,
+    });
+    expect(confirmed).toEqual([{ groupId: "p3", flips: [leg("out"), leg("in")] }]);
+  });
+
+  it("flips both legs when both are bank accounts, whichever was created first", async () => {
+    const [out, incoming] = ownAccountPair();
+    const { store, confirmed } = storeOf({ p3: [incoming, out] });
+
+    await approveGroup("p3", store);
+
+    expect(confirmed[0].flips.map((f) => f.txnId).sort()).toEqual(["in", "out"]);
+  });
+
+  it.each(["user", "memory"] as const)(
+    "flips a leg whatever its source (%s): a pair has a second leg to double-count against",
+    async (categorySource) => {
+      const pair = ownAccountPair({ categoryId: "cat-income", categorySource });
+      const { store, confirmed } = storeOf({ p3: pair });
+
+      await approveGroup("p3", store);
+
+      expect(confirmed[0].flips).toHaveLength(2);
+      expect(confirmed[0].flips.every((f) => !f.keepUserCategory)).toBe(true);
+    },
+  );
+
+  it("never re-types opposite-sign settlement details left over from an undone lump", async () => {
+    const left = [
+      row({ id: "d1", reconciliationGroupId: "s", reconciliationRole: "settlement_detail" }),
+      row({
+        id: "d2",
+        reconciliationGroupId: "s",
+        reconciliationRole: "settlement_detail",
+        chargedAmount: 800,
+      }),
+    ];
+    const { store, confirmed } = storeOf({ s: left });
+
+    await approveGroup("s", store);
+
+    expect(confirmed).toEqual([{ groupId: "s", flips: [] }]);
+  });
+
+  it("flips both legs through bulk approve too", async () => {
+    const { store, confirmed } = storeOf({ p3: ownAccountPair() });
+
+    await approveGroups(["p3"], store);
+
+    expect(confirmed[0].flips).toHaveLength(2);
+  });
+
+  it("writes no flips when the internal-transfer category does not exist", async () => {
+    const { store, confirmed } = storeOf({ p3: ownAccountPair() });
+    store.getCategoryIdByName = async () => null;
+
+    await approveGroup("p3", store);
+
+    expect(confirmed).toEqual([{ groupId: "p3", flips: [] }]);
+  });
+});
+
+describe("undoing an approved own-account transfer", () => {
+  it("clears both legs and releases each through the undo path", async () => {
+    const cleared: string[] = [];
+    const recategorized: { id: string; intent: string }[] = [];
+    const { store } = storeOf({});
+    store.clearRows = async (ids) => {
+      cleared.push(...ids);
+    };
+    store.setCategory = async (id, _categoryId, intent) => {
+      recategorized.push({ id, intent });
+    };
+    const members = [
+      row({ id: "out", reconciliationGroupId: "p3", chargedAmount: -2500 }),
+      row({ id: "in", reconciliationGroupId: "p3", chargedAmount: 2500 }),
+    ];
+
+    await undoTransaction("out", members, store);
+
+    expect(cleared.sort()).toEqual(["in", "out"]);
+    expect(recategorized.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: "in", intent: "undo" },
+      { id: "out", intent: "undo" },
+    ]);
   });
 });
