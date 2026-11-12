@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ReportSection as Section } from "@/components/reports/parts";
 import { SectionError } from "../sections/parts";
-import { monthKey } from "@/components/reports/format";
+import { monthKey, reportsMonthHref } from "@/components/reports/format";
 import type { HomeTrends as HomeTrendsData } from "@/lib/reports/home-trends";
 import { useMonthLoad } from "../month-load";
 import { monthName, sameMonth, shiftMonth, type HomeMonth, type MonthRange } from "../month";
@@ -102,7 +102,7 @@ export const HomeTrends = React.memo(function HomeTrends({
           description="מדורג לפי הוצאה. קבוצה נפתחת לקטגוריות שלה."
           action={
             <Link
-              href="/reports"
+              href={reportsMonthHref(month)}
               className="text-body text-primary focus-visible:ring-ring/50 inline-flex min-h-11 items-center rounded-lg px-2 font-semibold outline-none hover:underline focus-visible:ring-3"
             >
               לדוחות
