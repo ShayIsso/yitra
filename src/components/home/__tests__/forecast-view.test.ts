@@ -228,9 +228,9 @@ describe("dayAtOffset", () => {
 });
 
 describe("axisTicks", () => {
-  const on = (today: number) => {
+  const on = (today: number, days = 30) => {
     const actual = Array.from({ length: today }, (_, i) => 100 * (i + 1));
-    const projected = Array.from({ length: 31 - today }, (_, i) => 100 * (today + i));
+    const projected = Array.from({ length: days + 1 - today }, (_, i) => 100 * (today + i));
     return axisTicks(
       forecastView(
         active({ projection: { total: projected[projected.length - 1], actual, projected } }),
@@ -238,39 +238,57 @@ describe("axisTicks", () => {
       )!,
     );
   };
+  const ends = (days = 30) => [
+    { at: 1, label: 1, align: "right" },
+    { at: days, label: days, align: "left" },
+  ];
+  const weeks = [
+    { at: 8, label: 8, align: "center" },
+    { at: 15, label: 15, align: "center" },
+    { at: 22, label: 22, align: "center" },
+  ];
 
   it("labels both ends, the week marks and today mid-month", () => {
-    expect(on(12)).toEqual([
-      { at: 1, label: 1, align: "right" },
-      { at: 8, label: 8, align: "center" },
-      { at: 15, label: 15, align: "center" },
-      { at: 22, label: 22, align: "center" },
-      { at: 30, label: 30, align: "left" },
-      { at: 12, label: "today", align: "center" },
-    ]);
+    expect(on(12)).toEqual([...ends(), ...weeks, { at: 12, label: "today", align: "center" }]);
   });
 
   it("drops a week mark that would crowd today", () => {
-    expect(on(14).map((t) => t.label)).toEqual([1, 8, 22, 30, "today"]);
+    expect(on(14).map((t) => t.label)).toEqual([1, 30, 8, 22, "today"]);
   });
 
-  it("puts today flush on the right end when it is within a few days of day 1", () => {
-    expect(on(2)).toEqual([
-      { at: 1, label: "today", align: "right" },
-      { at: 8, label: 8, align: "center" },
-      { at: 15, label: 15, align: "center" },
-      { at: 22, label: 22, align: "center" },
-      { at: 30, label: 30, align: "left" },
-    ]);
+  it("names day 1 today when the month has just begun", () => {
+    expect(on(1)).toEqual([{ at: 1, label: "today", align: "right" }, ends()[1], ...weeks]);
   });
 
-  it("puts today flush on the left end when it is within a few days of the last day", () => {
-    expect(on(29)).toEqual([
-      { at: 1, label: 1, align: "right" },
-      { at: 8, label: 8, align: "center" },
-      { at: 15, label: 15, align: "center" },
-      { at: 22, label: 22, align: "center" },
-      { at: 30, label: "today", align: "left" },
+  it("aligns today near day 1 inward from its own day, keeping the end label when there is room", () => {
+    expect(on(3)).toEqual([...ends(), ...weeks, { at: 3, label: "today", align: "right" }]);
+  });
+
+  it("gives up day 1's label to today on day 2, where both don't fit", () => {
+    expect(on(2)).toEqual([ends()[1], ...weeks, { at: 2, label: "today", align: "right" }]);
+  });
+
+  it("aligns today near the last day inward from its own day", () => {
+    expect(on(28)).toEqual([...ends(), ...weeks, { at: 28, label: "today", align: "left" }]);
+  });
+
+  it("gives up the last day's label to today on the day before it", () => {
+    expect(on(29)).toEqual([ends()[0], ...weeks, { at: 29, label: "today", align: "left" }]);
+  });
+
+  it("names the last day today on the month's last day", () => {
+    expect(on(30)).toEqual([ends()[0], { at: 30, label: "today", align: "left" }, ...weeks]);
+  });
+
+  it("follows a 28-day month's length", () => {
+    expect(on(26, 28)).toEqual([...ends(28), ...weeks, { at: 26, label: "today", align: "left" }]);
+  });
+
+  it("follows a 31-day month's length", () => {
+    expect(on(12, 31)).toEqual([
+      ...ends(31),
+      ...weeks,
+      { at: 12, label: "today", align: "center" },
     ]);
   });
 });

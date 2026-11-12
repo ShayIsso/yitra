@@ -128,8 +128,9 @@ const WEEK_MARKS = [8, 15, 22];
 const TICK_CLEARANCE = 3;
 
 /**
- * An axis label at `at`'s x. "right"/"left" are physical: the plot's ends,
- * where the label sits flush inside the edge instead of centred over it.
+ * An axis label at `at`'s x. Alignment is physical: "right" puts the label's
+ * right edge on that x, "left" its left edge, so a label near an end of the
+ * plot extends inward and never spills past it.
  */
 export type AxisTick = {
   at: number;
@@ -137,22 +138,35 @@ export type AxisTick = {
   align: "center" | "right" | "left";
 };
 
+/** An end's label and a "today" label one day from it don't both fit. */
+const END_CLEARANCE = 2;
+
 /**
- * Both ends of the month, the week marks and today. Today near an end takes
- * that end's place flush with the edge, so its label never spills past the plot.
+ * Both ends of the month, the week marks and today. Today's label stays on
+ * today's own day; near an end it extends inward from it, and the end's label
+ * gives way only when today is the day next to it.
  */
 export function axisTicks(v: ForecastView): AxisTick[] {
   const { today, daysInMonth } = v;
-  const nearFirst = today - 1 < TICK_CLEARANCE;
-  const nearLast = !nearFirst && daysInMonth - today < TICK_CLEARANCE;
-  const ticks: AxisTick[] = [
-    { at: 1, label: nearFirst ? "today" : 1, align: "right" },
-    ...WEEK_MARKS.filter((d) => Math.abs(d - today) >= TICK_CLEARANCE).map(
-      (d): AxisTick => ({ at: d, label: d, align: "center" }),
-    ),
-    { at: daysInMonth, label: nearLast ? "today" : daysInMonth, align: "left" },
-  ];
-  if (!nearFirst && !nearLast) ticks.push({ at: today, label: "today", align: "center" });
+  const ticks: AxisTick[] = [];
+  if (today === 1) ticks.push({ at: 1, label: "today", align: "right" });
+  else if (today - 1 >= END_CLEARANCE) ticks.push({ at: 1, label: 1, align: "right" });
+  if (today === daysInMonth) ticks.push({ at: daysInMonth, label: "today", align: "left" });
+  else if (daysInMonth - today >= END_CLEARANCE) {
+    ticks.push({ at: daysInMonth, label: daysInMonth, align: "left" });
+  }
+  for (const d of WEEK_MARKS) {
+    if (Math.abs(d - today) >= TICK_CLEARANCE) ticks.push({ at: d, label: d, align: "center" });
+  }
+  if (today !== 1 && today !== daysInMonth) {
+    const align =
+      today - 1 < TICK_CLEARANCE
+        ? "right"
+        : daysInMonth - today < TICK_CLEARANCE
+          ? "left"
+          : "center";
+    ticks.push({ at: today, label: "today", align });
+  }
   return ticks;
 }
 

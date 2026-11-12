@@ -40,12 +40,12 @@ const BASIS_COPY = {
   },
 } as const;
 
-function dayLabel(day: number, view: ForecastView): string {
-  return `${day} ב${monthName(view.month)}`;
+function dayLabel(day: number, month: HomeMonth): string {
+  return `${day} ב${monthName(month)}`;
 }
 
-function pointKind(point: ForecastPoint, view: ForecastView): string {
-  return point.kind === "actual" ? "בפועל" : BASIS_COPY[view.basis].mark;
+function pointKind(point: ForecastPoint, basis: ForecastView["basis"]): string {
+  return point.kind === "actual" ? "בפועל" : BASIS_COPY[basis].mark;
 }
 
 /**
@@ -114,8 +114,14 @@ function ThinHistory({ titleId, hasTarget }: { titleId: string; hasTarget: boole
 }
 
 function Forecast({ view, titleId, busy }: { view: ForecastView; titleId: string; busy: boolean }) {
-  const [scrub, setScrubbed] = React.useState<number | null>(null);
-  const scrubbed = busy ? null : scrub;
+  const [scrubbed, setScrubbed] = React.useState<number | null>(null);
+  // Going busy drops the scrub: the plot turns inert, so no pointerleave or
+  // blur would clear it, and it must not come back over the next answer.
+  const [wasBusy, setWasBusy] = React.useState(busy);
+  if (busy !== wasBusy) {
+    setWasBusy(busy);
+    if (busy) setScrubbed(null);
+  }
   const readoutId = React.useId();
   const point = forecastPoint(view, scrubbed ?? view.today);
   const copy = BASIS_COPY[view.basis];
@@ -131,14 +137,16 @@ function Forecast({ view, titleId, busy }: { view: ForecastView; titleId: string
         <p className="text-body flex items-start gap-2 text-pretty">
           <WarningCircleIcon weight="fill" className="text-attention-text mt-0.5 size-4 shrink-0" />
           <span>
-            {copy.crossing} היעד ייחצה ב־{dayLabel(view.crossingDay, view)}
+            {copy.crossing} היעד ייחצה ב־{dayLabel(view.crossingDay, view.month)}
           </span>
         </p>
       )}
 
       <div id={readoutId} className="flex flex-col">
         <p className="text-muted-foreground text-caption">
-          {scrubbed === null ? copy.end : `${dayLabel(scrubbed, view)} · ${pointKind(point, view)}`}
+          {scrubbed === null
+            ? copy.end
+            : `${dayLabel(scrubbed, view.month)} · ${pointKind(point, view.basis)}`}
         </p>
         <p className="text-lead font-semibold">
           {scrubbed === null ? (
@@ -195,11 +203,15 @@ function Plot({
     return dayAtOffset(view, rect.right - e.clientX, rect.width);
   }
 
+  /** The day the keyboard last chose while the slider has focus. */
+  const keyDay = React.useRef<number | null>(null);
+
   // Pointer scrubbing never takes focus (see onMouseDown), so focus means the
-  // keyboard: a released pointer returns a focused slider to today, the value
-  // it announces, and otherwise clears the marker.
+  // keyboard: a released pointer returns a focused slider to the keyboard's
+  // day (today until a key moves it), and otherwise clears the marker. Either
+  // way the marker and the announced value stay the same day.
   function release(el: HTMLElement) {
-    onScrub(document.activeElement === el ? view.today : null);
+    onScrub(document.activeElement === el ? (keyDay.current ?? view.today) : null);
   }
 
   return (
@@ -214,17 +226,21 @@ function Plot({
         aria-valuemin={1}
         aria-valuemax={view.daysInMonth}
         aria-valuenow={point.day}
-        aria-valuetext={`${dayLabel(point.day, view)}: ${formatAmount(point.amount, "ILS", 0)}, ${pointKind(point, view)}`}
+        aria-valuetext={`${dayLabel(point.day, view.month)}: ${formatAmount(point.amount, "ILS", 0)}, ${pointKind(point, view.basis)}`}
         onKeyDown={(e) => {
           const next = scrubDay(view, scrubbed ?? view.today, e);
           if (next === null) return;
           e.preventDefault();
+          keyDay.current = next;
           onScrub(next);
         }}
         // Focus shows the day the slider reports, so the readout and the
         // announced value never disagree.
         onFocus={() => onScrub((day) => day ?? view.today)}
-        onBlur={() => onScrub(null)}
+        onBlur={() => {
+          keyDay.current = null;
+          onScrub(null);
+        }}
         onMouseDown={(e) => e.preventDefault()}
         onPointerDown={(e) => {
           // Keep a touch drag on the plot even when it strays off it.
@@ -268,7 +284,7 @@ function Plot({
               strokeLinejoin="round"
               strokeLinecap="round"
             />
-            {/* Actual last: on day 1 its lone dot sits where the projection starts. */}
+            {/* Actual drawn last, over the projection's start, so day 1's lone dot shows. */}
             <path
               d={geometry.actualPath}
               fill="none"

@@ -248,7 +248,6 @@ export function HomeScreen({
   const answered = (outlook.data !== null || outlook.failed) && runs !== null;
   /** The outlook failed for the month shown: the hero shows its error, the chart nothing. */
   const outlookFailed = outlook.failed && !outlook.current;
-  /** The next month is loading over the last one's figures, still on screen. */
   const busy = outlook.pending && !outlook.current && !outlook.failed && shown !== null;
   const forecast =
     shown?.outlook.state === "active" || shown?.outlook.state === "thin-history"
