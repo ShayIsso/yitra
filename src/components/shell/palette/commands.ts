@@ -77,43 +77,47 @@ function pageCommands(): PaletteCommand[] {
 function transactionCommands(current: HomeMonth): PaletteCommand[] {
   const filter = (
     id: string,
-    label: string,
-    href: string,
-    keywords: readonly string[],
-    icon: PaletteCommand["icon"] = FunnelIcon,
+    view: {
+      label: string;
+      href: string;
+      keywords: readonly string[];
+      icon?: PaletteCommand["icon"];
+    },
   ): PaletteCommand => ({
     id: `transactions:${id}`,
     group: "transactions",
-    label,
-    keywords: ["תנועות", "transactions", ...keywords],
-    href,
-    icon,
+    label: view.label,
+    keywords: ["תנועות", "transactions", ...view.keywords],
+    href: view.href,
+    icon: view.icon ?? FunnelIcon,
   });
   return [
-    filter(
-      "review",
-      "ממתינות לסקירה",
-      transactionsHref({ needsReview: true }),
-      ["review", "לבדיקה"],
-      ListChecksIcon,
-    ),
-    filter("uncategorized", "ללא קטגוריה", transactionsHref({ uncategorized: true }), [
-      "uncategorized",
-      "לא מסווגות",
-    ]),
-    filter("this-month", "תנועות החודש", transactionsHref({ month: monthKey(current) }), [
-      "this month",
-    ]),
-    filter(
-      "last-month",
-      "תנועות החודש שעבר",
-      transactionsHref({ month: monthKey(shiftMonth(current, -1)) }),
-      ["last month"],
-    ),
-    filter("pending", "תנועות בהמתנה", transactionsHref({ status: "pending" }), [
-      "pending",
-      "ממתין",
-    ]),
+    filter("review", {
+      label: "ממתינות לסקירה",
+      href: transactionsHref({ needsReview: true }),
+      keywords: ["review", "לבדיקה"],
+      icon: ListChecksIcon,
+    }),
+    filter("uncategorized", {
+      label: "ללא קטגוריה",
+      href: transactionsHref({ uncategorized: true }),
+      keywords: ["uncategorized", "לא מסווגות"],
+    }),
+    filter("this-month", {
+      label: "תנועות החודש",
+      href: transactionsHref({ month: monthKey(current) }),
+      keywords: ["this month"],
+    }),
+    filter("last-month", {
+      label: "תנועות החודש שעבר",
+      href: transactionsHref({ month: monthKey(shiftMonth(current, -1)) }),
+      keywords: ["last month"],
+    }),
+    filter("pending", {
+      label: "תנועות בהמתנה",
+      href: transactionsHref({ status: "pending" }),
+      keywords: ["pending", "ממתין"],
+    }),
   ];
 }
 
@@ -161,7 +165,7 @@ export function firstMonthWithData(answer: unknown): HomeMonth | null {
   return { year: oldest.year, month: oldest.month };
 }
 
-/** Every palette command, grouped: pages, then transaction views, then months. */
+/** Every palette command, in display order: pages, then transaction views, then months. */
 export function paletteCommands({
   current,
   first,

@@ -21,6 +21,9 @@ export type Destination = {
 
 export const RECONCILIATION_HREF = "/reconciliation";
 
+/** The page region the skip link and the command palette move focus to. */
+export const MAIN_CONTENT_ID = "main-content";
+
 /** The phone tab bar's own tabs; a fifth "more" tab opens MORE_DESTINATIONS. */
 export const TAB_DESTINATIONS: readonly Destination[] = [
   { href: "/", label: "בית", icon: HouseIcon },

@@ -18,6 +18,23 @@ describe("paletteCommands, pages", () => {
     expect(pages.map((p) => p.href)).toEqual(ALL_DESTINATIONS.map((d) => d.href));
     expect(pages.map((p) => p.label)).toEqual(ALL_DESTINATIONS.map((d) => d.label));
   });
+
+  it("finds every page by its English name too", () => {
+    const commands = paletteCommands({ current: nov2026, first: null });
+    const english: Record<string, string> = {
+      "/": "home",
+      "/transactions": "transactions",
+      "/reports": "reports",
+      "/reconciliation": "reconciliation",
+      "/subscriptions": "subscriptions",
+      "/sync": "sync",
+      "/settings": "settings",
+    };
+    expect(Object.keys(english)).toEqual(ALL_DESTINATIONS.map((d) => d.href));
+    for (const [href, name] of Object.entries(english)) {
+      expect(searchCommands(commands, name)[0]?.href).toBe(href);
+    }
+  });
 });
 
 describe("paletteCommands, months", () => {

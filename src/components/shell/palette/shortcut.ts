@@ -33,7 +33,6 @@ export function isPaletteShortcut(event: ShortcutEvent, { mac }: { mac: boolean 
   return event.code === "KeyK";
 }
 
-/** Apple platforms take Cmd, everything else Ctrl. */
 export function isApplePlatform(nav: Pick<Navigator, "platform" | "userAgent">): boolean {
   return /mac|iphone|ipad|ipod/i.test(nav.platform || nav.userAgent);
 }

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowElbowDownLeftIcon, MagnifyingGlassIcon } from "@/components/icons";
 import { homeMonthOf, type HomeMonth } from "@/components/home/month";
+import { useJson } from "@/components/reports/use-json";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
@@ -12,26 +13,18 @@ import {
   paletteCommands,
   type PaletteCommand,
 } from "./commands";
+import { MAIN_CONTENT_ID } from "../nav";
 import { searchCommands } from "./search";
 
-/** The floor for the month commands: unknown until the months answer arrives. */
-type Floor = { status: "loading" } | { status: "known"; first: HomeMonth | null };
-
-function useMonthFloor(open: boolean): Floor {
-  const [floor, setFloor] = React.useState<Floor>({ status: "loading" });
-  React.useEffect(() => {
-    if (!open) return;
-    const controller = new AbortController();
-    // Re-read on every open: a first sync can add a year of months under a palette opened before it.
-    fetch("/api/reports/months", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((answer: unknown) => setFloor({ status: "known", first: firstMonthWithData(answer) }))
-      .catch(() => {
-        if (!controller.signal.aborted) setFloor({ status: "known", first: null });
-      });
-    return () => controller.abort();
-  }, [open]);
-  return floor;
+/**
+ * The first month with data, which floors the month commands; undefined until
+ * the months answer arrives, null when it failed or holds none. Re-read on
+ * every open: a first sync can add a year of months under a mounted palette.
+ */
+function useMonthFloor(open: boolean): HomeMonth | null | undefined {
+  const { state } = useJson<unknown>(open ? "/api/reports/months" : null);
+  if (state.status === "loading") return undefined;
+  return state.status === "ready" ? firstMonthWithData(state.data) : null;
 }
 
 const optionId = (baseId: string, command: PaletteCommand) =>
@@ -76,11 +69,8 @@ export default function CommandPalette({
   const current = React.useMemo(() => (open ? homeMonthOf(new Date()) : null), [open]);
   const commands = React.useMemo(() => {
     if (!current) return [];
-    const all = paletteCommands({
-      current,
-      first: floor.status === "known" ? floor.first : null,
-    });
-    return floor.status === "known" ? all : all.filter((c) => c.group !== "months");
+    const all = paletteCommands({ current, first: floor ?? null });
+    return floor === undefined ? all.filter((c) => c.group !== "months") : all;
   }, [current, floor]);
 
   const sections = React.useMemo(
@@ -128,7 +118,7 @@ export default function CommandPalette({
         // page's content. Done here, not through finalFocus: given <main>, it
         // focused the first control inside it instead.
         if (!isOpen && navigatedRef.current) {
-          document.getElementById("main-content")?.focus({ preventScroll: true });
+          document.getElementById(MAIN_CONTENT_ID)?.focus({ preventScroll: true });
         }
       }}
     >
@@ -271,10 +261,7 @@ function Option({
         )}
       </span>
       {active && (
-        <ArrowElbowDownLeftIcon
-          aria-hidden="true"
-          className="text-muted-foreground hidden size-4 shrink-0 md:block"
-        />
+        <ArrowElbowDownLeftIcon className="text-muted-foreground hidden size-4 shrink-0 md:block" />
       )}
     </div>
   );

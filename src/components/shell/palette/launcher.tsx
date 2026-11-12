@@ -20,10 +20,11 @@ export function PaletteLauncher() {
     const mac = isApplePlatform(navigator);
     function onKeyDown(event: KeyboardEvent) {
       if (!isPaletteShortcut(event, { mac })) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      // A rich editor owns Cmd+K ("insert link"), and another dialog owns the keyboard while open.
-      if (target?.isContentEditable) return;
-      if (target?.closest('[role="dialog"]:not([data-command-palette]), [role="alertdialog"]')) {
+      // A rich editor owns Cmd+K ("insert link"), and another open dialog owns the keyboard.
+      if (event.target instanceof HTMLElement && event.target.isContentEditable) return;
+      if (
+        document.querySelector('[role="dialog"]:not([data-command-palette]), [role="alertdialog"]')
+      ) {
         return;
       }
       event.preventDefault();
