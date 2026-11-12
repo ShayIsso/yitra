@@ -152,17 +152,86 @@ describe.skipIf(!isThrowaway)("the suspected-transfer inbox on Postgres", () => 
       .set({ categoryId: incomeCategoryId, categorySource: "memory" })
       .where(eq(schema.transactions.id, ROW));
 
-    await drizzleInboxStore.confirmGroup(GROUP, new Date(), {
-      txnId: ROW,
-      categoryId: transferCategoryId,
-      categorySource: "user",
-      keepUserCategory: true,
-    });
+    await drizzleInboxStore.confirmGroup(GROUP, new Date(), [
+      {
+        txnId: ROW,
+        categoryId: transferCategoryId,
+        categorySource: "user",
+        keepUserCategory: true,
+      },
+    ]);
 
     const row = await stored();
     expect(row.reconciliationConfirmedAt).not.toBeNull();
     expect(row.categoryId).toBe(incomeCategoryId);
     expect(row.categorySource).toBe("memory");
+  });
+
+  describe("an own-account transfer pair (P3)", () => {
+    const INCOMING = "00000000-0000-4000-8000-000000000012";
+
+    const addIncomingLeg = async () => {
+      const [{ bankAccountId }] = await db
+        .select({ bankAccountId: schema.transactions.bankAccountId })
+        .from(schema.transactions)
+        .where(eq(schema.transactions.id, ROW));
+      const [{ credentialId }] = await db
+        .select({ credentialId: schema.bankAccounts.credentialId })
+        .from(schema.bankAccounts)
+        .where(eq(schema.bankAccounts.id, bankAccountId));
+      const [other] = await db
+        .insert(schema.bankAccounts)
+        .values({ credentialId, accountNumber: "111" })
+        .returning({ id: schema.bankAccounts.id });
+      await db.insert(schema.transactions).values({
+        id: INCOMING,
+        bankAccountId: other.id,
+        date: "2026-03-10",
+        processedDate: "2026-03-10",
+        description: "העברה לחשבון שלי",
+        originalAmount: "800.00",
+        originalCurrency: "ILS",
+        chargedAmount: "800.00",
+        type: "normal",
+        status: "completed",
+        reconciliationGroupId: GROUP,
+        reconciliationRole: "transfer_pair",
+        reconciliationConfidence: 0.9,
+      });
+    };
+
+    const storedLeg = async (id: string) =>
+      (await db.select().from(schema.transactions).where(eq(schema.transactions.id, id)))[0];
+
+    it("approving flips both legs to internal transfers as the user's decision", async () => {
+      await addIncomingLeg();
+
+      await approveGroup(GROUP, drizzleInboxStore);
+
+      for (const id of [ROW, INCOMING]) {
+        const leg = await storedLeg(id);
+        expect(leg.categoryId).toBe(transferCategoryId);
+        expect(leg.categorySource).toBe("user");
+        expect(leg.reconciliationConfirmedAt).not.toBeNull();
+      }
+    });
+
+    it("flips a leg carrying a memory category too, so no half-flip is left in the totals", async () => {
+      await addIncomingLeg();
+      await db
+        .update(schema.transactions)
+        .set({ categoryId: incomeCategoryId, categorySource: "memory" })
+        .where(eq(schema.transactions.id, INCOMING));
+
+      await approveGroup(GROUP, drizzleInboxStore);
+
+      for (const id of [ROW, INCOMING]) {
+        expect(await storedLeg(id)).toMatchObject({
+          categoryId: transferCategoryId,
+          categorySource: "user",
+        });
+      }
+    });
   });
 
   it("keeps a category the user chose after the row was queued", async () => {

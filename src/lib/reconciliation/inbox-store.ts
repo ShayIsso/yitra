@@ -196,30 +196,33 @@ export const drizzleInboxStore: InboxStore = {
     return map;
   },
 
-  async confirmGroup(groupId: string, now: Date, flip: TransferFlip | null): Promise<void> {
+  async confirmGroup(groupId: string, now: Date, flips: TransferFlip[]): Promise<void> {
     await db.transaction(async (tx) => {
       await tx
         .update(transactions)
         .set({ reconciliationConfirmedAt: now })
         .where(eq(transactions.reconciliationGroupId, groupId));
-      if (!flip) return;
-      const flipped = await tx
-        .update(transactions)
-        .set({ categoryId: flip.categoryId, categorySource: flip.categorySource })
-        .where(
-          and(
-            eq(transactions.id, flip.txnId),
-            eq(transactions.reconciliationGroupId, groupId),
-            flip.keepUserCategory
-              ? or(
-                  isNull(transactions.categorySource),
-                  notInArray(transactions.categorySource, ["user", "memory"]),
-                )
-              : undefined,
-          ),
-        )
-        .returning({ id: transactions.id });
-      if (flipped.length > 0) await supersedeOpenSuggestions([flip.txnId], tx);
+      const flippedIds: string[] = [];
+      for (const flip of flips) {
+        const flipped = await tx
+          .update(transactions)
+          .set({ categoryId: flip.categoryId, categorySource: flip.categorySource })
+          .where(
+            and(
+              eq(transactions.id, flip.txnId),
+              eq(transactions.reconciliationGroupId, groupId),
+              flip.keepUserCategory
+                ? or(
+                    isNull(transactions.categorySource),
+                    notInArray(transactions.categorySource, ["user", "memory"]),
+                  )
+                : undefined,
+            ),
+          )
+          .returning({ id: transactions.id });
+        flippedIds.push(...flipped.map((f) => f.id));
+      }
+      if (flippedIds.length > 0) await supersedeOpenSuggestions(flippedIds, tx);
     });
   },
 

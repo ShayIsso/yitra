@@ -46,7 +46,16 @@ describe("what a reconciliation group is, as the inbox presents it", () => {
       kind: "transfer",
       title: "העברה בין חשבונות",
       legs: [out, back],
+      ownAccount: true,
     });
+  });
+
+  it("tells a mirror (same sign) from an own-account transfer (opposite signs)", () => {
+    const view = reconciliationGroupView([
+      member("transfer_pair", -500, "a"),
+      member("transfer_pair", -500, "b"),
+    ]);
+    expect(view).toMatchObject({ kind: "transfer", ownAccount: false });
   });
 
   it("is a suspected transfer when a single row has no counterpart", () => {

@@ -25,6 +25,7 @@ import {
   confidenceText,
   directionText,
   isBulkApprovable,
+  OWN_ACCOUNT_TRANSFER_CONSEQUENCE,
   reconciliationGroupView,
   suspectedTransferConsequence,
   type PendingGroup,
@@ -228,6 +229,12 @@ function GroupCard({
         {view.kind === "suspected-transfer" && (
           <p className="text-muted-foreground text-body mx-4 mb-3 text-pretty">
             {suspectedTransferConsequence(view.row)}
+          </p>
+        )}
+
+        {view.kind === "transfer" && view.ownAccount && (
+          <p className="text-muted-foreground text-body mx-4 mb-3 text-pretty">
+            {OWN_ACCOUNT_TRANSFER_CONSEQUENCE}
           </p>
         )}
 
