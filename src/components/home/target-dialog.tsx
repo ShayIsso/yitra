@@ -50,10 +50,13 @@ export default function TargetDialog({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [value, setValue] = React.useState<number | null>(suggested);
   const [error, setError] = React.useState<string | null>(null);
-  const [savings, setSavings] = React.useState<SavingsRead>(() =>
-    knownTargets ? { status: "ready", value: knownTargets.savingsTarget } : { status: "loading" },
-  );
+  const [ownRead, setOwnRead] = React.useState<SavingsRead>({ status: "loading" });
   const needsRead = knownTargets === null;
+  // Whatever the sections read wins, even when it lands mid-way through or
+  // after a failed read of our own.
+  const savings: SavingsRead = knownTargets
+    ? { status: "ready", value: knownTargets.savingsTarget }
+    : ownRead;
   const [pending, startTransition] = React.useTransition();
 
   React.useEffect(() => {
@@ -64,10 +67,10 @@ export default function TargetDialog({
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((body: { monthlyTargets: MonthlyTargetsData }) =>
-        setSavings({ status: "ready", value: body.monthlyTargets.savingsTarget }),
+        setOwnRead({ status: "ready", value: body.monthlyTargets.savingsTarget }),
       )
       .catch(() => {
-        if (!controller.signal.aborted) setSavings({ status: "failed" });
+        if (!controller.signal.aborted) setOwnRead({ status: "failed" });
       });
     return () => controller.abort();
   }, [needsRead, month.year, month.month]);

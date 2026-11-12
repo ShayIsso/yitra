@@ -14,6 +14,13 @@ export type OutlookOf<S extends OutlookResponse["state"]> = Extract<OutlookRespo
 export type ActiveOutlook = OutlookOf<"active">;
 export type ClosedOutlook = OutlookOf<"closed">;
 
+/** When the figures were synced and whether that is stale; none before a first success. */
+export function syncedAsOf(o: OutlookResponse | null): { asOf: string | null; stale: boolean } {
+  return o !== null && "asOf" in o
+    ? { asOf: o.asOf, stale: o.stale }
+    : { asOf: null, stale: false };
+}
+
 export type ClosedVerdict = {
   balance: "surplus" | "deficit" | "even" | "empty";
   /** How far income and expenses ended apart: the net's size, its sign told in words. */

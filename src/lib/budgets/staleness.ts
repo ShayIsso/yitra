@@ -5,7 +5,6 @@
  */
 export const STALE_SYNC_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 
-/** Whether a sync `ageMs` old leaves the outlook stale. */
 export function isSyncStale(ageMs: number): boolean {
   return ageMs > STALE_SYNC_AFTER_MS;
 }

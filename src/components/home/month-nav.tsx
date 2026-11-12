@@ -14,7 +14,7 @@ import {
 } from "./month";
 
 const CHEVRON =
-  "press grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none disabled:pointer-events-none disabled:opacity-40";
+  "press grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted-foreground";
 
 /**
  * Month navigation: a segmented control between two chevrons. Months run
@@ -41,8 +41,10 @@ export function MonthNav({
         type="button"
         className={CHEVRON}
         aria-label="חודש קודם"
-        disabled={atOldest}
-        onClick={() => onSelect(shiftMonth(selected, -1))}
+        // aria-disabled, not disabled: stepping onto the edge month must not
+        // drop the focused chevron's focus to <body>.
+        aria-disabled={atOldest || undefined}
+        onClick={() => !atOldest && onSelect(shiftMonth(selected, -1))}
       >
         <CaretRightIcon className="size-5" />
       </button>
@@ -80,8 +82,8 @@ export function MonthNav({
         type="button"
         className={CHEVRON}
         aria-label="חודש הבא"
-        disabled={atNewest}
-        onClick={() => onSelect(shiftMonth(selected, 1))}
+        aria-disabled={atNewest || undefined}
+        onClick={() => !atNewest && onSelect(shiftMonth(selected, 1))}
       >
         <CaretLeftIcon className="size-5" />
       </button>

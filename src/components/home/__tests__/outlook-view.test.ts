@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   closedVerdict,
   equationTerms,
+  syncedAsOf,
   type ActiveOutlook,
   type ClosedOutlook,
 } from "@/components/home/outlook-view";
@@ -104,5 +105,19 @@ describe("equationTerms", () => {
   it("keeps an overspent month's negative remaining in the equation", () => {
     const over = active({ spent: 8500, remaining: -1400, overBy: 1400, perDay: 0 });
     expect(equationTerms(over).at(-1)).toEqual({ term: "remaining", amount: -1400 });
+  });
+});
+
+describe("syncedAsOf", () => {
+  it("reads when a month's figures were synced and whether that is stale", () => {
+    expect(syncedAsOf(closed({ stale: true }))).toEqual({
+      asOf: "2026-11-10T08:00:00.000Z",
+      stale: true,
+    });
+  });
+
+  it("has nothing before a first success", () => {
+    expect(syncedAsOf({ state: "no-connection" })).toEqual({ asOf: null, stale: false });
+    expect(syncedAsOf(null)).toEqual({ asOf: null, stale: false });
   });
 });

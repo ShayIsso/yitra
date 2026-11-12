@@ -130,7 +130,8 @@ const TINTS: Tint[] = [
   { text: "--foreground", tint: "--warning", alphas: { light: [0.15], dark: [0.15] } },
   ...(
     [
-      ["--hero-foreground", [0.1, 0.15]],
+      // /20 bounds a quiet button's /10 hover over a /10 note (about /19).
+      ["--hero-foreground", [0.1, 0.15, 0.2]],
       ["--hero-muted", [0.1]],
     ] as const
   ).map(([text, alphas]) => ({
@@ -169,6 +170,11 @@ describe.each([
  */
 const MARK_PAIRS: [mark: string, surface: string][] = [["--attention", "--hero"]];
 
+/** Translucent marks: the hero's focus ring is hero-foreground at /60. */
+const MARK_TINTS: [mark: string, alpha: number, surface: string][] = [
+  ["--hero-foreground", 0.6, "--hero"],
+];
+
 describe.each([
   ["light", light],
   ["dark", dark],
@@ -177,6 +183,11 @@ describe.each([
     expect(
       contrast(channels(hex(tokens, mark)), channels(hex(tokens, surface))),
     ).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(MARK_TINTS)("%s/%s on %s meets 3:1", (mark, alpha, surface) => {
+    const drawn = composite(hex(tokens, mark), alpha, hex(tokens, surface));
+    expect(contrast(drawn, channels(hex(tokens, surface)))).toBeGreaterThanOrEqual(3);
   });
 });
 

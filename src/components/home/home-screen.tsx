@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardPanel } from "@/components/dashboard-panel";
 import { awaitsCode } from "@/components/bank-status-view";
 import { monthKey } from "@/components/reports/format";
-import { useSyncStream } from "@/components/sync-stream";
+import { useSyncStream, type SyncStreamState } from "@/components/sync-stream";
 import type { MonthlyTargetsData } from "@/lib/budgets";
 import type { Category } from "@/lib/categories";
 import type { SyncRunSummary } from "@/lib/sync/runs";
@@ -34,7 +34,7 @@ import {
   type HomeMonth,
   type MonthRange,
 } from "./month";
-import type { OutlookResponse } from "./outlook-view";
+import { syncedAsOf, type OutlookResponse } from "./outlook-view";
 
 // Both dialogs open on demand only, so they stay out of the home route's first load.
 const OtpSheet = dynamic(() => import("@/components/sync-otp-sheet").then((m) => m.OtpSheet), {
@@ -104,6 +104,8 @@ export function HomeScreen({
   const [version, setVersion] = React.useState(0);
   /** Re-reads the outlook alone: a retry, or a poll while a first sync runs elsewhere. */
   const [outlookNudge, setOutlookNudge] = React.useState(0);
+  /** Re-reads everything but the outlook: it just answered that a run elsewhere ended. */
+  const [sectionsNudge, setSectionsNudge] = React.useState(0);
   const [runs, setRuns] = React.useState<SyncRunSummary[] | null>(null);
   /** The monthly targets as the sections last read them; the target dialog writes them back. */
   const [targets, setTargets] = React.useState<MonthlyTargetsData | null>(null);
@@ -112,13 +114,12 @@ export function HomeScreen({
   const [targetOpen, setTargetOpen] = React.useState(false);
   const [dismissedOtpBank, setDismissedOtpBank] = React.useState<string | null>(null);
 
-  const refreshAll = React.useCallback(() => {
-    setVersion((v) => v + 1);
-    // The shell's pending-reconciliation badge and the month floor are server-rendered.
-    router.refresh();
-  }, [router]);
+  // The shell's pending-reconciliation badge and the month floor are server-rendered.
+  const refreshServer = React.useCallback(() => router.refresh(), [router]);
 
+  /** The last outlook answer, to see a first sync driven elsewhere end. */
   const lastOutlookRef = React.useRef<OutlookResponse | null>(null);
+  const liveRef = React.useRef(false);
   const outlook = useMonthLoad<MonthOutlookLoad>(
     key,
     `${version}:${outlookNudge}`,
@@ -129,9 +130,14 @@ export function HomeScreen({
       );
       // Ages are measured from when the figures arrived, never from a render.
       setNowMs(Date.now());
-      // A first sync driven elsewhere just ended: everything it imported is
-      // new to the sections and the runs, as after a stream of our own.
-      if (firstSyncRunEnded(lastOutlookRef.current, data)) refreshAll();
+      // A first sync driven elsewhere just ended: what it imported is new to
+      // the sections and the runs too, as after a stream of our own (which
+      // re-reads through `onSettled` instead, hence the live check). Global,
+      // not per month, so an answer later dropped as stale still tells it.
+      if (!liveRef.current && firstSyncRunEnded(lastOutlookRef.current, data)) {
+        setSectionsNudge((n) => n + 1);
+        refreshServer();
+      }
       lastOutlookRef.current = data;
       return { month, outlook: data };
     },
@@ -141,9 +147,17 @@ export function HomeScreen({
     // Every outcome re-reads: a run that dropped mid-way kept what it
     // imported, and a refused start means a run is live elsewhere, which the
     // outlook's progress (and its polling) shows.
-    onSettled: refreshAll,
+    onSettled: () => {
+      lastOutlookRef.current = null;
+      setVersion((v) => v + 1);
+      refreshServer();
+    },
   });
   const stream = sync.state;
+  const live = stream.starting || stream.syncing;
+  React.useEffect(() => {
+    liveRef.current = live;
+  });
 
   React.useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), CLOCK_TICK_MS);
@@ -160,9 +174,8 @@ export function HomeScreen({
         if (!controller.signal.aborted) setRuns((known) => known ?? []);
       });
     return () => controller.abort();
-  }, [version]);
+  }, [version, sectionsNudge]);
 
-  const live = stream.starting || stream.syncing;
   const shown = outlook.data && nowMs !== null ? { ...outlook.data, nowMs } : null;
   const data = shown?.outlook ?? null;
   // The last known outlook decides, so a failed re-read never ends the watch.
@@ -188,7 +201,7 @@ export function HomeScreen({
           setRuns(next);
           setOutlookNudge((n) => n + 1);
         })
-        // A failed poll just waits for the next one.
+        // A failed poll leaves the runs as they were; a safety tick still re-reads the outlook.
         .catch(() => {
           if (safety && !controller.signal.aborted) setOutlookNudge((n) => n + 1);
         });
@@ -220,8 +233,7 @@ export function HomeScreen({
 
   const freshness = homeFreshness({
     runs: runs ?? [],
-    asOf: data && "asOf" in data ? data.asOf : null,
-    stale: data !== null && "stale" in data && data.stale,
+    ...syncedAsOf(data),
     nowMs,
     live: { syncing: live, codeBank },
   });
@@ -230,7 +242,9 @@ export function HomeScreen({
   // The sections load from the start, beside the outlook, but are drawn only
   // once it has answered and isn't a first-run state: nothing flashes for a
   // new user, and sections appended under a settled hero shift nothing.
-  const answered = outlook.data !== null || outlook.failed;
+  // And once the runs are known (or known unknown), so the onboarding card
+  // above the sections never lands after them and pushes them down.
+  const answered = (outlook.data !== null || outlook.failed) && runs !== null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -261,43 +275,14 @@ export function HomeScreen({
           // Keyed by month and state: the entrance plays when the content is
           // new, never on a refetch of the same month (ADR-0015 "Motion").
           <div key={`${monthKey(shown.month)}:${shown.outlook.state}`} className="enter">
-            {(() => {
-              const o = shown.outlook;
-              switch (o.state) {
-                case "no-connection":
-                  return <NoConnectionBody />;
-                case "first-sync":
-                  return (
-                    <FirstSyncHero
-                      outlook={o}
-                      banks={banks}
-                      stream={stream}
-                      onStart={startSync}
-                      onEnterCode={reopenCode}
-                    />
-                  );
-                case "no-target":
-                  return (
-                    <NoTargetBody
-                      outlook={o}
-                      nowMs={shown.nowMs}
-                      onSetTarget={() => setTargetOpen(true)}
-                    />
-                  );
-                case "thin-history":
-                  return (
-                    <ThinHistoryBody
-                      outlook={o}
-                      nowMs={shown.nowMs}
-                      onSetTarget={() => setTargetOpen(true)}
-                    />
-                  );
-                case "active":
-                  return <ActiveBody outlook={o} nowMs={shown.nowMs} />;
-                case "closed":
-                  return <ClosedBody outlook={o} month={shown.month} nowMs={shown.nowMs} />;
-              }
-            })()}
+            <HeroBody
+              shown={shown}
+              banks={banks}
+              stream={stream}
+              onStartSync={startSync}
+              onEnterCode={reopenCode}
+              onSetTarget={() => setTargetOpen(true)}
+            />
           </div>
         )}
       </MonthHero>
@@ -317,9 +302,9 @@ export function HomeScreen({
         <DashboardPanel
           categories={categories}
           month={month}
-          refreshKey={version}
+          refreshKey={`${version}:${sectionsNudge}`}
           visible={answered && !welcoming}
-          lastSyncRuns={runs}
+          lastSyncRuns={runs ?? []}
           onMonthlyTargets={setTargets}
         />
       )}
@@ -352,4 +337,45 @@ export function HomeScreen({
       )}
     </div>
   );
+}
+
+/** The hero's body for the outlook state shown. */
+function HeroBody({
+  shown,
+  banks,
+  stream,
+  onStartSync,
+  onEnterCode,
+  onSetTarget,
+}: {
+  shown: MonthOutlookLoad & { nowMs: number };
+  banks: HomeBank[];
+  stream: SyncStreamState;
+  onStartSync: () => void;
+  onEnterCode: () => void;
+  onSetTarget: () => void;
+}) {
+  const { outlook: o, month, nowMs } = shown;
+  switch (o.state) {
+    case "no-connection":
+      return <NoConnectionBody />;
+    case "first-sync":
+      return (
+        <FirstSyncHero
+          outlook={o}
+          banks={banks}
+          stream={stream}
+          onStart={onStartSync}
+          onEnterCode={onEnterCode}
+        />
+      );
+    case "no-target":
+      return <NoTargetBody outlook={o} nowMs={nowMs} onSetTarget={onSetTarget} />;
+    case "thin-history":
+      return <ThinHistoryBody outlook={o} nowMs={nowMs} onSetTarget={onSetTarget} />;
+    case "active":
+      return <ActiveBody outlook={o} nowMs={nowMs} />;
+    case "closed":
+      return <ClosedBody outlook={o} month={month} nowMs={nowMs} />;
+  }
 }

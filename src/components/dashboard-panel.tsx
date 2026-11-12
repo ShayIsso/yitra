@@ -188,7 +188,9 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
  * The old dashboard's sections below the home hero (#317), for the month the
  * home screen selected. Each later home ticket (#318–#321) replaces part of it.
  * Memoized: the home screen re-renders on every clock tick and sync-stream
- * frame, and nothing here depends on either.
+ * frame, and nothing here depends on either. (A `router.refresh()` after a
+ * settled sync hands new `categories` and re-renders it once, the same moment
+ * `refreshKey` moves anyway.)
  *
  * It loads as soon as it mounts, beside the outlook, but draws nothing until
  * `visible`: the home screen withholds it in a first-run state. `refreshKey`
@@ -206,10 +208,10 @@ export const DashboardPanel = React.memo(function DashboardPanel({
 }: {
   categories: Category[];
   month: HomeMonth;
-  refreshKey: number;
+  refreshKey: string;
   visible: boolean;
-  /** Last run per current institution, or null until the home screen has read them. */
-  lastSyncRuns: SyncRunSummary[] | null;
+  /** Last run per current institution; [] when that read failed (unknown, not "none"). */
+  lastSyncRuns: SyncRunSummary[];
   /** Hands the monthly targets up once read, so the target dialog needn't read them again. */
   onMonthlyTargets: (targets: MonthlyTargetsData) => void;
 }) {
@@ -253,7 +255,7 @@ function DashboardSections({
 }: {
   data: DashboardData;
   categoriesById: Map<string, Category>;
-  lastSyncRuns: SyncRunSummary[] | null;
+  lastSyncRuns: SyncRunSummary[];
 }) {
   const {
     summary,
@@ -307,7 +309,7 @@ function DashboardSections({
   // Balances only appear once a sync has landed, so they cover the bank whose
   // latest run errored after an earlier success (the runs list is last-per-bank).
   const onboardingFacts =
-    lastSyncRuns === null || attention === null
+    attention === null
       ? null
       : {
           // The home screen mounts the sections only with a connected institution.
@@ -551,9 +553,9 @@ function DashboardSections({
 /** The sections' own load failure: calm, with a retry for them alone. */
 function SectionsLoadError({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
   return (
-    <div
+    <Card
       role="alert"
-      className="bg-card flex flex-col items-start gap-3 rounded-xl border border-[color:var(--card-border)] p-4 shadow-[var(--card-shadow)] sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <p className="text-body flex items-center gap-2">
         <WarningCircleIcon weight="fill" className="text-attention-text size-5 shrink-0" />
@@ -568,11 +570,10 @@ function SectionsLoadError({ retrying, onRetry }: { retrying: boolean; onRetry: 
         <ArrowsClockwiseIcon className="size-4" />
         {retrying ? "טוען..." : "נסה שוב"}
       </Button>
-    </div>
+    </Card>
   );
 }
 
-/** The sections' loading state. */
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
