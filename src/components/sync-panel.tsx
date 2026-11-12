@@ -31,6 +31,7 @@ import { useSyncStream, type BankSyncState, type SyncStreamState } from "@/compo
 import { takeFrames } from "@/lib/sse-frames";
 import { bankLabel, bankTrustOf } from "@/lib/bank-registry";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
+import { formatRelativeAge } from "@/components/relative-age";
 import { cn } from "@/lib/utils";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
@@ -69,29 +70,6 @@ export function resolveBankDisplay(
   if (liveState !== undefined) return { source: "live", state: liveState };
   if (lastRun !== undefined) return { source: "persisted", run: lastRun };
   return { source: "none" };
-}
-
-/**
- * Mirrors sync-freshness-pill.tsx's bucket wording (minutes/hours/days) so a
- * persisted row here and the header pill never disagree on how "3 hours ago"
- * reads. Not imported from there: the pill only exports its classifier
- * (`classifySyncFreshness`), not this formatter, and #223's brief keeps that
- * file read-only — duplicating one small clock-free formatter costs less
- * than widening that file's surface for it. Takes `ageMs`, never a `Date`,
- * so it can't reintroduce the `Date.now()`-in-render pattern that is bug
- * #193.
- */
-export function formatRelativeAge(ageMs: number): string {
-  const minutes = Math.floor(ageMs / (60 * 1000));
-  if (minutes < 1) return "לפני פחות מדקה";
-  if (minutes < 60) return `לפני ${minutes} דקות`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `לפני ${hours} שעות`;
-
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "אתמול";
-  return `לפני ${days} ימים`;
 }
 
 // ── SSE-over-fetch framing (#246 — EventSource can't read the 409 status) ───
@@ -156,8 +134,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   // Mounted-only clock seed — SSR and the hydration pass render the
   // no-age form below; classification (and its `new Date()` reads) only
   // runs once this is set, so a clock read never happens in the render
-  // path shared with SSR (bug #193's exact trap; same shape as
-  // sync-freshness-pill.tsx's `nowMs`).
+  // path shared with SSR (bug #193's exact trap).
   const [nowMs, setNowMs] = useState<number | null>(null);
   // The bank whose code prompt the owner closed; reopened from its row.
   const [dismissedOtpBank, setDismissedOtpBank] = useState<string | null>(null);
@@ -173,7 +150,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount flag, mirrors sync-freshness-pill.tsx's nowMs seed
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount flag so SSR and hydration render the clock-free form (bug #193)
     setNowMs(Date.now());
   }, []);
 

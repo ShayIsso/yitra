@@ -80,6 +80,8 @@ const FILL_PAIRS: [text: string, fill: string][] = [
   ["--emerald-foreground", "--emerald"],
   ["--hero-foreground", "--hero"],
   ["--hero-muted", "--hero"],
+  // The hero's light action on hover (home/hero-states.tsx).
+  ["--hero", "--hero-muted"],
   ["--sidebar-foreground", "--sidebar"],
   ["--sidebar-primary-foreground", "--sidebar-primary"],
   ["--sidebar-accent-foreground", "--sidebar-accent"],
@@ -106,7 +108,9 @@ type Tint = {
  * (ui/button.tsx, ui/badge.tsx), the budget chips (budget-status-card.tsx),
  * the toast variants (ui/toast.tsx), the amber count badges, on the hero
  * the entry screens' sheen, current step and control hover
- * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx), and the sand
+ * (onboarding/entry-frame.tsx, onboarding/setup-frame.tsx) and the home
+ * hero's chips, notes and the equation's result term at /15
+ * (home/hero-states.tsx), and the sand
  * washes under the reports' expanded group rows (/40) and the subscriptions'
  * alert panels (/70).
  */
@@ -124,10 +128,16 @@ const TINTS: Tint[] = [
   { text: "--emerald", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
   { text: "--foreground", tint: "--emerald", alphas: { light: [0.1, 0.15], dark: [0.1, 0.15] } },
   { text: "--foreground", tint: "--warning", alphas: { light: [0.15], dark: [0.15] } },
-  ...["--hero-foreground", "--hero-muted"].map((text) => ({
+  ...(
+    [
+      // /20 bounds a quiet button's /10 hover over a /10 note (about /19).
+      ["--hero-foreground", [0.1, 0.15, 0.2]],
+      ["--hero-muted", [0.1]],
+    ] as const
+  ).map(([text, alphas]) => ({
     text,
     tint: "--hero-foreground",
-    alphas: { light: [0.1], dark: [0.1] },
+    alphas: { light: [...alphas], dark: [...alphas] },
     surfaces: ["--hero"],
   })),
   { text: "--foreground", tint: "--muted", alphas: { light: [0.4, 0.7], dark: [0.4, 0.7] } },
@@ -151,6 +161,33 @@ describe.each([
   it.each(tinted)("%s on %s/%s over %s meets WCAG AA (4.5:1)", (text, tint, alpha, surface) => {
     const fill = composite(hex(tokens, tint), alpha, hex(tokens, surface));
     expect(contrast(channels(hex(tokens, text)), fill)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/**
+ * Non-text marks (WCAG 1.4.11, 3:1): the coral status glyphs on the hero
+ * (a failed bank or a code request in the first sync, home/first-sync-hero.tsx).
+ */
+const MARK_PAIRS: [mark: string, surface: string][] = [["--attention", "--hero"]];
+
+/** Translucent marks: the hero's focus ring is hero-foreground at /60. */
+const MARK_TINTS: [mark: string, alpha: number, surface: string][] = [
+  ["--hero-foreground", 0.6, "--hero"],
+];
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("non-text contrast (%s)", (_theme, tokens) => {
+  it.each(MARK_PAIRS)("%s on %s meets 3:1", (mark, surface) => {
+    expect(
+      contrast(channels(hex(tokens, mark)), channels(hex(tokens, surface))),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(MARK_TINTS)("%s/%s on %s meets 3:1", (mark, alpha, surface) => {
+    const drawn = composite(hex(tokens, mark), alpha, hex(tokens, surface));
+    expect(contrast(drawn, channels(hex(tokens, surface)))).toBeGreaterThanOrEqual(3);
   });
 });
 

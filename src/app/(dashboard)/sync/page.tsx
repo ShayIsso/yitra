@@ -11,7 +11,7 @@ import { runsOfCurrentInstitutions } from "@/lib/sync/current-runs";
 
 export default async function SyncPage() {
   // Persisted fallback for SyncPanel's live SSE state (#223) — the same
-  // per-bank read the dashboard's SyncFreshnessPill already uses, so a
+  // per-bank read the home screen's freshness indicator uses, so a
   // failure or otp_skipped run survives a reload instead of only living in
   // this tab's in-memory SSE state.
   const [credentials, allRuns, observedInstitutions] = await Promise.all([

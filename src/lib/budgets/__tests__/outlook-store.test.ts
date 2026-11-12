@@ -414,6 +414,45 @@ describe("getMonthOutlookWithStore", () => {
     });
   });
 
+  // ADR-0013 §4: a stored id the registry no longer knows cannot sync, so it
+  // is not a connected institution (the Sync page and its runs read the same).
+  it("is no-connection when the only credential names a retired institution", async () => {
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({ banks: ["retired-institution"], successes: [] }),
+    );
+    expect(outlook).toEqual({ state: "no-connection" });
+  });
+
+  it("counts only registered institutions toward first-sync progress", async () => {
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({ banks: ["discount", "retired-institution"], successes: [] }),
+    );
+    expect(outlook).toEqual({
+      state: "first-sync",
+      progress: { running: false, banksDone: 0, banksTotal: 1 },
+    });
+  });
+
+  it("is not held stale by a retired institution's old success", async () => {
+    const outlook = await getMonthOutlookWithStore(
+      JUNE,
+      CLOCK,
+      store({
+        banks: ["discount", "max", "retired-institution"],
+        successes: [
+          { bank: "discount", finishedAt: SYNCED },
+          { bank: "max", finishedAt: SYNCED },
+          { bank: "retired-institution", finishedAt: new Date("2026-01-01T08:00:00Z") },
+        ],
+      }),
+    );
+    expect(outlook).toMatchObject({ asOf: SYNCED, stale: false });
+  });
+
   it("is no-connection with no credentials, whatever history remains", async () => {
     const outlook = await getMonthOutlookWithStore(
       JUNE,

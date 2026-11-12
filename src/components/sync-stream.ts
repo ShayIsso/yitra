@@ -260,9 +260,18 @@ export type SyncStream = {
   readonly dismissReconciliation: () => void;
 };
 
+/**
+ * How a start ended. `failed` covers a start that never opened and a stream
+ * that dropped mid-run; rows imported before the drop are kept, so a caller
+ * showing imported data must re-read it either way.
+ */
+export type SyncSettled = "complete" | "refused" | "failed";
+
 export type SyncStreamOptions = {
   /** Runs after `sync_complete` has been applied. */
   readonly onComplete?: () => void;
+  /** Runs once per start, on every outcome except the caller's own abort. */
+  readonly onSettled?: (outcome: SyncSettled) => void;
 };
 
 /**
@@ -290,6 +299,7 @@ export type ConsumeSyncStreamOptions = {
   readonly dispatch: (action: SyncStreamAction) => void;
   /** Runs after `sync_complete` has been dispatched. */
   readonly onComplete: () => void;
+  readonly onSettled?: (outcome: SyncSettled) => void;
 };
 
 /**
@@ -301,6 +311,7 @@ export async function consumeSyncStream({
   controller,
   dispatch,
   onComplete,
+  onSettled,
 }: ConsumeSyncStreamOptions): Promise<void> {
   dispatch({ type: "start_requested" });
   let sawSyncComplete = false;
@@ -316,10 +327,12 @@ export async function consumeSyncStream({
 
     if (res.status === 409) {
       dispatch({ type: "refused", message: refusalMessage(await res.json().catch(() => null)) });
+      onSettled?.("refused");
       return;
     }
     if (!res.ok || !res.body) {
       dispatch({ type: "start_failed" });
+      onSettled?.("failed");
       return;
     }
 
@@ -343,13 +356,17 @@ export async function consumeSyncStream({
         if (hasSyncComplete([event])) {
           sawSyncComplete = true;
           onComplete();
+          onSettled?.("complete");
         }
       }
     }
 
     // sync_complete is the only event that clears `syncing`; treating a clean
     // EOF without it any other way leaves the spinner stuck forever.
-    if (!sawSyncComplete) dispatch({ type: "stream_failed" });
+    if (!sawSyncComplete) {
+      dispatch({ type: "stream_failed" });
+      onSettled?.("failed");
+    }
   } catch {
     const wasIntentional = controller.signal.aborted;
     // Tears the connection down even when *we* threw (a malformed frame), so
@@ -357,6 +374,7 @@ export async function consumeSyncStream({
     controller.abort();
     if (wasIntentional) return;
     dispatch({ type: "stream_failed" });
+    if (!sawSyncComplete) onSettled?.("failed");
   }
 }
 
@@ -369,13 +387,15 @@ export async function consumeSyncStream({
  * request could only be refused by the claim (#246) and would leave the live
  * stream unowned.
  */
-export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStream {
+export function useSyncStream({ onComplete, onSettled }: SyncStreamOptions = {}): SyncStream {
   const [state, dispatch] = useReducer(syncStreamReducer, undefined, initialSyncStreamState);
   const controllerRef = useRef<AbortController | null>(null);
   const onCompleteRef = useRef(onComplete);
+  const onSettledRef = useRef(onSettled);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
+    onSettledRef.current = onSettled;
   });
 
   useEffect(() => () => controllerRef.current?.abort(), []);
@@ -398,6 +418,7 @@ export function useSyncStream({ onComplete }: SyncStreamOptions = {}): SyncStrea
           controller,
           dispatch,
           onComplete: () => onCompleteRef.current?.(),
+          onSettled: (outcome) => onSettledRef.current?.(outcome),
         });
       } finally {
         controllerRef.current = null;

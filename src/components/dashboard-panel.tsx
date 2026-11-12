@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowsClockwiseIcon, WarningCircleIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { BankBadge } from "@/components/bank-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +13,6 @@ import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
 import { SpendingBreakdown } from "@/components/spending-breakdown";
-import { isBankType } from "@/lib/bank-registry";
 import type { Category } from "@/lib/categories";
 import type {
   MonthlySummary,
@@ -30,32 +30,18 @@ import type {
   MonthlyTargetsData,
   SavingsTargetStatus,
 } from "@/lib/budgets";
+import type { HomeMonth } from "@/components/home/month";
+import { useMonthLoad } from "@/components/home/month-load";
+import { monthKey } from "@/components/reports/format";
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
-import { PaceHero, PaceHeroSkeleton } from "@/components/dashboard/pace-hero";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
 import { OnboardingPath } from "@/components/dashboard/onboarding-path";
-import { SyncFreshnessPill } from "@/components/dashboard/sync-freshness-pill";
 import { TrendMiniChart } from "@/components/dashboard/trend-mini-chart";
 import { TopMerchantsCard } from "@/components/dashboard/top-merchants-card";
 import {
   UpcomingChargesCard,
   type UpcomingCharge,
 } from "@/components/dashboard/upcoming-charges-card";
-
-const HEBREW_MONTHS = [
-  "ינואר",
-  "פברואר",
-  "מרץ",
-  "אפריל",
-  "מאי",
-  "יוני",
-  "יולי",
-  "אוגוסט",
-  "ספטמבר",
-  "אוקטובר",
-  "נובמבר",
-  "דצמבר",
-];
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -80,34 +66,16 @@ type DashboardData = {
   spending: CategorySpendingNode[];
   balances: AccountBalance[];
   recent: RecentTransaction[];
-  lastSyncRuns: SyncRunSummary[];
   upcomingCharges: UpcomingCharge[];
   upcomingTotal: number;
   goals: GoalProgressCardData[];
   goalsSurplus: number;
   budgetsSummary: BudgetsSummaryResponse;
+  /** The monthly targets as read, or null when that read failed (the fallback is not the truth). */
+  monthlyTargets: MonthlyTargetsData | null;
   attention: AttentionCounts | null;
   topMerchants: TopMerchant[];
   trend: TrendsMonthPoint[];
-  /** Null when the credentials fetch failed. Only existence is read (#264). */
-  credentialCount: number | null;
-};
-
-const EMPTY_DASHBOARD_DATA: DashboardData = {
-  summary: null,
-  spending: [],
-  balances: [],
-  recent: [],
-  lastSyncRuns: [],
-  upcomingCharges: [],
-  upcomingTotal: 0,
-  goals: [],
-  goalsSurplus: 0,
-  budgetsSummary: EMPTY_BUDGETS_SUMMARY,
-  attention: null,
-  topMerchants: [],
-  trend: [],
-  credentialCount: null,
 };
 
 type GoalsResponse = {
@@ -117,35 +85,36 @@ type GoalsResponse = {
 
 const EMPTY_GOALS_RESPONSE: GoalsResponse = { goals: [], surplus: 0 };
 
-async function fetchDashboardData(year: number, month: number): Promise<DashboardData> {
+async function fetchDashboardData(
+  year: number,
+  month: number,
+  signal: AbortSignal,
+): Promise<DashboardData> {
+  const get = (url: string) => fetch(url, { signal });
   const [
     summaryRes,
     spendingRes,
     balancesRes,
     recentRes,
-    syncRunsRes,
     upcomingRes,
     goalsRes,
     budgetsSummaryRes,
     attentionRes,
     topMerchantsRes,
     trendRes,
-    credentialsRes,
   ] = await Promise.all([
-    fetch(`/api/analytics/monthly?year=${year}&month=${month}`),
-    fetch(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
-    fetch(`/api/analytics/balances`),
+    get(`/api/analytics/monthly?year=${year}&month=${month}`),
+    get(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
+    get(`/api/analytics/balances`),
     // 8, not 15: the A′ layout puts the recent list in a half-width column
     // beside Upcoming, and a 15-row column dwarfs it. "צפה בהכל" carries the rest.
-    fetch(`/api/analytics/recent?limit=8`),
-    fetch(`/api/sync-runs`),
-    fetch(`/api/recurring-upcoming`),
-    fetch(`/api/goals`),
-    fetch(`/api/budgets-summary?year=${year}&month=${month}`),
-    fetch(`/api/attention-counts`),
-    fetch(`/api/analytics/top-merchants?year=${year}&month=${month}`),
-    fetch(`/api/reports/trends?range=12`),
-    fetch(`/api/credentials`),
+    get(`/api/analytics/recent?limit=8`),
+    get(`/api/recurring-upcoming`),
+    get(`/api/goals`),
+    get(`/api/budgets-summary?year=${year}&month=${month}`),
+    get(`/api/attention-counts`),
+    get(`/api/analytics/top-merchants?year=${year}&month=${month}`),
+    get(`/api/reports/trends?range=12`),
   ]);
 
   const [
@@ -153,27 +122,25 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     spending,
     balances,
     recent,
-    lastSyncRuns,
     upcomingData,
     goalsData,
     budgetsSummary,
     attention,
     topMerchants,
     trendReport,
-    credentials,
   ] = await Promise.all([
     summaryRes.ok ? summaryRes.json() : null,
     spendingRes.ok ? spendingRes.json() : [],
     balancesRes.ok ? balancesRes.json() : [],
     recentRes.ok ? recentRes.json() : [],
-    syncRunsRes.ok ? syncRunsRes.json() : [],
     upcomingRes.ok ? upcomingRes.json() : { upcoming: [], total: 0 },
     goalsRes.ok ? (goalsRes.json() as Promise<GoalsResponse>) : EMPTY_GOALS_RESPONSE,
-    budgetsSummaryRes.ok ? budgetsSummaryRes.json() : EMPTY_BUDGETS_SUMMARY,
+    budgetsSummaryRes.ok
+      ? (budgetsSummaryRes.json() as Promise<BudgetsSummaryResponse>)
+      : EMPTY_BUDGETS_SUMMARY,
     attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
     topMerchantsRes.ok ? topMerchantsRes.json() : [],
     trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
-    credentialsRes.ok ? (credentialsRes.json() as Promise<{ bankType: string }[]>) : null,
   ]);
 
   return {
@@ -181,17 +148,15 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     spending,
     balances,
     recent,
-    lastSyncRuns,
     upcomingCharges: upcomingData.upcoming ?? [],
     upcomingTotal: upcomingData.total ?? 0,
     goals: goalsData.goals ?? [],
     goalsSurplus: goalsData.surplus ?? 0,
     budgetsSummary,
+    monthlyTargets: budgetsSummaryRes.ok ? budgetsSummary.monthlyTargets : null,
     attention,
     topMerchants,
     trend: trendReport?.months ?? [],
-    // A credential for a retired institution cannot sync, so it is not "connected".
-    credentialCount: credentials?.filter((c) => isBankType(c.bankType)).length ?? null,
   };
 }
 
@@ -219,45 +184,84 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-export function DashboardPanel({ categories }: { categories: Category[] }) {
-  const now = new Date();
-  const [year, setYear] = React.useState(now.getFullYear());
-  const [month, setMonth] = React.useState(now.getMonth() + 1);
-  const [data, setData] = React.useState<DashboardData>(EMPTY_DASHBOARD_DATA);
-  const [loading, setLoading] = React.useState(true);
+/**
+ * The old dashboard's sections below the home hero (#317), for the month the
+ * home screen selected. Each later home ticket (#318–#321) replaces part of it.
+ * Memoized: the home screen re-renders on every clock tick and sync-stream
+ * frame, and nothing here depends on either. (A `router.refresh()` after a
+ * settled sync hands new `categories` and re-renders it once, the same moment
+ * `refreshKey` moves anyway.)
+ *
+ * It loads as soon as it mounts, beside the outlook, but draws nothing until
+ * `visible`: the home screen withholds it in a first-run state. `refreshKey`
+ * changes when the data changed (a target saved, a sync settled); a refetch of
+ * the same month keeps the sections on screen, and only a month change shows
+ * the skeleton.
+ */
+export const DashboardPanel = React.memo(function DashboardPanel({
+  categories,
+  month,
+  refreshKey,
+  visible,
+  lastSyncRuns,
+  onMonthlyTargets,
+}: {
+  categories: Category[];
+  month: HomeMonth;
+  refreshKey: string;
+  visible: boolean;
+  /** Last run per current institution; [] when that read failed (unknown, not "none"). */
+  lastSyncRuns: SyncRunSummary[];
+  /** Hands the monthly targets up once read, so the target dialog needn't read them again. */
+  onMonthlyTargets: (targets: MonthlyTargetsData) => void;
+}) {
+  const { year, month: monthNumber } = month;
+  const [attempt, setAttempt] = React.useState(0);
+  const load = useMonthLoad(monthKey(month), `${refreshKey}:${attempt}`, (signal) =>
+    // A microtask later: child effects run before their parent's, and the
+    // home screen's outlook request (the hero, first on screen) must not
+    // queue behind these eleven on the browser's per-host connection limit.
+    Promise.resolve().then(() => fetchDashboardData(year, monthNumber, signal)),
+  );
+  const data = load.current ? load.data : null;
+  const monthlyTargets = load.data?.monthlyTargets ?? null;
 
   React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- removed during Phase 2 Server Actions migration (see PRD issue #35)
-    setLoading(true);
-    fetchDashboardData(year, month)
-      .then(setData)
-      .finally(() => setLoading(false));
-  }, [year, month]);
+    if (monthlyTargets) onMonthlyTargets(monthlyTargets);
+  }, [monthlyTargets, onMonthlyTargets]);
 
-  function prevMonth() {
-    if (month === 1) {
-      setMonth(12);
-      setYear((y) => y - 1);
-    } else {
-      setMonth((m) => m - 1);
-    }
+  const categoriesById = React.useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
+
+  if (!visible) return null;
+  if (data === null) {
+    return load.failed ? (
+      <SectionsLoadError retrying={load.pending} onRetry={() => setAttempt((a) => a + 1)} />
+    ) : (
+      <DashboardSkeleton />
+    );
   }
+  return (
+    <DashboardSections data={data} categoriesById={categoriesById} lastSyncRuns={lastSyncRuns} />
+  );
+});
 
-  function nextMonth() {
-    if (month === 12) {
-      setMonth(1);
-      setYear((y) => y + 1);
-    } else {
-      setMonth((m) => m + 1);
-    }
-  }
-
+function DashboardSections({
+  data,
+  categoriesById,
+  lastSyncRuns,
+}: {
+  data: DashboardData;
+  categoriesById: Map<string, Category>;
+  lastSyncRuns: SyncRunSummary[];
+}) {
   const {
     summary,
     spending,
     balances,
     recent,
-    lastSyncRuns,
     upcomingCharges,
     upcomingTotal,
     goals,
@@ -266,16 +270,11 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
     attention,
     topMerchants,
     trend,
-    credentialCount,
   } = data;
 
   // Budgets only ever attach to expense-type categories (src/lib/budgets
   // enforces this at write time), so this lookup only ever needs to resolve
   // an expense category's display name/color for the chip row.
-  const categoriesById = React.useMemo(
-    () => new Map(categories.map((c) => [c.id, c])),
-    [categories],
-  );
   const budgetChips: BudgetChipData[] = React.useMemo(
     () =>
       budgetsSummary.budgets.map(({ budget, pace }) => {
@@ -310,10 +309,11 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
   // Balances only appear once a sync has landed, so they cover the bank whose
   // latest run errored after an earlier success (the runs list is last-per-bank).
   const onboardingFacts =
-    credentialCount === null || attention === null
+    attention === null
       ? null
       : {
-          hasCredential: credentialCount > 0,
+          // The home screen mounts the sections only with a connected institution.
+          hasCredential: true,
           hasSuccessfulSync:
             lastSyncRuns.some((run) => run.status === "success") || balances.length > 0,
           uncategorizedCount: attention.uncategorized,
@@ -321,72 +321,9 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
 
   return (
     <div className="space-y-6">
-      {/*
-       * .stagger is scoped to this month-nav block only — it doesn't depend on
-       * `loading`, so this wrapper's children never remount on the month-strip
-       * refetch below. (The sync freshness pill lives *inside* the month-nav
-       * child, so it doesn't occupy a stagger position of its own.) The data
-       * slots past this point DO remount every refetch (the loading ternary
-       * swaps their JSX), so they stay unanimated (#202).
-       */}
-      <div className="stagger space-y-6">
-        {/* Header — month navigation + sync-freshness pill */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-bold tracking-tight">לוח בקרה</h2>
-          {/* Stacked on phones: the pill's text grows after mount, and side by side
-              it would wrap the row and shift the page below (CLS). */}
-          <div className="flex items-center gap-3 max-sm:flex-col max-sm:items-start">
-            <SyncFreshnessPill runs={lastSyncRuns} />
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={nextMonth} aria-label="חודש הבא">
-                <ChevronRight className="size-4" />
-              </Button>
-              <span className="min-w-32 text-center text-sm font-medium">
-                {HEBREW_MONTHS[month - 1]} {year}
-              </span>
-              <Button variant="outline" size="icon" onClick={prevMonth} aria-label="חודש קודם">
-                <ChevronLeft className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <OnboardingPath facts={onboardingFacts} />
 
-      {!loading && <OnboardingPath facts={onboardingFacts} />}
-
-      {loading ? (
-        <div className="space-y-6">
-          {/* Pace hero + KPI band skeletons keep the loaded rows' heights, so
-              the swap to content does not shift the page (CLS). */}
-          <PaceHeroSkeleton />
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {KPI_LABELS.map((label) => (
-              <KpiTile key={label} label={label}>
-                <Skeleton className="h-8 w-28" />
-                {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
-              </KpiTile>
-            ))}
-          </div>
-          {/* Breakdown skeleton */}
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-5 w-40" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-64 w-full" />
-            </CardContent>
-          </Card>
-          {/* Recent transactions skeleton */}
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={`sk-tx-${i}`} className="flex items-center justify-between px-1 py-2">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : hasNoData ? (
+      {hasNoData ? (
         <Card>
           <CardContent className="p-0">
             <EmptyState
@@ -400,8 +337,6 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
       ) : (
         <div className="space-y-6 transition-opacity duration-150">
           {/* ── Monthly band — everything below is scoped to the month strip ── */}
-
-          <PaceHero pace={budgetsSummary.expenseTargetPace} />
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <KpiTile label={KPI_LABELS[0]}>
@@ -611,6 +546,65 @@ export function DashboardPanel({ categories }: { categories: Category[] }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The sections' own load failure: calm, with a retry for them alone. */
+function SectionsLoadError({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  return (
+    <Card
+      role="alert"
+      className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="text-body flex items-center gap-2">
+        <WarningCircleIcon weight="fill" className="text-attention-text size-5 shrink-0" />
+        לא הצלחנו לטעון את שאר הנתונים של החודש.
+      </p>
+      <Button
+        variant="outline"
+        className="h-11 gap-1.5 md:h-9"
+        disabled={retrying}
+        onClick={onRetry}
+      >
+        <ArrowsClockwiseIcon className="size-4" />
+        {retrying ? "טוען..." : "נסה שוב"}
+      </Button>
+    </Card>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* KPI band skeletons keep the loaded rows' heights, so the swap to
+          content does not shift the page (CLS). */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {KPI_LABELS.map((label) => (
+          <KpiTile key={label} label={label}>
+            <Skeleton className="h-8 w-28" />
+            {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
+          </KpiTile>
+        ))}
+      </div>
+      {/* Breakdown skeleton */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+      {/* Recent transactions skeleton */}
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={`sk-tx-${i}`} className="flex items-center justify-between px-1 py-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

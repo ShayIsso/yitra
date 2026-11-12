@@ -27,12 +27,9 @@ import {
 } from "@/lib/analytics";
 import { israelCalendarDay } from "@/lib/calendar";
 import { isMonthClosed, monthElapsed, type YearMonth } from "./pace";
+import { isSyncStale } from "./staleness";
 
-/**
- * Last successful sync older than this makes the outlook stale (#312 "stale =
- * last successful sync older than 2 days").
- */
-export const STALE_SYNC_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
+export { STALE_SYNC_AFTER_MS } from "./staleness";
 
 /**
  * History is thin below this many complete prior months with expense data: no
@@ -193,6 +190,9 @@ export type MonthOutlook =
       net: number;
       target: number | null;
       overBy: number | null;
+      /** A closed month still stands on the last sync: its rows can arrive days late. */
+      asOf: Date;
+      stale: boolean;
     };
 
 /**
@@ -367,6 +367,8 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
   }
 
   const { month, today, target } = input;
+  const asOf = input.lastSuccessfulSyncAt;
+  const stale = isSyncStale(input.now.getTime() - asOf.getTime());
 
   if (isMonthClosed(month, today)) {
     const summary = wholeMonthSummary(input.rows, month);
@@ -378,6 +380,8 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
       target,
       overBy:
         target !== null && summary.expenses > target ? toAgorot(summary.expenses - target) : null,
+      asOf,
+      stale,
     };
   }
 
@@ -388,8 +392,6 @@ export function monthOutlook(input: MonthOutlookInput): MonthOutlook {
 
   const counted = countedRows(input.rows, month, today);
   const spent = computeMonthlySummary(counted).expenses;
-  const asOf = input.lastSuccessfulSyncAt;
-  const stale = input.now.getTime() - asOf.getTime() > STALE_SYNC_AFTER_MS;
   const usualMonth = usualMonthOf(input);
 
   if (target === null) {

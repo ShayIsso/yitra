@@ -527,6 +527,8 @@ describe("monthOutlook — closed month", () => {
       net: 3000,
       target: 6000,
       overBy: 1000,
+      asOf: new Date("2026-06-15T06:00:00Z"),
+      stale: false,
     });
   });
 
@@ -542,6 +544,17 @@ describe("monthOutlook — closed month", () => {
       net: 3000,
       target: null,
       overBy: null,
+      asOf: new Date("2026-06-15T06:00:00Z"),
+      stale: false,
+    });
+  });
+
+  it("is anchored to the last successful sync, which can be stale", () => {
+    const syncedAt = new Date("2026-06-12T08:00:00Z");
+    expect(may({ lastSuccessfulSyncAt: syncedAt })).toMatchObject({
+      state: "closed",
+      asOf: syncedAt,
+      stale: true,
     });
   });
 

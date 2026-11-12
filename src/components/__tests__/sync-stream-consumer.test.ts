@@ -30,13 +30,15 @@ async function consume(
 ) {
   const actions: SyncStreamAction[] = [];
   const onComplete = vi.fn();
+  const onSettled = vi.fn();
   await consumeSyncStream({
     fetchImpl: typeof response === "function" ? response : async () => response,
     controller: controller ?? new AbortController(),
     dispatch: (action) => actions.push(action),
     onComplete,
+    onSettled,
   });
-  return { actions, types: actions.map((a) => a.type), onComplete };
+  return { actions, types: actions.map((a) => a.type), onComplete, onSettled };
 }
 
 describe("consuming the sync stream", () => {
@@ -117,11 +119,39 @@ describe("consuming the sync stream", () => {
 
   it("reports nothing more when the consumer aborted on purpose", async () => {
     const controller = new AbortController();
-    const { types } = await consume(async () => {
+    const { types, onSettled } = await consume(async () => {
       controller.abort();
       throw new DOMException("aborted", "AbortError");
     }, controller);
     expect(types).toEqual(["start_requested"]);
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+});
+
+describe("settling a run", () => {
+  it("settles as complete once sync_complete arrives", async () => {
+    const { onSettled } = await consume(streamOf([complete]));
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith("complete");
+  });
+
+  it("settles as failed when the stream drops before sync_complete, since imported rows are kept", async () => {
+    const { onSettled } = await consume(streamOf([frame({ type: "bank_complete", bank: BANK })]));
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith("failed");
+  });
+
+  it("settles as failed when the connection breaks mid-stream", async () => {
+    const { onSettled } = await consume(streamOf(["data: {not json\n\n"]));
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith("failed");
+  });
+
+  it("settles as failed when the start itself fails", async () => {
+    const { onSettled } = await consume(new Response("nope", { status: 500 }));
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith("failed");
+  });
+
+  it("settles as refused when a run is already live elsewhere", async () => {
+    const { onSettled } = await consume(new Response("{}", { status: 409 }));
+    expect(onSettled).toHaveBeenCalledExactlyOnceWith("refused");
   });
 });
 
