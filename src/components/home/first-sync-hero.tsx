@@ -9,7 +9,7 @@ import {
   PauseIcon,
   WarningCircleIcon,
 } from "@/components/icons";
-import { liveBankStatus, type BankStatusIcon } from "@/components/bank-status-view";
+import { awaitsCode, liveBankStatus, type BankStatusIcon } from "@/components/bank-status-view";
 import type { SyncStreamState } from "@/components/sync-stream";
 import { bankLabel } from "@/lib/bank-registry";
 import { cn } from "@/lib/utils";
@@ -61,18 +61,22 @@ function Bar({ value }: { value: number }) {
  * shows live per-bank progress from the sync stream (`useSyncStream`, the same
  * consumer as the Sync page and the wizard). A run driven elsewhere — another
  * tab, the scheduler — has no stream here, so the outlook's own count is shown
- * and the home screen polls it. With no run at all, one tap starts it.
+ * and the home screen polls it. With no run at all, one tap starts it. A bank
+ * waiting for a one-time code keeps an action to reopen the code prompt: the
+ * freshness indicator, its other way back, is hidden in this state.
  */
 export function FirstSyncHero({
   outlook,
   banks,
   stream,
   onStart,
+  onEnterCode,
 }: {
   outlook: OutlookOf<"first-sync">;
   banks: readonly HomeBank[];
   stream: SyncStreamState;
   onStart: () => void;
+  onEnterCode: () => void;
 }) {
   const ours = stream.starting || stream.syncing || Object.keys(stream.bankStates).length > 0;
   const live = stream.starting || stream.syncing;
@@ -125,6 +129,16 @@ export function FirstSyncHero({
                   </span>
                 </div>
                 {view.progress !== null && <Bar value={view.progress} />}
+                {awaitsCode(stream.bankStates[bank.bankType], stream.otp[bank.bankType]) && (
+                  <button
+                    type="button"
+                    onClick={onEnterCode}
+                    className={cn(HERO_BUTTON, "self-start")}
+                  >
+                    <KeyIcon className="size-5" />
+                    הזנת קוד
+                  </button>
+                )}
               </li>
             );
           })}

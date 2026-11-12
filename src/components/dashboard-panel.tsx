@@ -11,7 +11,6 @@ import { EmptyState } from "@/components/empty-state";
 import { Amount } from "@/components/ui/amount";
 import { cn } from "@/lib/utils";
 import { SpendingBreakdown } from "@/components/spending-breakdown";
-import { isBankType } from "@/lib/bank-registry";
 import type { Category } from "@/lib/categories";
 import type {
   MonthlySummary,
@@ -30,6 +29,8 @@ import type {
   SavingsTargetStatus,
 } from "@/lib/budgets";
 import type { HomeMonth } from "@/components/home/month";
+import { useMonthLoad } from "@/components/home/month-load";
+import { monthKey } from "@/components/reports/format";
 import type { TrendsMonthPoint, TrendsReport } from "@/lib/reports";
 import { AttentionCounters, type AttentionCounts } from "@/components/dashboard/attention-counters";
 import { OnboardingPath } from "@/components/dashboard/onboarding-path";
@@ -63,7 +64,6 @@ type DashboardData = {
   spending: CategorySpendingNode[];
   balances: AccountBalance[];
   recent: RecentTransaction[];
-  lastSyncRuns: SyncRunSummary[];
   upcomingCharges: UpcomingCharge[];
   upcomingTotal: number;
   goals: GoalProgressCardData[];
@@ -72,25 +72,6 @@ type DashboardData = {
   attention: AttentionCounts | null;
   topMerchants: TopMerchant[];
   trend: TrendsMonthPoint[];
-  /** Null when the credentials fetch failed. Only existence is read (#264). */
-  credentialCount: number | null;
-};
-
-const EMPTY_DASHBOARD_DATA: DashboardData = {
-  summary: null,
-  spending: [],
-  balances: [],
-  recent: [],
-  lastSyncRuns: [],
-  upcomingCharges: [],
-  upcomingTotal: 0,
-  goals: [],
-  goalsSurplus: 0,
-  budgetsSummary: EMPTY_BUDGETS_SUMMARY,
-  attention: null,
-  topMerchants: [],
-  trend: [],
-  credentialCount: null,
 };
 
 type GoalsResponse = {
@@ -100,35 +81,36 @@ type GoalsResponse = {
 
 const EMPTY_GOALS_RESPONSE: GoalsResponse = { goals: [], surplus: 0 };
 
-async function fetchDashboardData(year: number, month: number): Promise<DashboardData> {
+async function fetchDashboardData(
+  year: number,
+  month: number,
+  signal: AbortSignal,
+): Promise<DashboardData> {
+  const get = (url: string) => fetch(url, { signal });
   const [
     summaryRes,
     spendingRes,
     balancesRes,
     recentRes,
-    syncRunsRes,
     upcomingRes,
     goalsRes,
     budgetsSummaryRes,
     attentionRes,
     topMerchantsRes,
     trendRes,
-    credentialsRes,
   ] = await Promise.all([
-    fetch(`/api/analytics/monthly?year=${year}&month=${month}`),
-    fetch(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
-    fetch(`/api/analytics/balances`),
+    get(`/api/analytics/monthly?year=${year}&month=${month}`),
+    get(`/api/analytics/spending-rollup?year=${year}&month=${month}`),
+    get(`/api/analytics/balances`),
     // 8, not 15: the A′ layout puts the recent list in a half-width column
     // beside Upcoming, and a 15-row column dwarfs it. "צפה בהכל" carries the rest.
-    fetch(`/api/analytics/recent?limit=8`),
-    fetch(`/api/sync-runs`),
-    fetch(`/api/recurring-upcoming`),
-    fetch(`/api/goals`),
-    fetch(`/api/budgets-summary?year=${year}&month=${month}`),
-    fetch(`/api/attention-counts`),
-    fetch(`/api/analytics/top-merchants?year=${year}&month=${month}`),
-    fetch(`/api/reports/trends?range=12`),
-    fetch(`/api/credentials`),
+    get(`/api/analytics/recent?limit=8`),
+    get(`/api/recurring-upcoming`),
+    get(`/api/goals`),
+    get(`/api/budgets-summary?year=${year}&month=${month}`),
+    get(`/api/attention-counts`),
+    get(`/api/analytics/top-merchants?year=${year}&month=${month}`),
+    get(`/api/reports/trends?range=12`),
   ]);
 
   const [
@@ -136,27 +118,23 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     spending,
     balances,
     recent,
-    lastSyncRuns,
     upcomingData,
     goalsData,
     budgetsSummary,
     attention,
     topMerchants,
     trendReport,
-    credentials,
   ] = await Promise.all([
     summaryRes.ok ? summaryRes.json() : null,
     spendingRes.ok ? spendingRes.json() : [],
     balancesRes.ok ? balancesRes.json() : [],
     recentRes.ok ? recentRes.json() : [],
-    syncRunsRes.ok ? syncRunsRes.json() : [],
     upcomingRes.ok ? upcomingRes.json() : { upcoming: [], total: 0 },
     goalsRes.ok ? (goalsRes.json() as Promise<GoalsResponse>) : EMPTY_GOALS_RESPONSE,
     budgetsSummaryRes.ok ? budgetsSummaryRes.json() : EMPTY_BUDGETS_SUMMARY,
     attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
     topMerchantsRes.ok ? topMerchantsRes.json() : [],
     trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
-    credentialsRes.ok ? (credentialsRes.json() as Promise<{ bankType: string }[]>) : null,
   ]);
 
   return {
@@ -164,7 +142,6 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     spending,
     balances,
     recent,
-    lastSyncRuns,
     upcomingCharges: upcomingData.upcoming ?? [],
     upcomingTotal: upcomingData.total ?? 0,
     goals: goalsData.goals ?? [],
@@ -173,8 +150,6 @@ async function fetchDashboardData(year: number, month: number): Promise<Dashboar
     attention,
     topMerchants,
     trend: trendReport?.months ?? [],
-    // A credential for a retired institution cannot sync, so it is not "connected".
-    credentialCount: credentials?.filter((c) => isBankType(c.bankType)).length ?? null,
   };
 }
 
@@ -205,35 +180,72 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
 /**
  * The old dashboard's sections below the home hero (#317), for the month the
  * home screen selected. Each later home ticket (#318–#321) replaces part of it.
- * `refreshKey` changes when the home screen knows the data changed (a target
- * saved, a sync finished).
+ *
+ * It loads as soon as it mounts, beside the outlook, but draws nothing until
+ * `visible`: the home screen withholds it in a first-run state. `refreshKey`
+ * changes when the data changed (a target saved, a sync settled); a refetch of
+ * the same month keeps the sections on screen, and only a month change shows
+ * the skeleton.
  */
 export function DashboardPanel({
   categories,
-  month: { year, month },
+  month,
   refreshKey,
+  visible,
+  credentialCount,
+  lastSyncRuns,
 }: {
   categories: Category[];
   month: HomeMonth;
   refreshKey: number;
+  visible: boolean;
+  /** Connected institutions the registry still knows; only existence is read (#264). */
+  credentialCount: number;
+  /** Last run per current institution, or null until the home screen has read them. */
+  lastSyncRuns: SyncRunSummary[] | null;
 }) {
-  const [data, setData] = React.useState<DashboardData>(EMPTY_DASHBOARD_DATA);
-  const [loading, setLoading] = React.useState(true);
+  const { year, month: monthNumber } = month;
+  const load = useMonthLoad(monthKey(month), refreshKey, (signal) =>
+    // A microtask later: child effects run before their parent's, and the
+    // home screen's outlook request (the hero, first on screen) must not
+    // queue behind these eleven on the browser's per-host connection limit.
+    Promise.resolve().then(() => fetchDashboardData(year, monthNumber, signal)),
+  );
+  const data = load.current ? load.data : null;
 
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- removed during Phase 2 Server Actions migration (see PRD issue #35)
-    setLoading(true);
-    fetchDashboardData(year, month)
-      .then(setData)
-      .finally(() => setLoading(false));
-  }, [year, month, refreshKey]);
+  const categoriesById = React.useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
 
+  if (!visible) return null;
+  if (data === null) return <DashboardSkeleton />;
+  return (
+    <DashboardSections
+      data={data}
+      categoriesById={categoriesById}
+      credentialCount={credentialCount}
+      lastSyncRuns={lastSyncRuns}
+    />
+  );
+}
+
+function DashboardSections({
+  data,
+  categoriesById,
+  credentialCount,
+  lastSyncRuns,
+}: {
+  data: DashboardData;
+  categoriesById: Map<string, Category>;
+  credentialCount: number;
+  lastSyncRuns: SyncRunSummary[] | null;
+}) {
   const {
     summary,
     spending,
     balances,
     recent,
-    lastSyncRuns,
     upcomingCharges,
     upcomingTotal,
     goals,
@@ -242,16 +254,11 @@ export function DashboardPanel({
     attention,
     topMerchants,
     trend,
-    credentialCount,
   } = data;
 
   // Budgets only ever attach to expense-type categories (src/lib/budgets
   // enforces this at write time), so this lookup only ever needs to resolve
   // an expense category's display name/color for the chip row.
-  const categoriesById = React.useMemo(
-    () => new Map(categories.map((c) => [c.id, c])),
-    [categories],
-  );
   const budgetChips: BudgetChipData[] = React.useMemo(
     () =>
       budgetsSummary.budgets.map(({ budget, pace }) => {
@@ -286,7 +293,7 @@ export function DashboardPanel({
   // Balances only appear once a sync has landed, so they cover the bank whose
   // latest run errored after an earlier success (the runs list is last-per-bank).
   const onboardingFacts =
-    credentialCount === null || attention === null
+    lastSyncRuns === null || attention === null
       ? null
       : {
           hasCredential: credentialCount > 0,
@@ -297,40 +304,9 @@ export function DashboardPanel({
 
   return (
     <div className="space-y-6">
-      {!loading && <OnboardingPath facts={onboardingFacts} />}
+      <OnboardingPath facts={onboardingFacts} />
 
-      {loading ? (
-        <div className="space-y-6">
-          {/* KPI band skeletons keep the loaded rows' heights, so the swap to
-              content does not shift the page (CLS). */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {KPI_LABELS.map((label) => (
-              <KpiTile key={label} label={label}>
-                <Skeleton className="h-8 w-28" />
-                {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
-              </KpiTile>
-            ))}
-          </div>
-          {/* Breakdown skeleton */}
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-5 w-40" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-64 w-full" />
-            </CardContent>
-          </Card>
-          {/* Recent transactions skeleton */}
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={`sk-tx-${i}`} className="flex items-center justify-between px-1 py-2">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : hasNoData ? (
+      {hasNoData ? (
         <Card>
           <CardContent className="p-0">
             <EmptyState
@@ -553,6 +529,42 @@ export function DashboardPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The sections' loading state. */
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* KPI band skeletons keep the loaded rows' heights, so the swap to
+          content does not shift the page (CLS). */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {KPI_LABELS.map((label) => (
+          <KpiTile key={label} label={label}>
+            <Skeleton className="h-8 w-28" />
+            {label === SAVINGS_RATE_LABEL && <Skeleton className="mt-2 h-2 w-full" />}
+          </KpiTile>
+        ))}
+      </div>
+      {/* Breakdown skeleton */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+      {/* Recent transactions skeleton */}
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={`sk-tx-${i}`} className="flex items-center justify-between px-1 py-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

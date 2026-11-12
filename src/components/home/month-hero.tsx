@@ -3,7 +3,8 @@
 import * as React from "react";
 import { ArrowsClockwiseIcon, WarningCircleIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
-import { monthName, swipeStep, type HomeMonth } from "./month";
+import { monthLabel } from "@/components/reports/format";
+import { swipeStep, type HomeMonth } from "./month";
 
 /**
  * The home hero's frame (ADR-0015 "Hero"): the dark teal surface with its
@@ -55,7 +56,7 @@ export function MonthHero({
       <div className="flex flex-col gap-4 p-5 sm:p-7 lg:p-8">
         <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h2 id={titleId} className="text-lead font-semibold">
-            {monthName(month)} {month.year}
+            {monthLabel(month)}
           </h2>
           {indicator}
         </div>

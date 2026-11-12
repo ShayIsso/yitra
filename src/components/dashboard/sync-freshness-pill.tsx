@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 import type { SyncRunSummary } from "@/lib/sync/runs";
+import { formatRelativeAge } from "@/components/relative-age";
 
 export type SyncFreshnessPillProps = {
   /** Last run per bank (`getLastRunPerBank`). Aggregate freshness only. */
@@ -65,19 +66,6 @@ export function classifySyncFreshness(runs: SyncRunSummary[], nowMs: number): Sy
 /** True for any level the pill should flag with the amber attention fill. */
 function needsAttention(level: SyncFreshnessLevel): boolean {
   return level === "stale" || level === "otp_skipped" || level === "error";
-}
-
-function formatRelativeAge(ageMs: number): string {
-  const minutes = Math.floor(ageMs / (60 * 1000));
-  if (minutes < 1) return "לפני פחות מדקה";
-  if (minutes < 60) return `לפני ${minutes} דקות`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `לפני ${hours} שעות`;
-
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "אתמול";
-  return `לפני ${days} ימים`;
 }
 
 function verdictText(verdict: SyncFreshnessVerdict): string {

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ArrowsClockwiseIcon, KeyIcon, WarningCircleIcon } from "@/components/icons";
 import { bankLabel } from "@/lib/bank-registry";
 import { cn } from "@/lib/utils";
-import { relativeAge, type Freshness } from "./freshness";
+import { formatRelativeAge } from "@/components/relative-age";
+import type { Freshness } from "./freshness";
 
 const PILL =
   "press text-body inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-hero-foreground/60";
@@ -36,7 +37,7 @@ export function FreshnessIndicator({
       return (
         <Link href="/sync" className={cn(PILL, QUIET)}>
           <ArrowsClockwiseIcon className="size-4" />
-          {freshness.ageMs === null ? "סנכרון" : `עודכן ${relativeAge(freshness.ageMs)}`}
+          {freshness.ageMs === null ? "סנכרון" : `עודכן ${formatRelativeAge(freshness.ageMs)}`}
         </Link>
       );
     case "syncing":
@@ -48,7 +49,9 @@ export function FreshnessIndicator({
       );
     case "stale": {
       const age =
-        freshness.ageMs === null ? "הנתונים לא עדכניים" : `עודכן ${relativeAge(freshness.ageMs)}`;
+        freshness.ageMs === null
+          ? "הנתונים לא עדכניים"
+          : `עודכן ${formatRelativeAge(freshness.ageMs)}`;
       return (
         <button
           type="button"

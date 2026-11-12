@@ -31,6 +31,7 @@ import { useSyncStream, type BankSyncState, type SyncStreamState } from "@/compo
 import { takeFrames } from "@/lib/sse-frames";
 import { bankLabel, bankTrustOf } from "@/lib/bank-registry";
 import { InstitutionTrustBadge, unverifiedFailureNote } from "@/components/institution-trust";
+import { formatRelativeAge } from "@/components/relative-age";
 import { cn } from "@/lib/utils";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
@@ -71,32 +72,9 @@ export function resolveBankDisplay(
   return { source: "none" };
 }
 
-/**
- * Mirrors sync-freshness-pill.tsx's bucket wording (minutes/hours/days) so a
- * persisted row here and the header pill never disagree on how "3 hours ago"
- * reads. Not imported from there: the pill only exports its classifier
- * (`classifySyncFreshness`), not this formatter, and #223's brief keeps that
- * file read-only — duplicating one small clock-free formatter costs less
- * than widening that file's surface for it. Takes `ageMs`, never a `Date`,
- * so it can't reintroduce the `Date.now()`-in-render pattern that is bug
- * #193.
- */
-export function formatRelativeAge(ageMs: number): string {
-  const minutes = Math.floor(ageMs / (60 * 1000));
-  if (minutes < 1) return "לפני פחות מדקה";
-  if (minutes < 60) return `לפני ${minutes} דקות`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `לפני ${hours} שעות`;
-
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "אתמול";
-  return `לפני ${days} ימים`;
-}
-
 // ── SSE-over-fetch framing (#246 — EventSource can't read the 409 status) ───
 
-export { takeFrames };
+export { takeFrames, formatRelativeAge };
 
 type SyncPanelProps = {
   banks: Bank[];

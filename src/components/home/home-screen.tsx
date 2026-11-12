@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardPanel } from "@/components/dashboard-panel";
 import { awaitsCode } from "@/components/bank-status-view";
+import { monthKey } from "@/components/reports/format";
 import { useSyncStream } from "@/components/sync-stream";
 import type { Category } from "@/lib/categories";
 import type { SyncRunSummary } from "@/lib/sync/runs";
@@ -19,12 +20,12 @@ import {
   ThinHistoryBody,
 } from "./hero-states";
 import { HeroBodySkeleton, HeroError, MonthHero } from "./month-hero";
+import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
 import {
   HOME_MONTH_PARAM,
   compareMonths,
   homeHref,
-  monthParam,
   parseMonthParam,
   sameMonth,
   shiftMonth,
@@ -38,14 +39,10 @@ const OtpSheet = dynamic(() => import("@/components/sync-otp-sheet").then((m) =>
 });
 const TargetDialog = dynamic(() => import("./target-dialog"), { ssr: false });
 
-type OutlookLoad =
-  | { key: string; month: HomeMonth; status: "ready"; data: OutlookResponse }
-  | { key: string; month: HomeMonth; status: "error" };
-
 /** How often the hero re-reads the outlook while a first sync runs that this tab doesn't drive. */
 const FIRST_SYNC_POLL_MS = 4000;
 
-/** Keeps "updated 5 minutes ago" moving while the page stays open. */
+/** Keeps "updated 5 minutes ago" and staleness moving while the page stays open. */
 const CLOCK_TICK_MS = 60_000;
 
 async function readJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -53,6 +50,8 @@ async function readJson<T>(url: string, signal: AbortSignal): Promise<T> {
   if (!res.ok) throw new Error(String(res.status));
   return res.json() as Promise<T>;
 }
+
+type MonthOutlookLoad = { month: HomeMonth; outlook: OutlookResponse };
 
 /**
  * The home screen (#317): month navigation, the month-outlook hero and, below
@@ -74,48 +73,43 @@ export function HomeScreen({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const month = parseMonthParam(searchParams.get(HOME_MONTH_PARAM), currentMonth);
-  const key = monthParam(month);
+  // By value: `router.refresh()` re-renders the page and hands a new object.
+  const { year: currentYear, month: currentMonthNumber } = currentMonth;
+  const current = React.useMemo(
+    () => ({ year: currentYear, month: currentMonthNumber }),
+    [currentYear, currentMonthNumber],
+  );
+  const month = parseMonthParam(searchParams.get(HOME_MONTH_PARAM), current);
+  const key = monthKey(month);
 
-  const [outlook, setOutlook] = React.useState<OutlookLoad | null>(null);
+  /** Bumped whenever the data under the screen changed: a sync settled, a target was saved. */
+  const [version, setVersion] = React.useState(0);
+  const [runs, setRuns] = React.useState<SyncRunSummary[] | null>(null);
   /** The client clock, read only after mount (bug #193: no clock in the SSR path). */
   const [nowMs, setNowMs] = React.useState<number | null>(null);
-  const [runs, setRuns] = React.useState<SyncRunSummary[]>([]);
-  const [retrying, setRetrying] = React.useState(false);
-  /** Bumped whenever the data under the screen changed: a sync finished, a target was saved. */
-  const [version, setVersion] = React.useState(0);
-  const [attempt, setAttempt] = React.useState(0);
   const [targetOpen, setTargetOpen] = React.useState(false);
   const [dismissedOtpBank, setDismissedOtpBank] = React.useState<string | null>(null);
 
+  const outlook = useMonthLoad<MonthOutlookLoad>(key, version, async (signal) => {
+    const data = await readJson<OutlookResponse>(
+      `/api/month-outlook?year=${month.year}&month=${month.month}`,
+      signal,
+    );
+    setNowMs(Date.now());
+    return { month, outlook: data };
+  });
+
   const sync = useSyncStream({
-    onComplete: () => {
+    // Every outcome re-reads: a run that dropped mid-way kept what it
+    // imported, and a refused start means a run is live elsewhere, which the
+    // outlook's progress (and its polling) shows.
+    onSettled: () => {
       setVersion((v) => v + 1);
       // The shell's pending-reconciliation badge is server-rendered.
       router.refresh();
     },
   });
   const stream = sync.state;
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    const requested = parseMonthParam(key, currentMonth);
-    readJson<OutlookResponse>(
-      `/api/month-outlook?year=${requested.year}&month=${requested.month}`,
-      controller.signal,
-    )
-      .then((data) => {
-        setNowMs(Date.now());
-        setOutlook({ key, month: requested, status: "ready", data });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setOutlook({ key, month: requested, status: "error" });
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setRetrying(false);
-      });
-    return () => controller.abort();
-  }, [key, currentMonth, version, attempt]);
 
   React.useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), CLOCK_TICK_MS);
@@ -132,41 +126,38 @@ export function HomeScreen({
   }, [version]);
 
   const live = stream.starting || stream.syncing;
-  const current = outlook?.key === key ? outlook : null;
-  const shown = outlook?.status === "ready" && nowMs !== null ? { ...outlook, nowMs } : null;
+  const shown = outlook.data && nowMs !== null ? { ...outlook.data, nowMs } : null;
+  const data = shown?.outlook ?? null;
   const firstSyncElsewhere =
-    current?.status === "ready" &&
-    current.data.state === "first-sync" &&
-    current.data.progress.running &&
-    !live;
+    outlook.current && data?.state === "first-sync" && data.progress.running && !live;
 
   React.useEffect(() => {
     if (!firstSyncElsewhere) return;
     const timer = setTimeout(() => setVersion((v) => v + 1), FIRST_SYNC_POLL_MS);
     return () => clearTimeout(timer);
-  }, [firstSyncElsewhere, outlook]);
+  }, [firstSyncElsewhere, data]);
 
   const select = React.useCallback(
     (next: HomeMonth) => {
-      if (compareMonths(next, currentMonth) > 0 || sameMonth(next, month)) return;
-      window.history.pushState(null, "", homeHref(next, currentMonth));
+      if (compareMonths(next, current) > 0 || sameMonth(next, month)) return;
+      window.history.pushState(null, "", homeHref(next, current));
     },
-    [currentMonth, month],
+    [current, month],
   );
 
   const codeBank =
     banks.find((bank) => awaitsCode(stream.bankStates[bank.bankType], stream.otp[bank.bankType]))
       ?.bankType ?? null;
   const otpBank = banks.find((bank) => bank.bankType === codeBank) ?? null;
+  const reopenCode = () => setDismissedOtpBank(null);
 
   function startSync() {
     setDismissedOtpBank(null);
     void sync.start();
   }
 
-  const data = shown?.data ?? null;
   const freshness = homeFreshness({
-    runs,
+    runs: runs ?? [],
     asOf: data && "asOf" in data ? data.asOf : null,
     stale: data !== null && "stale" in data && data.stale,
     nowMs,
@@ -174,53 +165,54 @@ export function HomeScreen({
   });
 
   const welcoming = data?.state === "no-connection" || data?.state === "first-sync";
-  // The sections below wait for the outlook: a first-run state has nothing to
-  // show there, and appending them after the hero settles shifts nothing.
-  const showSections = outlook !== null && !welcoming;
+  // The sections load from the start, beside the outlook, but are drawn only
+  // once it has answered and isn't a first-run state: nothing flashes for a
+  // new user, and sections appended under a settled hero shift nothing.
+  const answered = outlook.data !== null || outlook.failed;
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-headline font-bold">לוח בקרה</h1>
-        <MonthNav selected={month} current={currentMonth} onSelect={select} />
+        <MonthNav selected={month} current={current} onSelect={select} />
       </header>
 
       <MonthHero
         month={month}
-        busy={current === null && shown !== null}
+        busy={!outlook.current && shown !== null}
         onStep={(delta) => select(shiftMonth(month, delta))}
         indicator={
           !welcoming && (
             <FreshnessIndicator
               freshness={freshness}
               onSyncNow={startSync}
-              onEnterCode={() => setDismissedOtpBank(null)}
+              onEnterCode={reopenCode}
             />
           )
         }
       >
-        {current?.status === "error" ? (
-          <HeroError
-            retrying={retrying}
-            onRetry={() => {
-              setRetrying(true);
-              setAttempt((a) => a + 1);
-            }}
-          />
+        {outlook.current && outlook.failed ? (
+          <HeroError retrying={outlook.pending} onRetry={() => setVersion((v) => v + 1)} />
         ) : shown === null ? (
           <HeroBodySkeleton />
         ) : (
           // Keyed by month and state: the entrance plays when the content is
           // new, never on a refetch of the same month (ADR-0015 "Motion").
-          <div key={`${shown.key}:${shown.data.state}`} className="enter">
+          <div key={`${monthKey(shown.month)}:${shown.outlook.state}`} className="enter">
             {(() => {
-              const o = shown.data;
+              const o = shown.outlook;
               switch (o.state) {
                 case "no-connection":
                   return <NoConnectionBody />;
                 case "first-sync":
                   return (
-                    <FirstSyncHero outlook={o} banks={banks} stream={stream} onStart={startSync} />
+                    <FirstSyncHero
+                      outlook={o}
+                      banks={banks}
+                      stream={stream}
+                      onStart={startSync}
+                      onEnterCode={reopenCode}
+                    />
                   );
                 case "no-target":
                   return (
@@ -259,8 +251,15 @@ export function HomeScreen({
         </p>
       )}
 
-      {showSections && (
-        <DashboardPanel categories={categories} month={month} refreshKey={version} />
+      {banks.length > 0 && (
+        <DashboardPanel
+          categories={categories}
+          month={month}
+          refreshKey={version}
+          visible={answered && !welcoming}
+          credentialCount={banks.length}
+          lastSyncRuns={runs}
+        />
       )}
 
       {otpBank && (
@@ -276,21 +275,18 @@ export function HomeScreen({
         />
       )}
 
-      {targetOpen &&
-        shown &&
-        data &&
-        (data.state === "no-target" || data.state === "thin-history") && (
-          <TargetDialog
-            month={shown.month}
-            suggested={data.state === "no-target" ? data.suggestedTarget : null}
-            usualMonth={data.state === "no-target" ? data.usualMonth : null}
-            onClose={() => setTargetOpen(false)}
-            onSaved={() => {
-              setTargetOpen(false);
-              setVersion((v) => v + 1);
-            }}
-          />
-        )}
+      {targetOpen && shown && (data?.state === "no-target" || data?.state === "thin-history") && (
+        <TargetDialog
+          month={shown.month}
+          suggested={data.state === "no-target" ? data.suggestedTarget : null}
+          usualMonth={data.state === "no-target" ? data.usualMonth : null}
+          onClose={() => setTargetOpen(false)}
+          onSaved={() => {
+            setTargetOpen(false);
+            setVersion((v) => v + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

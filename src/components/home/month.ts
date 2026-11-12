@@ -1,4 +1,4 @@
-import { HEBREW_MONTHS } from "@/components/reports/format";
+import { HEBREW_MONTHS, monthKey, type YearMonth } from "@/components/reports/format";
 import { israelCalendarDay } from "@/lib/calendar";
 
 /**
@@ -7,7 +7,7 @@ import { israelCalendarDay } from "@/lib/calendar";
  * (bare `/` is the current month), so reload, back/forward, the command
  * palette and the 12-month chart all address a month the same way.
  */
-export type HomeMonth = { year: number; month: number };
+export type HomeMonth = YearMonth;
 
 const ordinal = (m: HomeMonth): number => m.year * 12 + (m.month - 1);
 
@@ -30,10 +30,6 @@ export function shiftMonth(m: HomeMonth, delta: number): HomeMonth {
 
 export const HOME_MONTH_PARAM = "month";
 
-export function monthParam(m: HomeMonth): string {
-  return `${m.year}-${String(m.month).padStart(2, "0")}`;
-}
-
 /**
  * The month a `?month=` value names, or `current` when it names none or one
  * that hasn't started: the outlook has nothing to say about a future month.
@@ -47,7 +43,7 @@ export function parseMonthParam(value: string | null, current: HomeMonth): HomeM
 }
 
 export function homeHref(m: HomeMonth, current: HomeMonth): string {
-  return sameMonth(m, current) ? "/" : `/?${HOME_MONTH_PARAM}=${monthParam(m)}`;
+  return sameMonth(m, current) ? "/" : `/?${HOME_MONTH_PARAM}=${monthKey(m)}`;
 }
 
 /** The current month on the home calendar day (CONTEXT.md "home calendar day"). */

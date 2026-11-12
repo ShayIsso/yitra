@@ -1,3 +1,4 @@
+import { isSyncStale } from "@/lib/budgets/staleness";
 import { israelCalendarDay } from "@/lib/calendar";
 import type { SyncRunStatus } from "@/lib/sync/runs";
 
@@ -5,7 +6,9 @@ import type { SyncRunStatus } from "@/lib/sync/runs";
  * How current the home screen's figures are, decided once for the hero's
  * freshness indicator. Staleness is the month outlook's own verdict (its
  * `STALE_SYNC_AFTER_MS` against the oldest institution's last success), so
- * the indicator and the "as of" line can never disagree; failures and missed
+ * the indicator and the "as of" line can never disagree. It is re-applied on
+ * the client clock, so a page left open past the threshold turns stale
+ * without a refetch; the server's verdict stays the floor. Failures and missed
  * codes come from each current institution's last recorded run
  * (`/api/sync-runs`); a run this tab is driving outranks both.
  */
@@ -40,7 +43,9 @@ export function homeFreshness({ runs, asOf, stale, nowMs, live }: FreshnessInput
 
   if (asOf === null) return { kind: "unknown" };
   const ageMs = nowMs === null ? null : nowMs - Date.parse(asOf);
-  return stale ? { kind: "stale", ageMs } : { kind: "fresh", ageMs };
+  return stale || (ageMs !== null && isSyncStale(ageMs))
+    ? { kind: "stale", ageMs }
+    : { kind: "fresh", ageMs };
 }
 
 const israelTime = new Intl.DateTimeFormat("he-IL", {
@@ -67,15 +72,4 @@ export function syncDayLabel(iso: string, nowMs: number): string {
   if (day === israelCalendarDay(new Date(nowMs))) return `היום ${israelTime.format(at)}`;
   if (day === israelCalendarDay(new Date(nowMs - DAY_MS))) return `אתמול ${israelTime.format(at)}`;
   return israelDate.format(at);
-}
-
-/** Same buckets and wording as the Sync page's per-bank age. */
-export function relativeAge(ageMs: number): string {
-  const minutes = Math.floor(ageMs / 60_000);
-  if (minutes < 1) return "לפני פחות מדקה";
-  if (minutes < 60) return `לפני ${minutes} דקות`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `לפני ${hours} שעות`;
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "אתמול" : `לפני ${days} ימים`;
 }

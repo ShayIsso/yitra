@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  homeFreshness,
-  relativeAge,
-  syncDayLabel,
-  type FreshnessInput,
-} from "@/components/home/freshness";
+import { homeFreshness, syncDayLabel, type FreshnessInput } from "@/components/home/freshness";
 
 const NOW = Date.parse("2026-11-12T12:00:00Z");
 const HOUR = 60 * 60 * 1000;
@@ -33,6 +28,21 @@ describe("homeFreshness", () => {
     expect(homeFreshness(input({ asOf, stale: true }))).toEqual({
       kind: "stale",
       ageMs: 50 * HOUR,
+    });
+  });
+
+  it("turns stale on the client clock once the page outlives the two days", () => {
+    const asOf = new Date(NOW - 49 * HOUR).toISOString();
+    expect(homeFreshness(input({ asOf, stale: false }))).toEqual({
+      kind: "stale",
+      ageMs: 49 * HOUR,
+    });
+  });
+
+  it("keeps the server's stale verdict before the clock is read", () => {
+    expect(homeFreshness(input({ stale: true, nowMs: null }))).toEqual({
+      kind: "stale",
+      ageMs: null,
     });
   });
 
@@ -102,17 +112,5 @@ describe("syncDayLabel", () => {
 
   it("dates an older sync", () => {
     expect(syncDayLabel("2026-11-08T08:00:00Z", NOW)).toBe("8 בנובמבר");
-  });
-});
-
-describe("relativeAge", () => {
-  it.each([
-    [30 * 1000, "לפני פחות מדקה"],
-    [5 * 60 * 1000, "לפני 5 דקות"],
-    [3 * HOUR, "לפני 3 שעות"],
-    [30 * HOUR, "אתמול"],
-    [5 * 24 * HOUR, "לפני 5 ימים"],
-  ])("reads %i ms as %s", (ms, text) => {
-    expect(relativeAge(ms)).toBe(text);
   });
 });

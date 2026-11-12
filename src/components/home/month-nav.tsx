@@ -1,16 +1,9 @@
 "use client";
 
 import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
-import { HEBREW_MONTHS_SHORT } from "@/components/reports/format";
+import { HEBREW_MONTHS_SHORT, monthLabel } from "@/components/reports/format";
 import { cn } from "@/lib/utils";
-import {
-  compareMonths,
-  monthName,
-  monthWindow,
-  sameMonth,
-  shiftMonth,
-  type HomeMonth,
-} from "./month";
+import { compareMonths, monthWindow, sameMonth, shiftMonth, type HomeMonth } from "./month";
 
 const CHEVRON =
   "press grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none disabled:pointer-events-none disabled:opacity-40";
@@ -51,7 +44,7 @@ export function MonthNav({
               <button
                 type="button"
                 aria-current={active ? "date" : undefined}
-                aria-label={`${monthName(m)} ${m.year}`}
+                aria-label={monthLabel(m)}
                 onClick={() => onSelect(m)}
                 className={cn(
                   "press text-body focus-visible:ring-ring/50 flex h-11 w-full min-w-11 flex-col items-center justify-center rounded-full px-1 leading-none font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 md:w-16",
