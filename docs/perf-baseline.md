@@ -69,6 +69,70 @@ figure, and the timing probe is unchanged; re-measuring `a8a5f8d` later in
 the same session gave the same 317.3 kB and FCP/LCP within noise
 (2084 / 6168 ms).
 
+## Redesign final (#327)
+
+The last redesign slice measured every page on the production build, against
+`main` at **`46a5b6f`** (every other #312 slice merged) built and served side by
+side, back to back on the same machine, with the same throwaway seed. Apple M2,
+Chrome for Testing 148 headless, method as above.
+
+**Home, against the budget:**
+
+| Home (`/`)                              | Baseline `a8a5f8d`                    | `main` `46a5b6f` | Redesign final |
+| --------------------------------------- | ------------------------------------- | ---------------- | -------------- |
+| First-load JS, modern browsers, gzip -9 | 278.7 kB                              | 257.4 kB         | **249.0 kB**   |
+| Budget ceiling (baseline + 40 kB)       | 318.7 kB                              |                  | 69.7 kB under  |
+| Icons on the route (`route-icons.ts`)   | 8.8 kB (all Lucide, `module-cost.ts`) | 10.0 kB          | 10.9 kB        |
+| FCP, median of 7, CPU 6x + Slow 4G      | 2120 ms                               | 2140 ms          | 2156 ms        |
+| LCP, median of 7, CPU 6x + Slow 4G      | 6060 ms                               | 2356 ms          | 2372 ms        |
+| CLS, median of 7                        | 0.000                                 | 0.000            | 0.000          |
+
+The redesign ends 29.7 kB _below_ the pre-redesign home. FCP is within noise
+of both references (the `main` and final runs were back to back; the baseline
+was measured in another session), and LCP is far earlier than the baseline's
+because the home's largest element now renders with the hero. #327's own
+change to home: −8.4 kB, from dropping the unused `motion` library (about
+11 kB eager on every route) net of the category glyphs below.
+
+**Every page** (first-load JS gzip -9; icons; FCP / LCP / CLS median of 3,
+CPU 6x + Slow 4G; `main` `46a5b6f` → final):
+
+| Route             | First-load JS    | Icons (glyphs)           | FCP / LCP final | CLS   |
+| ----------------- | ---------------- | ------------------------ | --------------- | ----- |
+| `/transactions`   | 240.5 → 223.0 kB | 10.0 (65) → 4.3 (25) kB  | 2140 / 5260 ms  | 0.000 |
+| `/reports`        | 235.7 → 218.1 kB | 10.0 (65) → 4.2 (24) kB  | 2100 / 2148 ms  | 0.000 |
+| `/reconciliation` | 235.9 → 217.5 kB | 10.0 (65) → 3.2 (15) kB  | 2104 / 2152 ms  | 0.000 |
+| `/subscriptions`  | 206.2 → 188.8 kB | 10.0 (65) → 3.6 (18) kB  | 2160 / 2228 ms  | 0.000 |
+| `/sync`           | 236.6 → 219.8 kB | 10.0 (65) → 4.0 (21) kB  | 2096 / 2144 ms  | 0.000 |
+| `/settings`       | 297.7 → 284.6 kB | 10.0 (65) → 10.7 (61) kB | 2140 / 2376 ms  | 0.000 |
+| `/login`          | 171.5 → 150.1 kB | 10.0 (65) → 0.4 (1) kB   | 2172 / 2172 ms  | 0.000 |
+| `/setup`          | final 264.3 kB   |                          | 2484 / 2532 ms  | 0.000 |
+
+`main`'s FCP / LCP for the same routes were within ±50 ms of these except
+`/subscriptions` (2420 / 2488 ms on `main`), and every `main` CLS was 0.000.
+`/setup` was measured on a second, empty throwaway database (the wizard
+redirects once onboarding is complete).
+
+**Icons per route.** On `main`, Turbopack put every glyph any route used into
+one chunk that every route loaded (65 glyphs, 10.0 kB gz everywhere), against
+ADR-0015's claim. #327 generates one module per glyph and declares the icon
+directory free of side effects, so each route carries only its own glyphs. The
+whole 79-glyph set is 13.0 kB gz (`module-cost.ts`), but no route loads it.
+Home (10.9 kB) and settings (10.7 kB) are 0.9 and 0.7 kB over the ~10 kB
+icon budget, because both can draw any of the 31 category marks (the picker's
+Phosphor names and the Lucide names older `categories.icon` rows hold); every
+other route is at 4.3 kB or less. Home's first-load JS as a whole stays 69.7 kB
+under its ceiling.
+
+Per-route icons are measured with
+
+```sh
+BASE_URL=http://localhost:3400 ENCRYPTION_KEY=${PERF_KEY:?} npx tsx scripts/perf/route-icons.ts
+```
+
+which lists the glyphs defined in each route's first-load chunks and bundles
+exactly those (gzip -9).
+
 ## Reproducing the measurement
 
 Everything runs against a throwaway database (never the dev DB, which holds
@@ -101,7 +165,7 @@ CHROMIUM_PATH="<path to a Chrome/Chromium binary>" \
 npx tsx scripts/perf/measure.ts
 
 # 4. Library cost (see below), then clean up.
-npx tsx scripts/perf/module-cost.ts --lucide-in-use
+npx tsx scripts/perf/module-cost.ts src/components/icons/index.ts
 docker exec yitra-db-1 dropdb -U yitra yitra_perf
 ```
 
@@ -142,17 +206,19 @@ part of it pays at most that much.
 
 ```sh
 npx tsx scripts/perf/module-cost.ts <entry.ts> [<entry.ts> ...]
-npx tsx scripts/perf/module-cost.ts --lucide-in-use
 ```
 
-- **Icons**: pass the app's icon module (the single file that names every
-  Phosphor icon the app imports). The budget applies to that whole set.
-- **Motion**: do not use this script. esbuild's code splitting does not
-  reproduce how Turbopack splits motion between the eager `LazyMotion` part and
-  the lazy feature bundle (it reports about 28 kB eager for the motion module
-  where the real build ships about 11 kB eager plus a 19 kB lazy chunk). For
-  motion, the authoritative figure is the route-level first-load delta from
-  `measure.ts` on the production build.
+The Lucide row in the baseline table came from a `--lucide-in-use` option that
+was removed with Lucide (#327).
+
+- **Icons**: passing the icon barrel (`src/components/icons/index.ts`) gives
+  the cost of the whole glyph set. Since #327 every glyph is its own module and
+  a route ships only the glyphs it imports, so the budget is checked per route
+  on the production build (see "Redesign final" below for the method).
+- **Motion**: the `motion` library was removed in #327 (see ADR-0015). When it
+  was in use, this script misreported it (esbuild does not split it the way
+  Turbopack does); a route-level `measure.ts` delta was the authoritative
+  figure.
 
 ### Seed data (`scripts/perf/seed-synthetic.ts`)
 

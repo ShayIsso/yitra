@@ -27,16 +27,17 @@ Experimental is a statement about testing, not about a different code path: an e
 
 ## Tech Stack
 
-| Layer     | Technology                             |
-| --------- | -------------------------------------- |
-| Framework | Next.js (App Router) + TypeScript      |
-| Styling   | Tailwind CSS + Shadcn UI               |
-| Database  | PostgreSQL + Drizzle ORM               |
-| Scraping  | israeli-bank-scrapers-core + Puppeteer |
-| Forms     | React Hook Form + Zod                  |
-| Mutations | Next.js Server Actions                 |
-| Charts    | Shadcn Charts (Recharts)               |
-| Testing   | Vitest                                 |
+| Layer     | Technology                               |
+| --------- | ---------------------------------------- |
+| Framework | Next.js (App Router) + TypeScript        |
+| Styling   | Tailwind CSS + Shadcn UI                 |
+| Database  | PostgreSQL + Drizzle ORM                 |
+| Scraping  | israeli-bank-scrapers-core + Puppeteer   |
+| Forms     | React Hook Form + Zod                    |
+| Mutations | Next.js Server Actions                   |
+| Charts    | Hand-built SVG and CSS, no chart library |
+| Icons     | Phosphor (generated per-glyph modules)   |
+| Testing   | Vitest                                   |
 
 ## Prerequisites
 

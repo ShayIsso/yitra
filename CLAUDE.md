@@ -116,8 +116,9 @@ The design system is **ADR-0015 (Pocket Pro)**; tokens live in `src/app/globals.
 - **Palette:** deep teal ink on warm paper. Use semantic tokens (`bg-background`, `text-muted-foreground`, `text-pos`, …), never raw hues. **Coral (`attention`) means attention only** — badges, stale/failed sync, at-risk/over states. Positive/negative money uses the `pos`/`neg` pair via `<Amount>`; colour is never the only good/bad signal. Category colours as small dots only. Every text pair must pass WCAG AA in both themes (`palette-contrast.test.ts`).
 - **Typography:** Rubik via `next/font`. Six steps: `text-caption`, `text-body`, `text-lead`, `text-title`, `text-headline`, `text-display` — display is reserved for the single hero figure. Tabular numerals wherever amounts align; amounts go through `<Amount>` (`size`, `figure`).
 - **Shape:** three radii only — small, large, full.
-- **Shadcn UI** components. **Phosphor icons** from `@/components/icons` (regular inactive, fill active, duotone for insight/category marks; add icons via the manifest + generator). Lucide remains in older components until the redesign cleanup. **No emoji anywhere.**
-- **Motion** only through `@/components/motion` (`m.*` under LazyMotion): transform/opacity only, once-only entrances, no count-up on money, no infinite animation except skeleton pulse; reduced motion keeps opacity only.
+- **Shadcn UI** components. **Phosphor icons** only, from `@/components/icons` (regular inactive, fill active, duotone for insight/category marks; add icons via `scripts/icons/phosphor-manifest.ts` + the generator, one module per glyph so a route ships only its own). Category marks go through `@/components/category-icon`, which also draws the Lucide names older `categories.icon` rows store. **No emoji anywhere.**
+- **Motion** is CSS only (`globals.css` utilities, tw-animate for popups; no animation library): transform/opacity only, once-only entrances, no count-up on money, no infinite animation except skeleton pulse; reduced motion keeps opacity only.
+- **Dialogs** use `@/components/ui/dialog`: a bottom sheet below `md` (grab handle, swipe down to close), a centred dialog from `md`.
 - **Performance budget:** home first-load JS ≤ +40 kB gz over `docs/perf-baseline.md` for the whole redesign (icons ≤ ~10 kB); first meaningful content no slower. UI PRs record their numbers with `scripts/perf/measure.ts`.
 - **NO** coral glow behind text, heavy shadows, busy patterns, backdrop blur over large scrolling regions, or WebGL/canvas effects.
 - **Mobile responsive**, tap targets ≥ 44px.
@@ -125,7 +126,7 @@ The design system is **ADR-0015 (Pocket Pro)**; tokens live in `src/app/globals.
 
 ## Pages
 
-Four pages — **Dashboard**, **Transactions**, **Sync**, **Settings** — under `src/app/(dashboard)/`. Read the page's component tree for its current feature set; the tracker issue that shipped a feature is the record of its intent.
+Under `src/app/(dashboard)/`, inside the app shell (`@/components/shell`: phone tab bar, desktop rail, Cmd/Ctrl+K command palette): **Home** (`/`, the month outlook: hero, forecast, insights, stat tiles, categories, 12-month chart, budgets, goals, merchants, attention, upcoming, accounts, activity), **Transactions**, **Reports**, **Reconciliation**, and behind "more" **Subscriptions**, **Sync**, **Settings**. `/login` and the first-run wizard `/setup` sit outside the shell. Read the page's component tree for its current feature set; the tracker issue that shipped a feature is the record of its intent.
 
 ## Infrastructure
 
@@ -205,4 +206,4 @@ Tests validate external behavior through public interfaces, not implementation d
 4. **Crypto** — Encrypt/decrypt integrity, unique IVs, tamper detection.
 5. **Screenshots** — Path traversal prevention, 24h cleanup, age formatting.
 
-Current: **58 tests across 5 suites.** All must pass before any PR merge.
+`npm test` runs every suite (component view-models and pure helpers are unit-tested beside their components in `__tests__`); all must pass before any PR merge. Rendered UI is verified headlessly (screenshots at 1440/390/360, light and dark), not by unit tests.
