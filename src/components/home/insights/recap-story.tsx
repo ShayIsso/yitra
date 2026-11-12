@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { CategoryDot } from "@/components/category-dot";
 import { CaretLeftIcon, CaretRightIcon, XIcon } from "@/components/icons";
 import { Amount } from "@/components/ui/amount";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -171,11 +172,7 @@ function SlideBody({
         <>
           <Eyebrow>לאן הלך הכי הרבה</Eyebrow>
           <p className="text-headline flex items-center gap-2 font-bold">
-            <span
-              aria-hidden="true"
-              className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: slide.color }}
-            />
+            <CategoryDot color={slide.color} />
             {slide.name}
           </p>
           <Line>

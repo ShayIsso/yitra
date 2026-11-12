@@ -2,13 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import {
-  ArrowsClockwiseIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  WarningCircleIcon,
-} from "@/components/icons";
+import { CaretLeftIcon, CaretRightIcon, CheckCircleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +11,7 @@ import { monthPosition, type Insight, type InsightMonth } from "@/lib/analytics/
 import { cn } from "@/lib/utils";
 import { monthName } from "../month";
 import { useMonthLoad } from "../month-load";
+import { SectionError } from "../sections/parts";
 import { INSIGHT_CARD_SIZE, InsightCard, type CardInsight } from "./insight-card";
 
 type RecapInsight = Extract<Insight, { kind: "recap" }>;
@@ -302,23 +297,14 @@ function InsightsEmpty({ current }: { current: boolean }) {
   );
 }
 
-/** The row's own load failure, at the row's height, with a retry for this section only. */
+/**
+ * The row's own load failure (the home sections' shared error card), held at
+ * the row's height so a retry that lands never shifts the sections below.
+ */
 function InsightsError({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
   return (
-    <Card role="alert" className="my-1 h-44 justify-center gap-3 p-4">
-      <p className="text-body flex items-center gap-2">
-        <WarningCircleIcon weight="fill" className="text-attention-text size-5 shrink-0" />
-        לא הצלחנו לטעון את התובנות של החודש.
-      </p>
-      <Button
-        variant="outline"
-        className="h-11 gap-1.5 self-start md:h-9"
-        disabled={retrying}
-        onClick={onRetry}
-      >
-        <ArrowsClockwiseIcon className="size-4" />
-        {retrying ? "טוען..." : "נסה שוב"}
-      </Button>
-    </Card>
+    <div className="my-1 h-44 *:h-full *:justify-center">
+      <SectionError what="התובנות של החודש" retrying={retrying} onRetry={onRetry} />
+    </div>
   );
 }

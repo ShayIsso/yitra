@@ -11,6 +11,7 @@ import {
   SparkleIcon,
   TrayIcon,
 } from "@/components/icons";
+import { CategoryDot } from "@/components/category-dot";
 import { Amount } from "@/components/ui/amount";
 import { Card } from "@/components/ui/card";
 import { monthPosition, type Insight, type InsightMonth } from "@/lib/analytics/insights";
@@ -218,11 +219,9 @@ function cardContent(
                 : "עלייה מול החודש שעבר"}
             </Eyebrow>
             <Title>
-              <span
-                aria-hidden="true"
-                className="me-1.5 inline-block size-2 rounded-full align-middle"
-                style={{ backgroundColor: insight.color }}
-              />
+              <span className="me-1.5 inline-flex align-middle">
+                <CategoryDot color={insight.color} />
+              </span>
               {insight.name}
             </Title>
             <p className="text-body flex flex-wrap items-baseline gap-x-1">
