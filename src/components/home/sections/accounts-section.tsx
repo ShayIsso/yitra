@@ -12,7 +12,7 @@ import { balanceTone, debitDayHint } from "./view";
 
 function Balance({ balance }: { balance: number | null }) {
   const tone = balanceTone(balance);
-  if (tone === "unknown") {
+  if (balance === null || tone === "unknown") {
     return (
       <span className="text-body text-muted-foreground shrink-0">
         <span aria-hidden="true">—</span>
@@ -23,7 +23,7 @@ function Balance({ balance }: { balance: number | null }) {
   return (
     <span className="flex shrink-0 flex-col items-end text-end">
       <Amount
-        amount={balance!}
+        amount={balance}
         colorize={false}
         fractionDigits={0}
         className={cn(

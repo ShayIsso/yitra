@@ -65,9 +65,18 @@ export type UpcomingWhen = { late: true } | { late: false; inDays: number };
 
 const MS_PER_DAY = 86_400_000;
 
-function dayIndex(iso: string): number {
+/**
+ * A YYYY-MM-DD calendar date as a local Date, never via `new Date(string)`,
+ * which parses it as UTC midnight and shows the previous day west of Greenwich.
+ */
+export function localDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
-  return Date.UTC(y, m - 1, d) / MS_PER_DAY;
+  return new Date(y, m - 1, d);
+}
+
+function dayIndex(iso: string): number {
+  const date = localDate(iso);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / MS_PER_DAY;
 }
 
 /**
@@ -103,8 +112,8 @@ export function balanceTone(balance: number | null): "neutral" | "negative" | "u
 
 /** A card account's next debit day, as an unpadded "day.month". */
 export function debitDayHint(isoDate: string): string {
-  const [, month, day] = isoDate.split("-").map(Number);
-  return `${day}.${month}`;
+  const date = localDate(isoDate);
+  return `${date.getDate()}.${date.getMonth() + 1}`;
 }
 
 export type BudgetRing = {
@@ -125,7 +134,10 @@ export function budgetRing(pace: { spentFraction: number; verdict: BudgetVerdict
   };
 }
 
-/** A goal's ladder fill (already capped server-side, CONTEXT.md "goal ladder"), as a bar width. */
+/**
+ * A goal's ladder fill (CONTEXT.md "goal ladder") as a bar width. `current` is
+ * already capped server-side; the clamp only keeps the bar inside its track.
+ */
 export function goalFillPercent(current: number, target: number): number {
   if (target === 0) return 0;
   return Math.max(0, Math.min(100, (current / target) * 100));

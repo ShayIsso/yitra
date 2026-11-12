@@ -14,10 +14,10 @@ import {
 } from "@/lib/onboarding/path";
 import { transactionsHref } from "@/lib/transactions/view-params";
 import type { SectionLoad } from "./load";
-import { Bone, ListCard, ROW, Section, SectionBody } from "./parts";
+import { Bone, ListCard, ROW, Section, SectionBody, type LinkTarget } from "./parts";
 import { attentionItems, type AttentionCounts } from "./view";
 
-const STEP_DEFS: Record<OnboardingPathStepId, { label: string; href: string }> = {
+const STEP_DEFS: Record<OnboardingPathStepId, LinkTarget> = {
   connect: { label: "חיבור בנק או כרטיס אשראי", href: settingsSectionHref("accounts") },
   "first-sync": { label: "סנכרון ראשון", href: "/sync" },
   review: { label: "סיווג התנועות שלא סווגו", href: transactionsHref({ uncategorized: true }) },

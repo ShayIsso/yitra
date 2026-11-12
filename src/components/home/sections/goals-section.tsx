@@ -31,13 +31,13 @@ const PACE_LABEL: Record<GoalPaceVerdict, string> = {
   "no-deadline": "ללא יעד זמן",
 };
 
-const ROW = "flex flex-col gap-2 px-4 py-3";
+const GOAL_ROW = "flex flex-col gap-2 px-4 py-3";
 
 function GoalRow({ goal }: { goal: GoalsLadder["goals"][number] }) {
   const percent = goalFillPercent(goal.current, goal.target);
   const behind = goal.paceVerdict === "behind-pace";
   return (
-    <li className={ROW}>
+    <li className={GOAL_ROW}>
       <div className="text-body flex items-center justify-between gap-3">
         <span className="truncate font-semibold">{goal.name}</span>
         <span className="text-muted-foreground shrink-0 tabular-nums">{Math.round(percent)}%</span>
@@ -67,7 +67,7 @@ function GoalRow({ goal }: { goal: GoalsLadder["goals"][number] }) {
 
 function GoalRowSkeleton() {
   return (
-    <li className={ROW}>
+    <li className={GOAL_ROW}>
       <div className="text-body">
         <Bone className="w-28" />
       </div>

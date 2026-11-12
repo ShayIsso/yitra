@@ -62,11 +62,8 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
 }
 
 /**
- * What remains of the old dashboard below the home hero (#317): the KPI band,
- * the category breakdown and the trend mini chart, for the month the home
- * screen selected. #320 replaces them; #321 moved the rest into
- * `home/sections`.
- * Memoized: the home screen re-renders on every clock tick and sync-stream
+ * The KPI band, the category breakdown and the trend mini chart below the home
+ * hero, for the month the home screen selected. Memoized: the home screen re-renders on every clock tick and sync-stream
  * frame, and nothing here depends on either.
  *
  * It loads as soon as it mounts, beside the outlook, but draws nothing until

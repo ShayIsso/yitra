@@ -6,8 +6,8 @@ import { CaretLeftIcon, ClockIcon, RepeatIcon } from "@/components/icons";
 import { Amount } from "@/components/ui/amount";
 import type { Cadence } from "@/lib/recurring-detection";
 import type { SectionLoad } from "./load";
-import { ListCard, ListSkeleton, ROW, Section, SectionBody, SectionEmpty } from "./parts";
-import { upcomingList, type UpcomingCharge, type UpcomingWhen } from "./view";
+import { Bone, ListCard, ListSkeletonRows, ROW, Section, SectionBody, SectionEmpty } from "./parts";
+import { localDate, upcomingList, type UpcomingCharge, type UpcomingWhen } from "./view";
 
 export type UpcomingForecast = { upcoming: UpcomingCharge[]; total: number };
 
@@ -20,9 +20,10 @@ const CADENCE_LABEL: Record<Cadence, string> = {
 const SHORT_DATE = new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "short" });
 
 function dateLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return SHORT_DATE.format(new Date(y, m - 1, d));
+  return SHORT_DATE.format(localDate(iso));
 }
+
+const TOTAL_ROW = "bg-muted text-body flex min-h-11 items-center justify-between gap-3 px-4 py-2";
 
 /** The hero's word for it ("שמאחרים להגיע"), so the two never describe a late charge differently. */
 const LATE_LABEL = "מאחר להגיע";
@@ -50,7 +51,20 @@ function When({ when, date }: { when: UpcomingWhen; date: string }) {
 export function UpcomingSection({ load }: { load: SectionLoad<UpcomingForecast> }) {
   return (
     <Section title="חיובים קבועים קרובים" link={{ label: "מנויים", href: "/subscriptions" }}>
-      <SectionBody load={load} what="החיובים הקרובים" skeleton={<ListSkeleton rows={3} />}>
+      <SectionBody
+        load={load}
+        what="החיובים הקרובים"
+        skeleton={
+          <ListCard>
+            <ListSkeletonRows rows={3} />
+            <li className={TOTAL_ROW}>
+              <span className="text-body">
+                <Bone className="w-24" />
+              </span>
+            </li>
+          </ListCard>
+        }
+      >
         {(data, today) => <UpcomingList forecast={data} today={today} />}
       </SectionBody>
     </Section>
@@ -100,7 +114,7 @@ function UpcomingList({ forecast, today }: { forecast: UpcomingForecast; today: 
           </Link>
         </li>
       )}
-      <li className="bg-muted text-body flex min-h-11 items-center justify-between gap-3 px-4 py-2">
+      <li className={TOTAL_ROW}>
         <span className="text-muted-foreground">צפוי בחודש הקרוב</span>
         <Amount
           amount={forecast.total}

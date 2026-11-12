@@ -8,12 +8,12 @@ import type { SectionLoad } from "./load";
 import { Bone, ListCard, Section, SectionBody, SectionEmpty } from "./parts";
 import { merchantBarPercents } from "./view";
 
-const ROW = "flex min-h-12 items-center gap-3 px-4 py-2.5";
+const MERCHANT_ROW = "flex min-h-12 items-center gap-3 px-4 py-2.5";
 const SKELETON_ROWS = 5;
 
 function MerchantRow({ merchant, percent }: { merchant: TopMerchant; percent: number }) {
   return (
-    <li className={ROW}>
+    <li className={MERCHANT_ROW}>
       <span className="text-body min-w-0 flex-1 truncate">{merchant.merchant}</span>
       <span
         aria-hidden="true"
@@ -51,7 +51,7 @@ export function MerchantsSection({ load }: { load: SectionLoad<TopMerchant[]> })
         skeleton={
           <ListCard>
             {Array.from({ length: skeletonRows }, (_, i) => (
-              <li key={i} className={ROW}>
+              <li key={i} className={MERCHANT_ROW}>
                 <span className="text-body flex-1">
                   <Bone className="w-28" />
                 </span>

@@ -254,6 +254,8 @@ export function HomeScreen({
     shown?.outlook.state === "active" || shown?.outlook.state === "thin-history"
       ? shown.outlook
       : null;
+  const sectionsShown = answered && !welcoming;
+  const sectionsKey = `${version}:${sectionsNudge}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -314,22 +316,17 @@ export function HomeScreen({
       )}
 
       {banks.length > 0 && (
-        <DashboardPanel
-          month={month}
-          refreshKey={`${version}:${sectionsNudge}`}
-          visible={answered && !welcoming}
-        />
-      )}
-
-      {banks.length > 0 && (
-        <HomeSections
-          categories={categories}
-          month={month}
-          refreshKey={`${version}:${sectionsNudge}`}
-          visible={answered && !welcoming}
-          lastSyncRuns={runs ?? []}
-          onMonthlyTargets={setTargets}
-        />
+        <>
+          <DashboardPanel month={month} refreshKey={sectionsKey} visible={sectionsShown} />
+          <HomeSections
+            categories={categories}
+            month={month}
+            refreshKey={sectionsKey}
+            visible={sectionsShown}
+            lastSyncRuns={runs ?? []}
+            onMonthlyTargets={setTargets}
+          />
+        </>
       )}
 
       {otpBank && (

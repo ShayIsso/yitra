@@ -35,10 +35,7 @@ export const VERDICT_LABEL: Record<BudgetVerdict, string> = {
 /**
  * The shared positive/negative chip fill — reused by both the per-verdict
  * palette below and the savings met/missed chip, so the two "good/bad" chip
- * treatments can't drift apart. Token-driven (not the
- * hardcoded `-50`/`-700` Tailwind literals this replaced) so the wash reads
- * correctly in dark mode too — same low-opacity-fill technique as the toast
- * primitive's success/error variants (`src/components/ui/toast.tsx`).
+ * treatments can't drift apart.
  */
 const POSITIVE_CHIP_CLASS = "border-emerald/30 bg-emerald/10 text-emerald";
 const NEGATIVE_CHIP_CLASS = "border-destructive/30 bg-destructive/10 text-destructive";

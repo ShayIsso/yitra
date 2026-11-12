@@ -8,6 +8,25 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { SectionLoad } from "./load";
 
+/** Where a section's link goes, and what it says. */
+export type LinkTarget = { label: string; href: string };
+
+/** A teal text link with a trailing caret, 44px tall. */
+function SectionLink({ target, className }: { target: LinkTarget; className?: string }) {
+  return (
+    <Link
+      href={target.href}
+      className={cn(
+        "press text-body text-primary focus-visible:ring-ring/50 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 font-semibold outline-none hover:underline focus-visible:ring-3",
+        className,
+      )}
+    >
+      {target.label}
+      <CaretLeftIcon className="size-4" />
+    </Link>
+  );
+}
+
 /** A titled home section; the title row keeps one height whether or not it has a link. */
 export function Section({
   title,
@@ -15,7 +34,7 @@ export function Section({
   children,
 }: {
   title: string;
-  link?: { label: string; href: string };
+  link?: LinkTarget;
   children: React.ReactNode;
 }) {
   const titleId = React.useId();
@@ -25,15 +44,7 @@ export function Section({
         <h2 id={titleId} className="text-title font-bold">
           {title}
         </h2>
-        {link && (
-          <Link
-            href={link.href}
-            className="press text-body text-primary focus-visible:ring-ring/50 -me-2 inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-2 font-semibold outline-none hover:underline focus-visible:ring-3"
-          >
-            {link.label}
-            <CaretLeftIcon className="size-4" />
-          </Link>
-        )}
+        {link && <SectionLink target={link} className="-me-2 shrink-0" />}
       </div>
       {children}
     </section>
@@ -99,7 +110,7 @@ export function SectionEmpty({
   icon: React.ReactNode;
   heading: string;
   explainer: string;
-  action?: { label: string; href: string };
+  action?: LinkTarget;
 }) {
   return (
     <Card className="flex-row items-start gap-3 p-4">
@@ -109,15 +120,7 @@ export function SectionEmpty({
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
         <p className="text-body font-semibold">{heading}</p>
         <p className="text-body text-muted-foreground">{explainer}</p>
-        {action && (
-          <Link
-            href={action.href}
-            className="press text-body text-primary focus-visible:ring-ring/50 -ms-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 font-semibold outline-none hover:underline focus-visible:ring-3"
-          >
-            {action.label}
-            <CaretLeftIcon className="size-4" />
-          </Link>
-        )}
+        {action && <SectionLink target={action} className="-ms-2" />}
       </div>
     </Card>
   );
@@ -145,25 +148,28 @@ export function ListCard({ children }: { children: React.ReactNode }) {
 /** The two-line list row every list section draws (and its skeleton copies). */
 export const ROW = "flex min-h-16 items-center gap-3 px-4 py-3";
 
-/** A list skeleton: `rows` rows of the shared two-line shape. */
+export function ListSkeletonRows({ rows }: { rows: number }) {
+  return Array.from({ length: rows }, (_, i) => (
+    <li key={i} className={ROW}>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-body">
+          <Bone className="w-32" />
+        </span>
+        <span className="text-caption mt-0.5">
+          <Bone className="w-20" />
+        </span>
+      </span>
+      <span className="text-body">
+        <Bone className="w-16" />
+      </span>
+    </li>
+  ));
+}
+
 export function ListSkeleton({ rows }: { rows: number }) {
   return (
     <ListCard>
-      {Array.from({ length: rows }, (_, i) => (
-        <li key={i} className={ROW}>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="text-body">
-              <Bone className="w-32" />
-            </span>
-            <span className="text-caption mt-0.5">
-              <Bone className="w-20" />
-            </span>
-          </span>
-          <span className="text-body">
-            <Bone className="w-16" />
-          </span>
-        </li>
-      ))}
+      <ListSkeletonRows rows={rows} />
     </ListCard>
   );
 }

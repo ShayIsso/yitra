@@ -9,15 +9,10 @@ import { transactionsHref } from "@/lib/transactions/view-params";
 import { cn } from "@/lib/utils";
 import type { SectionLoad } from "./load";
 import { Bone, ListCard, ListSkeleton, ROW, Section, SectionBody, SectionEmpty } from "./parts";
+import { localDate } from "./view";
 
 /** How many of the latest rows the feed reads; the transactions page carries the rest. */
 export const ACTIVITY_LIMIT = 8;
-
-/** A YYYY-MM-DD read as a local date, so `dayLabel`'s local comparisons see that calendar day. */
-function localDate(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
 
 function ActivityRow({ tx }: { tx: RecentTransaction }) {
   // Transfers and ignored rows are outside every total (CONTEXT.md), so their amount recedes.

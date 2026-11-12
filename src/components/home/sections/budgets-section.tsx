@@ -131,12 +131,13 @@ function RingTileSkeleton() {
   );
 }
 
-const ROW = "flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3";
+const SAVINGS_ROW =
+  "flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3";
 
 /** The month's savings target: actual against target, with the month-close verdict in words. */
 function SavingsTargetRow({ status }: { status: SavingsTargetStatus }) {
   return (
-    <Card className={cn("gap-0 py-0", ROW)}>
+    <Card className={cn("gap-0 py-0", SAVINGS_ROW)}>
       <p className="text-body">
         <span className="text-muted-foreground">יעד חיסכון </span>
         <span className="font-semibold">
@@ -162,7 +163,7 @@ function SavingsTargetRow({ status }: { status: SavingsTargetStatus }) {
 
 function SavingsTargetSkeleton() {
   return (
-    <Card className={cn("gap-0 py-0", ROW)}>
+    <Card className={cn("gap-0 py-0", SAVINGS_ROW)}>
       <p className="text-body">
         <Bone className="w-48" />
       </p>
