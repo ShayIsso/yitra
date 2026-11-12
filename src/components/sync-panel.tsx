@@ -134,8 +134,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   // Mounted-only clock seed — SSR and the hydration pass render the
   // no-age form below; classification (and its `new Date()` reads) only
   // runs once this is set, so a clock read never happens in the render
-  // path shared with SSR (bug #193's exact trap; same shape as
-  // sync-freshness-pill.tsx's `nowMs`).
+  // path shared with SSR (bug #193's exact trap).
   const [nowMs, setNowMs] = useState<number | null>(null);
   // The bank whose code prompt the owner closed; reopened from its row.
   const [dismissedOtpBank, setDismissedOtpBank] = useState<string | null>(null);
@@ -151,7 +150,7 @@ function SyncPanelInner({ banks, lastRuns, observedInstitutions = [] }: SyncPane
   const observed = useMemo(() => new Set(observedInstitutions), [observedInstitutions]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount flag, mirrors sync-freshness-pill.tsx's nowMs seed
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount flag so SSR and hydration render the clock-free form (bug #193)
     setNowMs(Date.now());
   }, []);
 

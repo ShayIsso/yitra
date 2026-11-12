@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   homeHref,
   homeMonthOf,
+  isBrowsable,
   monthWindow,
   parseMonthParam,
   shiftMonth,
@@ -9,26 +10,46 @@ import {
 } from "@/components/home/month";
 
 const NOV = { year: 2026, month: 11 };
+const FIRST = { year: 2025, month: 3 };
+const RANGE = { first: FIRST, current: NOV };
 
 describe("parseMonthParam", () => {
   it("reads a YYYY-MM month", () => {
-    expect(parseMonthParam("2026-09", NOV)).toEqual({ year: 2026, month: 9 });
+    expect(parseMonthParam("2026-09", RANGE)).toEqual({ year: 2026, month: 9 });
   });
 
   it("falls back to the current month without a param", () => {
-    expect(parseMonthParam(null, NOV)).toEqual(NOV);
+    expect(parseMonthParam(null, RANGE)).toEqual(NOV);
   });
 
   it.each(["2026-13", "2026-00", "26-09", "2026-9", "september", "2026-09-01"])(
     "falls back to the current month for %s",
     (value) => {
-      expect(parseMonthParam(value, NOV)).toEqual(NOV);
+      expect(parseMonthParam(value, RANGE)).toEqual(NOV);
     },
   );
 
   it("never lands on a month that hasn't started", () => {
-    expect(parseMonthParam("2026-12", NOV)).toEqual(NOV);
-    expect(parseMonthParam("2027-01", NOV)).toEqual(NOV);
+    expect(parseMonthParam("2026-12", RANGE)).toEqual(NOV);
+    expect(parseMonthParam("2027-01", RANGE)).toEqual(NOV);
+  });
+
+  it("clamps a month before the first one to the first", () => {
+    expect(parseMonthParam("2025-02", RANGE)).toEqual(FIRST);
+    expect(parseMonthParam("1999-12", RANGE)).toEqual(FIRST);
+  });
+});
+
+describe("isBrowsable", () => {
+  it("allows the first and the current month and everything between", () => {
+    expect(isBrowsable(FIRST, RANGE)).toBe(true);
+    expect(isBrowsable(NOV, RANGE)).toBe(true);
+    expect(isBrowsable({ year: 2026, month: 1 }, RANGE)).toBe(true);
+  });
+
+  it("refuses a month before the first or after the current one", () => {
+    expect(isBrowsable({ year: 2025, month: 2 }, RANGE)).toBe(false);
+    expect(isBrowsable({ year: 2026, month: 12 }, RANGE)).toBe(false);
   });
 });
 
@@ -52,7 +73,7 @@ describe("shiftMonth", () => {
 
 describe("monthWindow", () => {
   it("ends at the current month, oldest first, while the selection is recent", () => {
-    expect(monthWindow({ year: 2026, month: 9 }, NOV)).toEqual([
+    expect(monthWindow({ year: 2026, month: 9 }, RANGE)).toEqual([
       { year: 2026, month: 7 },
       { year: 2026, month: 8 },
       { year: 2026, month: 9 },
@@ -62,7 +83,7 @@ describe("monthWindow", () => {
   });
 
   it("centres an older selection", () => {
-    expect(monthWindow({ year: 2026, month: 2 }, NOV)).toEqual([
+    expect(monthWindow({ year: 2026, month: 2 }, RANGE)).toEqual([
       { year: 2025, month: 12 },
       { year: 2026, month: 1 },
       { year: 2026, month: 2 },

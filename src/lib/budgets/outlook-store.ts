@@ -5,6 +5,7 @@
  * outlook's spend agrees with them.
  */
 import { monthDateRange } from "@/lib/analytics";
+import { isBankType } from "@/lib/bank-registry";
 import {
   projectSeries,
   type DetectionTransaction,
@@ -37,7 +38,7 @@ export type MonthOutlookStore = {
     patterns: PersistedRecurringPattern[];
     transactions: DetectionTransaction[];
   }>;
-  /** Institution id of every connected credential. */
+  /** Institution id of every stored credential, retired institutions included. */
   credentialBankTypes(): Promise<string[]>;
   /** The latest run per institution, any status. */
   lastRunPerBank(): Promise<SyncRunSummary[]>;
@@ -183,7 +184,7 @@ export async function getMonthOutlookWithStore(
     accountStarts,
     target,
     recurring,
-    bankTypes,
+    storedBankTypes,
     lastRuns,
     successes,
     firstSuccess,
@@ -200,6 +201,10 @@ export async function getMonthOutlookWithStore(
     store.firstRecordedSuccessAt(),
     store.syncRunningSince(),
   ]);
+
+  // ADR-0013 §4: a stored id the registry no longer knows cannot sync, so it
+  // is not connected: it neither counts as a bank nor holds the outlook stale.
+  const bankTypes = storedBankTypes.filter(isBankType);
 
   const history: PriorMonthExpenses[] = priorMonths.map((prior, i) => ({
     month: prior,

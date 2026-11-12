@@ -7,8 +7,10 @@ import { DashboardPanel } from "@/components/dashboard-panel";
 import { awaitsCode } from "@/components/bank-status-view";
 import { monthKey } from "@/components/reports/format";
 import { useSyncStream } from "@/components/sync-stream";
+import type { MonthlyTargetsData } from "@/lib/budgets";
 import type { Category } from "@/lib/categories";
 import type { SyncRunSummary } from "@/lib/sync/runs";
+import { firstSyncRunEnded, runsSignature } from "./first-sync-watch";
 import { FreshnessIndicator } from "./freshness-indicator";
 import { homeFreshness } from "./freshness";
 import { CONNECTION_LOST, FirstSyncHero, type HomeBank } from "./first-sync-hero";
@@ -24,12 +26,13 @@ import { useMonthLoad } from "./month-load";
 import { MonthNav } from "./month-nav";
 import {
   HOME_MONTH_PARAM,
-  compareMonths,
   homeHref,
+  isBrowsable,
   parseMonthParam,
   sameMonth,
   shiftMonth,
   type HomeMonth,
+  type MonthRange,
 } from "./month";
 import type { OutlookResponse } from "./outlook-view";
 
@@ -39,8 +42,15 @@ const OtpSheet = dynamic(() => import("@/components/sync-otp-sheet").then((m) =>
 });
 const TargetDialog = dynamic(() => import("./target-dialog"), { ssr: false });
 
-/** How often the hero re-reads the outlook while a first sync runs that this tab doesn't drive. */
+/**
+ * While a first sync this tab doesn't drive is running, the cheap
+ * last-run-per-bank read is polled this often; the outlook (about ten DB
+ * reads) is re-read only when that moves, or every SAFETY_TICKS polls in
+ * case the run ends without a run row changing (a categorization backfill
+ * holds the same claim).
+ */
 const FIRST_SYNC_POLL_MS = 4000;
+const FIRST_SYNC_SAFETY_TICKS = 8;
 
 /** Keeps "updated 5 minutes ago" and staleness moving while the page stays open. */
 const CLOCK_TICK_MS = 60_000;
@@ -61,25 +71,33 @@ type MonthOutlookLoad = { month: HomeMonth; outlook: OutlookResponse };
  * month switch is instant and back/forward walk the months.
  */
 export function HomeScreen({
-  currentMonth,
+  range: rangeProp,
   categories,
   banks,
 }: {
-  /** On the home calendar day, decided by the server so SSR and hydration agree. */
-  currentMonth: HomeMonth;
+  /**
+   * From the first month with data to the current one on the home calendar
+   * day, decided by the server so SSR and hydration agree.
+   */
+  range: MonthRange;
   categories: Category[];
-  /** Connected institutions, in sync order. */
+  /** Connected institutions (the registry still knows them), in sync order. */
   banks: HomeBank[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // By value: `router.refresh()` re-renders the page and hands a new object.
-  const { year: currentYear, month: currentMonthNumber } = currentMonth;
-  const current = React.useMemo(
-    () => ({ year: currentYear, month: currentMonthNumber }),
-    [currentYear, currentMonthNumber],
+  // By value: `router.refresh()` re-renders the page and hands new objects.
+  const { year: firstYear, month: firstMonth } = rangeProp.first;
+  const { year: currentYear, month: currentMonth } = rangeProp.current;
+  const range = React.useMemo<MonthRange>(
+    () => ({
+      first: { year: firstYear, month: firstMonth },
+      current: { year: currentYear, month: currentMonth },
+    }),
+    [firstYear, firstMonth, currentYear, currentMonth],
   );
-  const month = parseMonthParam(searchParams.get(HOME_MONTH_PARAM), current);
+  const param = searchParams.get(HOME_MONTH_PARAM);
+  const month = React.useMemo(() => parseMonthParam(param, range), [param, range]);
   const key = monthKey(month);
 
   /** Bumped whenever the data under the screen changed: a sync settled, a target was saved. */
@@ -87,11 +105,20 @@ export function HomeScreen({
   /** Re-reads the outlook alone: a retry, or a poll while a first sync runs elsewhere. */
   const [outlookNudge, setOutlookNudge] = React.useState(0);
   const [runs, setRuns] = React.useState<SyncRunSummary[] | null>(null);
+  /** The monthly targets as the sections last read them; the target dialog writes them back. */
+  const [targets, setTargets] = React.useState<MonthlyTargetsData | null>(null);
   /** The client clock, read only after mount (bug #193: no clock in the SSR path). */
   const [nowMs, setNowMs] = React.useState<number | null>(null);
   const [targetOpen, setTargetOpen] = React.useState(false);
   const [dismissedOtpBank, setDismissedOtpBank] = React.useState<string | null>(null);
 
+  const refreshAll = React.useCallback(() => {
+    setVersion((v) => v + 1);
+    // The shell's pending-reconciliation badge and the month floor are server-rendered.
+    router.refresh();
+  }, [router]);
+
+  const lastOutlookRef = React.useRef<OutlookResponse | null>(null);
   const outlook = useMonthLoad<MonthOutlookLoad>(
     key,
     `${version}:${outlookNudge}`,
@@ -102,6 +129,10 @@ export function HomeScreen({
       );
       // Ages are measured from when the figures arrived, never from a render.
       setNowMs(Date.now());
+      // A first sync driven elsewhere just ended: everything it imported is
+      // new to the sections and the runs, as after a stream of our own.
+      if (firstSyncRunEnded(lastOutlookRef.current, data)) refreshAll();
+      lastOutlookRef.current = data;
       return { month, outlook: data };
     },
   );
@@ -110,11 +141,7 @@ export function HomeScreen({
     // Every outcome re-reads: a run that dropped mid-way kept what it
     // imported, and a refused start means a run is live elsewhere, which the
     // outlook's progress (and its polling) shows.
-    onSettled: () => {
-      setVersion((v) => v + 1);
-      // The shell's pending-reconciliation badge is server-rendered.
-      router.refresh();
-    },
+    onSettled: refreshAll,
   });
   const stream = sync.state;
 
@@ -127,29 +154,57 @@ export function HomeScreen({
     const controller = new AbortController();
     readJson<SyncRunSummary[]>("/api/sync-runs", controller.signal)
       .then(setRuns)
-      // Freshness falls back to the outlook's own staleness; the hero still renders.
-      .catch(() => {});
+      .catch(() => {
+        // Unknown, not "hide": freshness falls back to the outlook's own
+        // staleness and onboarding to its balances; the next re-read retries.
+        if (!controller.signal.aborted) setRuns((known) => known ?? []);
+      });
     return () => controller.abort();
   }, [version]);
 
   const live = stream.starting || stream.syncing;
   const shown = outlook.data && nowMs !== null ? { ...outlook.data, nowMs } : null;
   const data = shown?.outlook ?? null;
-  const firstSyncElsewhere =
-    outlook.current && data?.state === "first-sync" && data.progress.running && !live;
+  // The last known outlook decides, so a failed re-read never ends the watch.
+  const firstSyncElsewhere = data?.state === "first-sync" && data.progress.running && !live;
+  const runsRef = React.useRef(runs);
+  React.useEffect(() => {
+    runsRef.current = runs;
+  });
 
   React.useEffect(() => {
     if (!firstSyncElsewhere) return;
-    const timer = setTimeout(() => setOutlookNudge((n) => n + 1), FIRST_SYNC_POLL_MS);
-    return () => clearTimeout(timer);
-  }, [firstSyncElsewhere, data]);
+    const controller = new AbortController();
+    let seen = runsRef.current ? runsSignature(runsRef.current) : null;
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+      const safety = ticks % FIRST_SYNC_SAFETY_TICKS === 0;
+      readJson<SyncRunSummary[]>("/api/sync-runs", controller.signal)
+        .then((next) => {
+          const signature = runsSignature(next);
+          if (signature === seen && !safety) return;
+          seen = signature;
+          setRuns(next);
+          setOutlookNudge((n) => n + 1);
+        })
+        // A failed poll just waits for the next one.
+        .catch(() => {
+          if (safety && !controller.signal.aborted) setOutlookNudge((n) => n + 1);
+        });
+    }, FIRST_SYNC_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      controller.abort();
+    };
+  }, [firstSyncElsewhere]);
 
   const select = React.useCallback(
     (next: HomeMonth) => {
-      if (compareMonths(next, current) > 0 || sameMonth(next, month)) return;
-      window.history.pushState(null, "", homeHref(next, current));
+      if (!isBrowsable(next, range) || sameMonth(next, month)) return;
+      window.history.pushState(null, "", homeHref(next, range.current));
     },
-    [current, month],
+    [range, month],
   );
 
   const codeBank =
@@ -181,12 +236,12 @@ export function HomeScreen({
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-headline font-bold">לוח בקרה</h1>
-        <MonthNav selected={month} current={current} onSelect={select} />
+        <MonthNav selected={month} range={range} onSelect={select} />
       </header>
 
       <MonthHero
         month={month}
-        busy={!outlook.current && shown !== null}
+        busy={outlook.pending && !outlook.current && !outlook.failed && shown !== null}
         onStep={(delta) => select(shiftMonth(month, delta))}
         indicator={
           !welcoming && (
@@ -264,8 +319,8 @@ export function HomeScreen({
           month={month}
           refreshKey={version}
           visible={answered && !welcoming}
-          credentialCount={banks.length}
           lastSyncRuns={runs}
+          onMonthlyTargets={setTargets}
         />
       )}
 
@@ -287,6 +342,7 @@ export function HomeScreen({
           month={shown.month}
           suggested={data.state === "no-target" ? data.suggestedTarget : null}
           usualMonth={data.state === "no-target" ? data.usualMonth : null}
+          knownTargets={targets}
           onClose={() => setTargetOpen(false)}
           onSaved={() => {
             setTargetOpen(false);

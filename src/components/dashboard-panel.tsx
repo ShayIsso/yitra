@@ -71,6 +71,8 @@ type DashboardData = {
   goals: GoalProgressCardData[];
   goalsSurplus: number;
   budgetsSummary: BudgetsSummaryResponse;
+  /** The monthly targets as read, or null when that read failed (the fallback is not the truth). */
+  monthlyTargets: MonthlyTargetsData | null;
   attention: AttentionCounts | null;
   topMerchants: TopMerchant[];
   trend: TrendsMonthPoint[];
@@ -133,7 +135,9 @@ async function fetchDashboardData(
     recentRes.ok ? recentRes.json() : [],
     upcomingRes.ok ? upcomingRes.json() : { upcoming: [], total: 0 },
     goalsRes.ok ? (goalsRes.json() as Promise<GoalsResponse>) : EMPTY_GOALS_RESPONSE,
-    budgetsSummaryRes.ok ? budgetsSummaryRes.json() : EMPTY_BUDGETS_SUMMARY,
+    budgetsSummaryRes.ok
+      ? (budgetsSummaryRes.json() as Promise<BudgetsSummaryResponse>)
+      : EMPTY_BUDGETS_SUMMARY,
     attentionRes.ok ? (attentionRes.json() as Promise<AttentionCounts>) : null,
     topMerchantsRes.ok ? topMerchantsRes.json() : [],
     trendRes.ok ? (trendRes.json() as Promise<TrendsReport>) : null,
@@ -149,6 +153,7 @@ async function fetchDashboardData(
     goals: goalsData.goals ?? [],
     goalsSurplus: goalsData.surplus ?? 0,
     budgetsSummary,
+    monthlyTargets: budgetsSummaryRes.ok ? budgetsSummary.monthlyTargets : null,
     attention,
     topMerchants,
     trend: trendReport?.months ?? [],
@@ -182,6 +187,8 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
 /**
  * The old dashboard's sections below the home hero (#317), for the month the
  * home screen selected. Each later home ticket (#318–#321) replaces part of it.
+ * Memoized: the home screen re-renders on every clock tick and sync-stream
+ * frame, and nothing here depends on either.
  *
  * It loads as soon as it mounts, beside the outlook, but draws nothing until
  * `visible`: the home screen withholds it in a first-run state. `refreshKey`
@@ -189,22 +196,22 @@ function KpiTile({ label, children }: { label: string; children: React.ReactNode
  * the same month keeps the sections on screen, and only a month change shows
  * the skeleton.
  */
-export function DashboardPanel({
+export const DashboardPanel = React.memo(function DashboardPanel({
   categories,
   month,
   refreshKey,
   visible,
-  credentialCount,
   lastSyncRuns,
+  onMonthlyTargets,
 }: {
   categories: Category[];
   month: HomeMonth;
   refreshKey: number;
   visible: boolean;
-  /** Connected institutions the registry still knows; only existence is read (#264). */
-  credentialCount: number;
   /** Last run per current institution, or null until the home screen has read them. */
   lastSyncRuns: SyncRunSummary[] | null;
+  /** Hands the monthly targets up once read, so the target dialog needn't read them again. */
+  onMonthlyTargets: (targets: MonthlyTargetsData) => void;
 }) {
   const { year, month: monthNumber } = month;
   const [attempt, setAttempt] = React.useState(0);
@@ -215,6 +222,11 @@ export function DashboardPanel({
     Promise.resolve().then(() => fetchDashboardData(year, monthNumber, signal)),
   );
   const data = load.current ? load.data : null;
+  const monthlyTargets = load.data?.monthlyTargets ?? null;
+
+  React.useEffect(() => {
+    if (monthlyTargets) onMonthlyTargets(monthlyTargets);
+  }, [monthlyTargets, onMonthlyTargets]);
 
   const categoriesById = React.useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
@@ -230,24 +242,17 @@ export function DashboardPanel({
     );
   }
   return (
-    <DashboardSections
-      data={data}
-      categoriesById={categoriesById}
-      credentialCount={credentialCount}
-      lastSyncRuns={lastSyncRuns}
-    />
+    <DashboardSections data={data} categoriesById={categoriesById} lastSyncRuns={lastSyncRuns} />
   );
-}
+});
 
 function DashboardSections({
   data,
   categoriesById,
-  credentialCount,
   lastSyncRuns,
 }: {
   data: DashboardData;
   categoriesById: Map<string, Category>;
-  credentialCount: number;
   lastSyncRuns: SyncRunSummary[] | null;
 }) {
   const {
@@ -305,7 +310,8 @@ function DashboardSections({
     lastSyncRuns === null || attention === null
       ? null
       : {
-          hasCredential: credentialCount > 0,
+          // The home screen mounts the sections only with a connected institution.
+          hasCredential: true,
           hasSuccessfulSync:
             lastSyncRuns.some((run) => run.status === "success") || balances.length > 0,
           uncategorizedCount: attention.uncategorized,

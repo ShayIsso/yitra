@@ -26,19 +26,23 @@ type SavingsRead =
  * Confirms or edits the suggested monthly expense target before anything is
  * written (#312: a suggestion is never applied silently). Saving goes through
  * `setMonthlyTargetsAction`, the one write path for targets, which replaces
- * both targets at once, so the current savings target is read first and
- * written back unchanged.
+ * both targets at once, so the current savings target is written back
+ * unchanged: the one the sections already read, or, before they have, a read
+ * of its own.
  */
 export default function TargetDialog({
   month,
   suggested,
   usualMonth,
+  knownTargets,
   onClose,
   onSaved,
 }: {
   month: HomeMonth;
   suggested: number | null;
   usualMonth: number | null;
+  /** The targets the home screen's sections already read; null until they have. */
+  knownTargets: MonthlyTargetsData | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -46,10 +50,14 @@ export default function TargetDialog({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [value, setValue] = React.useState<number | null>(suggested);
   const [error, setError] = React.useState<string | null>(null);
-  const [savings, setSavings] = React.useState<SavingsRead>({ status: "loading" });
+  const [savings, setSavings] = React.useState<SavingsRead>(() =>
+    knownTargets ? { status: "ready", value: knownTargets.savingsTarget } : { status: "loading" },
+  );
+  const needsRead = knownTargets === null;
   const [pending, startTransition] = React.useTransition();
 
   React.useEffect(() => {
+    if (!needsRead) return;
     const controller = new AbortController();
     fetch(`/api/budgets-summary?year=${month.year}&month=${month.month}`, {
       signal: controller.signal,
@@ -62,7 +70,7 @@ export default function TargetDialog({
         if (!controller.signal.aborted) setSavings({ status: "failed" });
       });
     return () => controller.abort();
-  }, [month.year, month.month]);
+  }, [needsRead, month.year, month.month]);
 
   function save(e: React.FormEvent) {
     e.preventDefault();

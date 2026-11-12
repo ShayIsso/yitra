@@ -31,15 +31,27 @@ export function shiftMonth(m: HomeMonth, delta: number): HomeMonth {
 export const HOME_MONTH_PARAM = "month";
 
 /**
- * The month a `?month=` value names, or `current` when it names none or one
- * that hasn't started: the outlook has nothing to say about a future month.
+ * The months the home screen can show: from the first month with data (or
+ * the outlook route's own floor when nothing dates it) to the current month.
+ * The outlook has nothing to say about a month that hasn't started.
  */
-export function parseMonthParam(value: string | null, current: HomeMonth): HomeMonth {
+export type MonthRange = { first: HomeMonth; current: HomeMonth };
+
+export function isBrowsable(m: HomeMonth, { first, current }: MonthRange): boolean {
+  return compareMonths(m, first) >= 0 && compareMonths(m, current) <= 0;
+}
+
+/**
+ * The month a `?month=` value names, clamped into `range`; the current month
+ * when it names none.
+ */
+export function parseMonthParam(value: string | null, range: MonthRange): HomeMonth {
   const match = value?.match(/^(\d{4})-(\d{2})$/);
-  if (!match) return current;
+  if (!match) return range.current;
   const parsed = { year: Number(match[1]), month: Number(match[2]) };
-  if (parsed.month < 1 || parsed.month > 12) return current;
-  return compareMonths(parsed, current) > 0 ? current : parsed;
+  if (parsed.month < 1 || parsed.month > 12) return range.current;
+  if (compareMonths(parsed, range.current) > 0) return range.current;
+  return compareMonths(parsed, range.first) < 0 ? range.first : parsed;
 }
 
 export function homeHref(m: HomeMonth, current: HomeMonth): string {
@@ -59,7 +71,7 @@ export const MONTH_WINDOW = 5;
  * The segmented control's months, oldest first. In RTL that puts the newest
  * at the inline end (left), the same direction as the chevrons and the swipe.
  */
-export function monthWindow(selected: HomeMonth, current: HomeMonth): HomeMonth[] {
+export function monthWindow(selected: HomeMonth, { current }: MonthRange): HomeMonth[] {
   const behind = compareMonths(current, selected);
   const newest =
     behind < MONTH_WINDOW ? current : shiftMonth(selected, Math.floor(MONTH_WINDOW / 2));

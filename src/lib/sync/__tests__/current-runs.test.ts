@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { enabledBankTypes } from "@/lib/bank-registry";
-import { classifySyncFreshness } from "@/components/dashboard/sync-freshness-pill";
+import { homeFreshness } from "@/components/home/freshness";
 import { getLastRunsForCurrentInstitutions, runsOfCurrentInstitutions } from "../current-runs";
 import type { SyncRunStore, SyncRunSummary } from "../runs";
 
@@ -48,43 +48,40 @@ describe("runsOfCurrentInstitutions", () => {
   });
 });
 
-describe("freshness over current institutions", () => {
+describe("home freshness over current institutions", () => {
+  // The home hero's freshness reads `/api/sync-runs`, i.e. this filter; its
+  // staleness comes from the month outlook, so only failures are run-based.
+  const freshness = (runs: SyncRunSummary[], bankTypes: string[]) =>
+    homeFreshness({
+      runs: runsOfCurrentInstitutions(runs, bankTypes),
+      asOf: hoursAgo(2).toISOString(),
+      stale: false,
+      nowMs: NOW,
+      live: { syncing: false, codeBank: null },
+    });
+
   it("ignores a deleted institution's failed run", () => {
-    const runs = [
-      run({ bank: KEPT, startedAt: hoursAgo(2) }),
-      run({ bank: DELETED, status: "error" }),
-    ];
+    const runs = [run({ bank: KEPT }), run({ bank: DELETED, status: "error" })];
 
-    const verdict = classifySyncFreshness(runsOfCurrentInstitutions(runs, [KEPT]), NOW);
-
-    expect(verdict.level).toBe("fresh");
+    expect(freshness(runs, [KEPT]).kind).toBe("fresh");
   });
 
-  it("ignores a deleted institution's stale run", () => {
-    const runs = [
-      run({ bank: KEPT, startedAt: hoursAgo(2) }),
-      run({ bank: DELETED, startedAt: hoursAgo(24 * 30) }),
-    ];
+  it("ignores a deleted institution's missed code", () => {
+    const runs = [run({ bank: KEPT }), run({ bank: DELETED, status: "otp_skipped" })];
 
-    const verdict = classifySyncFreshness(runsOfCurrentInstitutions(runs, [KEPT]), NOW);
-
-    expect(verdict.level).toBe("fresh");
+    expect(freshness(runs, [KEPT]).kind).toBe("fresh");
   });
 
   it("still lets a surviving institution's failed run decide the verdict", () => {
     const runs = [run({ bank: KEPT, status: "error" }), run({ bank: DELETED })];
 
-    const verdict = classifySyncFreshness(runsOfCurrentInstitutions(runs, [KEPT, DELETED]), NOW);
-
-    expect(verdict.level).toBe("error");
+    expect(freshness(runs, [KEPT, DELETED])).toEqual({ kind: "failed", bank: KEPT });
   });
 
-  it("reports never when the only runs belong to deleted institutions", () => {
-    const runs = [run({ bank: DELETED, status: "error" })];
+  it("ignores a failed run of an institution the registry no longer knows", () => {
+    const runs = [run({ bank: KEPT }), run({ bank: UNREGISTERED, status: "error" })];
 
-    const verdict = classifySyncFreshness(runsOfCurrentInstitutions(runs, [KEPT]), NOW);
-
-    expect(verdict).toEqual({ level: "never" });
+    expect(freshness(runs, [KEPT, UNREGISTERED]).kind).toBe("fresh");
   });
 });
 
@@ -106,6 +103,6 @@ describe("getLastRunsForCurrentInstitutions", () => {
 
     const runs = await getLastRunsForCurrentInstitutions(store, async () => []);
 
-    expect(classifySyncFreshness(runs, NOW)).toEqual({ level: "never" });
+    expect(runs).toEqual([]);
   });
 });

@@ -3,7 +3,15 @@
 import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
 import { HEBREW_MONTHS_SHORT, monthLabel } from "@/components/reports/format";
 import { cn } from "@/lib/utils";
-import { compareMonths, monthWindow, sameMonth, shiftMonth, type HomeMonth } from "./month";
+import {
+  compareMonths,
+  isBrowsable,
+  monthWindow,
+  sameMonth,
+  shiftMonth,
+  type HomeMonth,
+  type MonthRange,
+} from "./month";
 
 const CHEVRON =
   "press grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 outline-none disabled:pointer-events-none disabled:opacity-40";
@@ -12,31 +20,34 @@ const CHEVRON =
  * Month navigation: a segmented control between two chevrons. Months run
  * oldest to newest in reading order, so in RTL the newest sits at the inline
  * end (left): "earlier" is the right-hand chevron pointing right, "later" the
- * left-hand one pointing left, matching the hero's swipe. A month that hasn't
- * started is never offered.
+ * left-hand one pointing left, matching the hero's swipe. Only months in
+ * `range` are offered: none that hasn't started, none before the first data.
  */
 export function MonthNav({
   selected,
-  current,
+  range,
   onSelect,
 }: {
   selected: HomeMonth;
-  current: HomeMonth;
+  range: MonthRange;
   onSelect: (month: HomeMonth) => void;
 }) {
+  const { current } = range;
   const atNewest = compareMonths(selected, current) >= 0;
+  const atOldest = compareMonths(selected, range.first) <= 0;
   return (
     <nav aria-label="בחירת חודש" className="flex items-center gap-1">
       <button
         type="button"
         className={CHEVRON}
         aria-label="חודש קודם"
+        disabled={atOldest}
         onClick={() => onSelect(shiftMonth(selected, -1))}
       >
         <CaretRightIcon className="size-5" />
       </button>
       <ul className="bg-muted flex min-w-0 flex-1 items-center rounded-full p-1 md:flex-none">
-        {monthWindow(selected, current).map((m) => {
+        {monthWindow(selected, range).map((m) => {
           const active = sameMonth(m, selected);
           const otherYear = m.year !== current.year;
           return (
@@ -45,12 +56,13 @@ export function MonthNav({
                 type="button"
                 aria-current={active ? "date" : undefined}
                 aria-label={monthLabel(m)}
+                disabled={!isBrowsable(m, range)}
                 onClick={() => onSelect(m)}
                 className={cn(
                   "press text-body focus-visible:ring-ring/50 flex h-11 w-full min-w-11 flex-col items-center justify-center rounded-full px-1 leading-none font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 md:w-16",
                   active
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    : "text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
                 )}
               >
                 {HEBREW_MONTHS_SHORT[m.month - 1]}
