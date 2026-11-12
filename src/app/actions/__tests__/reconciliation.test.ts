@@ -169,7 +169,9 @@ describe("rejectGroup — suspected transfer (singleton)", () => {
     expect(result.error).toBeUndefined();
     expect(store.clearGroup).toHaveBeenCalledWith(["group-sus"], [["sus-1", "sus-1"]]);
     // No rule matches → the row goes back to uncategorized.
-    expect(store.setCategory).toHaveBeenCalledWith("sus-1", null);
+    expect(store.setCategory).toHaveBeenCalledWith("sus-1", null, {
+      transferCategoryId: "cat-transfer",
+    });
   });
 });
 
@@ -250,7 +252,9 @@ describe("undoTransaction", () => {
       ],
     );
     // lump matches rule
-    expect(store.setCategory).toHaveBeenCalledWith("lump-1", "cat-settle");
+    expect(store.setCategory).toHaveBeenCalledWith("lump-1", "cat-settle", {
+      transferCategoryId: "cat-transfer",
+    });
   });
 
   it("group becomes singleton after undo — clears remaining member too", async () => {
