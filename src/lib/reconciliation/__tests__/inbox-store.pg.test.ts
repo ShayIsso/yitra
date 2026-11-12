@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { sql, eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { approveGroup } from "../inbox-ops";
+import { approveGroup, rejectGroup } from "../inbox-ops";
 import { drizzleInboxStore } from "../inbox-store";
 import { drizzleSuspectedTransferRouter } from "../suspected-transfer";
 
@@ -36,17 +36,22 @@ describe.skipIf(!isThrowaway)("the suspected-transfer inbox on Postgres", () => 
   let db: Awaited<typeof import("@/db")>["db"];
   let transferCategoryId: string;
   let incomeCategoryId: string;
+  let settlementCategoryId: string;
 
   beforeEach(async () => {
     ({ db } = await import("@/db"));
     await db.execute(sql`delete from bank_credentials`);
     await db.execute(sql`delete from merchant_memory`);
     await db.execute(
-      sql`delete from categories where name in ('העברה פנימית', 'synthetic income')`,
+      sql`delete from categories where name in ('העברה פנימית', 'synthetic income', 'הסדרה - כרטיס אשראי')`,
     );
     [{ id: transferCategoryId }] = await db
       .insert(schema.categories)
       .values({ name: "העברה פנימית", type: "transfer", icon: "x", color: "#000000" })
+      .returning({ id: schema.categories.id });
+    [{ id: settlementCategoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: "הסדרה - כרטיס אשראי", type: "transfer", icon: "x", color: "#000000" })
       .returning({ id: schema.categories.id });
     [{ id: incomeCategoryId }] = await db
       .insert(schema.categories)
@@ -172,5 +177,109 @@ describe.skipIf(!isThrowaway)("the suspected-transfer inbox on Postgres", () => 
     expect(row.reconciliationConfirmedAt).not.toBeNull();
     expect(row.categoryId).toBe(incomeCategoryId);
     expect(row.categorySource).toBe("user");
+  });
+
+  const seed = (categoryId: string | null, categorySource: "user" | "memory" | "rule" | null) =>
+    db
+      .update(schema.transactions)
+      .set({ categoryId, categorySource })
+      .where(eq(schema.transactions.id, ROW));
+
+  describe("reject (unconfirmed group)", () => {
+    it.each(["user", "memory"] as const)(
+      "keeps a %s category, even internal transfer, whatever the caller read",
+      async (source) => {
+        for (const category of [incomeCategoryId, transferCategoryId]) {
+          await seed(category, source);
+          await drizzleInboxStore.setCategory(ROW, null, "reject");
+          expect(await stored()).toMatchObject({ categoryId: category, categorySource: source });
+        }
+      },
+    );
+
+    it("rejecting a queued row keeps a category the user gave it", async () => {
+      await seed(transferCategoryId, "user");
+      await rejectGroup(GROUP, drizzleInboxStore);
+      expect(await stored()).toMatchObject({
+        reconciliationGroupId: null,
+        categoryId: transferCategoryId,
+        categorySource: "user",
+      });
+    });
+
+    it.each([null, "income"] as const)(
+      "writes to a row with no provenance (category %s) and clears it again",
+      async (existing) => {
+        await seed(existing ? incomeCategoryId : null, null);
+        await drizzleInboxStore.setCategory(ROW, incomeCategoryId, "reject");
+        expect(await stored()).toMatchObject({
+          categoryId: incomeCategoryId,
+          categorySource: "rule",
+        });
+        await drizzleInboxStore.setCategory(ROW, null, "reject");
+        expect(await stored()).toMatchObject({ categoryId: null, categorySource: null });
+      },
+    );
+  });
+
+  describe("undo (confirmed group)", () => {
+    it("releases the transfer flip an approval wrote (user provenance)", async () => {
+      await seed(transferCategoryId, "user");
+      await drizzleInboxStore.setCategory(ROW, incomeCategoryId, "undo");
+      expect(await stored()).toMatchObject({
+        categoryId: incomeCategoryId,
+        categorySource: "rule",
+      });
+    });
+
+    it.each([
+      ["transfer", () => transferCategoryId],
+      ["settlement", () => settlementCategoryId],
+    ])("releases an auto-applied %s category under a stale memory source", async (_n, id) => {
+      await seed(id(), "memory");
+      await drizzleInboxStore.setCategory(ROW, null, "undo");
+      expect(await stored()).toMatchObject({ categoryId: null, categorySource: null });
+    });
+
+    it.each(["user", "memory"] as const)(
+      "keeps a %s category unrelated to reconciliation",
+      async (source) => {
+        await seed(incomeCategoryId, source);
+        await drizzleInboxStore.setCategory(ROW, null, "undo");
+        expect(await stored()).toMatchObject({
+          categoryId: incomeCategoryId,
+          categorySource: source,
+        });
+      },
+    );
+  });
+
+  describe("open AI suggestions", () => {
+    const suggest = () =>
+      db.insert(schema.aiSuggestions).values({
+        transactionId: ROW,
+        categoryId: incomeCategoryId,
+        confidence: 4,
+        model: "synthetic",
+        status: "pending_review",
+      });
+    const statuses = async () =>
+      (await db.select({ s: schema.aiSuggestions.status }).from(schema.aiSuggestions)).map(
+        (r) => r.s,
+      );
+
+    it("stay open when the guard skips the write", async () => {
+      await seed(incomeCategoryId, "user");
+      await suggest();
+      await drizzleInboxStore.setCategory(ROW, transferCategoryId, "reject");
+      expect(await statuses()).toEqual(["pending_review"]);
+    });
+
+    it("are superseded when the row is written", async () => {
+      await seed(null, null);
+      await suggest();
+      await drizzleInboxStore.setCategory(ROW, transferCategoryId, "reject");
+      expect(await statuses()).toEqual(["superseded"]);
+    });
   });
 });

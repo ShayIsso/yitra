@@ -7,6 +7,7 @@
 import { categorize, type CategoryRule } from "@/lib/categories/rules";
 import { bankKindOf } from "@/lib/bank-registry";
 import type { CategorySource } from "@/lib/merchant-memory";
+import { TRANSFER_CATEGORY_NAME } from "./category-names";
 import { pairsToRecordOnReject, pairsToRecordOnUndo, type RejectedPair } from "./rejected-pairs";
 
 export type InboxTransaction = {
@@ -47,6 +48,9 @@ export type TransferFlip = {
   keepUserCategory: boolean;
 };
 
+/** What a category reset is undoing: see `InboxStore.setCategory`. */
+export type ReleaseIntent = "reject" | "undo";
+
 export type InboxStore = {
   getGroupMembers(groupId: string): Promise<InboxTransaction[]>;
   getGroupMembersByIds(groupIds: string[]): Promise<Map<string, InboxTransaction[]>>;
@@ -56,7 +60,16 @@ export type InboxStore = {
   clearGroup(groupIds: string[], rejections?: RejectedPair[]): Promise<void>;
   /** Clears the rows and persists `rejections` in the same transaction. */
   clearRows(txnIds: string[], rejections?: RejectedPair[]): Promise<void>;
-  setCategory(txnId: string, categoryId: string | null): Promise<void>;
+  /**
+   * Resets the row to `categoryId` (a rule result, or null), unless it carries a
+   * `user`/`memory` category at write time (the guard is in the write, so a
+   * category chosen after the caller read the row still wins).
+   * - `reject`: an unconfirmed group; reconciliation wrote nothing to release.
+   * - `undo`: a confirmed group; also releases the categories reconciliation
+   *   itself writes (internal transfer, card settlement), which can sit under a
+   *   stale `user`/`memory` source because auto-apply leaves provenance alone.
+   */
+  setCategory(txnId: string, categoryId: string | null, intent: ReleaseIntent): Promise<void>;
   getCategoryIdByName(name: string): Promise<string | null>;
   getRulesOrderedByPriority(): Promise<CategoryRule[]>;
 };
@@ -133,7 +146,7 @@ async function transferFlipFor(
     return null;
   }
 
-  const transferCategoryId = await store.getCategoryIdByName("העברה פנימית");
+  const transferCategoryId = await store.getCategoryIdByName(TRANSFER_CATEGORY_NAME);
   if (!transferCategoryId) return null;
   return {
     txnId: bankSide.id,
@@ -182,23 +195,23 @@ export async function approveGroups(
   return { skipped };
 }
 
+async function rejectMembers(
+  groupId: string,
+  members: InboxTransaction[],
+  rules: CategoryRule[],
+  store: InboxStore,
+): Promise<void> {
+  // The rejected pairs are recorded with the clear, so no sync can re-propose them.
+  await store.clearGroup([groupId], pairsToRecordOnReject(members));
+  for (const member of members) {
+    await store.setCategory(member.id, categorize(member.description, rules), "reject");
+  }
+}
+
 export async function rejectGroup(groupId: string, store: InboxStore): Promise<{ error?: string }> {
   const members = await store.getGroupMembers(groupId);
   if (members.length === 0) return { error: "קבוצת ההתאמה לא נמצאה" };
-
-  // Queued candidates do NOT have their category flipped — only re-rule-engine
-  // rows that were part of an auto-applied group (reconciliationConfirmedAt set).
-  // For the queue case, just clear reconciliation columns; category is unchanged.
-  // The rejected pairs are recorded with the clear, so no sync can re-propose them.
-  await store.clearGroup([groupId], pairsToRecordOnReject(members));
-
-  // Re-run rule engine for any rows whose category may have been system-assigned
-  const rules = await store.getRulesOrderedByPriority();
-  for (const member of members) {
-    const newCategoryId = categorize(member.description, rules);
-    await store.setCategory(member.id, newCategoryId);
-  }
-
+  await rejectMembers(groupId, members, await store.getRulesOrderedByPriority(), store);
   return {};
 }
 
@@ -206,9 +219,11 @@ export async function rejectGroups(
   groupIds: string[],
   store: InboxStore,
 ): Promise<{ error?: string }> {
+  const rules = await store.getRulesOrderedByPriority();
   for (const groupId of groupIds) {
-    const result = await rejectGroup(groupId, store);
-    if (result.error) return result;
+    const members = await store.getGroupMembers(groupId);
+    if (members.length === 0) return { error: "קבוצת ההתאמה לא נמצאה" };
+    await rejectMembers(groupId, members, rules, store);
   }
   return {};
 }
@@ -231,8 +246,7 @@ export async function undoTransaction(
       allGroupMembers.filter((m) => m.reconciliationGroupId === txn.reconciliationGroupId),
     ),
   );
-  const newCategoryId = categorize(txn.description, rules);
-  await store.setCategory(txnId, newCategoryId);
+  await store.setCategory(txnId, categorize(txn.description, rules), "undo");
 
   const remaining = allGroupMembers.filter(
     (m) => m.id !== txnId && m.reconciliationGroupId === txn.reconciliationGroupId,
@@ -242,8 +256,7 @@ export async function undoTransaction(
     // Group has become a singleton (or is empty) — clear the remaining member too
     for (const rem of remaining) {
       await store.clearRows([rem.id]);
-      const remCategoryId = categorize(rem.description, rules);
-      await store.setCategory(rem.id, remCategoryId);
+      await store.setCategory(rem.id, categorize(rem.description, rules), "undo");
     }
   }
 

@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
 import type { ApplyResult, ReconciliationCandidate } from "./types";
 import type { ReconciliationStore } from "./store";
+import { SETTLEMENT_CATEGORY_NAME } from "./category-names";
 
 const AUTO_APPLY_THRESHOLD = 0.95;
-const SETTLEMENT_CATEGORY_NAME = "הסדרה - כרטיס אשראי";
 
 export async function applyReconciliation(
   candidates: ReconciliationCandidate[],

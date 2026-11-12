@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
 import type { ApplyResult, P2MirrorCandidate } from "./types";
 import type { ReconciliationStore } from "./store";
+import { TRANSFER_CATEGORY_NAME } from "./category-names";
 
 const AUTO_APPLY_THRESHOLD = 0.95;
-const TRANSFER_CATEGORY_NAME = "העברה פנימית";
 
 export async function applyP2Mirror(
   candidates: P2MirrorCandidate[],

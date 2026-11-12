@@ -14,8 +14,9 @@ import {
 import { and, eq, isNull, inArray, notInArray, or, asc } from "drizzle-orm";
 import { supersedeOpenSuggestions } from "@/lib/ai-categorization";
 import type { CategorySource } from "@/lib/merchant-memory";
-import type { InboxStore, InboxTransaction, TransferFlip } from "./inbox-ops";
+import type { InboxStore, InboxTransaction, ReleaseIntent, TransferFlip } from "./inbox-ops";
 import type { RejectedPair } from "./rejected-pairs";
+import { RECONCILIATION_CATEGORY_NAMES } from "./category-names";
 import { recordRejections } from "./rejection-writes";
 import type { CategoryRule } from "@/lib/categories/rules";
 
@@ -255,16 +256,36 @@ export const drizzleInboxStore: InboxStore = {
     });
   },
 
-  async setCategory(txnId: string, categoryId: string | null): Promise<void> {
+  async setCategory(
+    txnId: string,
+    categoryId: string | null,
+    intent: ReleaseIntent,
+  ): Promise<void> {
     // Reconciliation re-runs the rule engine on split/edit rows, so a non-null
     // result is rule-sourced (ADR-0010); clearing resets provenance to NULL.
     // Memory is deliberately NOT consulted here in this slice (issue #135).
+    const writable = or(
+      isNull(transactions.categorySource),
+      notInArray(transactions.categorySource, ["user", "memory"]),
+      // By category name, in the write: undo has already cleared the
+      // reconciliation columns, so nothing on the row says what wrote its category.
+      intent === "undo"
+        ? inArray(
+            transactions.categoryId,
+            db
+              .select({ id: categories.id })
+              .from(categories)
+              .where(inArray(categories.name, [...RECONCILIATION_CATEGORY_NAMES])),
+          )
+        : undefined,
+    );
     await db.transaction(async (tx) => {
-      await tx
+      const written = await tx
         .update(transactions)
         .set({ categoryId, categorySource: categoryId === null ? null : "rule" })
-        .where(eq(transactions.id, txnId));
-      if (categoryId !== null) await supersedeOpenSuggestions([txnId], tx);
+        .where(and(eq(transactions.id, txnId), writable))
+        .returning({ id: transactions.id });
+      if (categoryId !== null && written.length > 0) await supersedeOpenSuggestions([txnId], tx);
     });
   },
 

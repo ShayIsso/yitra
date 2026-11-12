@@ -1,0 +1,3 @@
+export const TRANSFER_CATEGORY_NAME = "העברה פנימית";
+export const SETTLEMENT_CATEGORY_NAME = "הסדרה - כרטיס אשראי";
+export const RECONCILIATION_CATEGORY_NAMES = [TRANSFER_CATEGORY_NAME, SETTLEMENT_CATEGORY_NAME];
