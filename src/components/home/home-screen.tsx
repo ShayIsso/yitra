@@ -84,20 +84,27 @@ export function HomeScreen({
 
   /** Bumped whenever the data under the screen changed: a sync settled, a target was saved. */
   const [version, setVersion] = React.useState(0);
+  /** Re-reads the outlook alone: a retry, or a poll while a first sync runs elsewhere. */
+  const [outlookNudge, setOutlookNudge] = React.useState(0);
   const [runs, setRuns] = React.useState<SyncRunSummary[] | null>(null);
   /** The client clock, read only after mount (bug #193: no clock in the SSR path). */
   const [nowMs, setNowMs] = React.useState<number | null>(null);
   const [targetOpen, setTargetOpen] = React.useState(false);
   const [dismissedOtpBank, setDismissedOtpBank] = React.useState<string | null>(null);
 
-  const outlook = useMonthLoad<MonthOutlookLoad>(key, version, async (signal) => {
-    const data = await readJson<OutlookResponse>(
-      `/api/month-outlook?year=${month.year}&month=${month.month}`,
-      signal,
-    );
-    setNowMs(Date.now());
-    return { month, outlook: data };
-  });
+  const outlook = useMonthLoad<MonthOutlookLoad>(
+    key,
+    `${version}:${outlookNudge}`,
+    async (signal) => {
+      const data = await readJson<OutlookResponse>(
+        `/api/month-outlook?year=${month.year}&month=${month.month}`,
+        signal,
+      );
+      // Ages are measured from when the figures arrived, never from a render.
+      setNowMs(Date.now());
+      return { month, outlook: data };
+    },
+  );
 
   const sync = useSyncStream({
     // Every outcome re-reads: a run that dropped mid-way kept what it
@@ -133,7 +140,7 @@ export function HomeScreen({
 
   React.useEffect(() => {
     if (!firstSyncElsewhere) return;
-    const timer = setTimeout(() => setVersion((v) => v + 1), FIRST_SYNC_POLL_MS);
+    const timer = setTimeout(() => setOutlookNudge((n) => n + 1), FIRST_SYNC_POLL_MS);
     return () => clearTimeout(timer);
   }, [firstSyncElsewhere, data]);
 
@@ -191,8 +198,8 @@ export function HomeScreen({
           )
         }
       >
-        {outlook.current && outlook.failed ? (
-          <HeroError retrying={outlook.pending} onRetry={() => setVersion((v) => v + 1)} />
+        {outlook.failed && !outlook.current ? (
+          <HeroError retrying={outlook.pending} onRetry={() => setOutlookNudge((n) => n + 1)} />
         ) : shown === null ? (
           <HeroBodySkeleton />
         ) : (

@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowsClockwiseIcon, WarningCircleIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { BankBadge } from "@/components/bank-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -205,7 +207,8 @@ export function DashboardPanel({
   lastSyncRuns: SyncRunSummary[] | null;
 }) {
   const { year, month: monthNumber } = month;
-  const load = useMonthLoad(monthKey(month), refreshKey, (signal) =>
+  const [attempt, setAttempt] = React.useState(0);
+  const load = useMonthLoad(monthKey(month), `${refreshKey}:${attempt}`, (signal) =>
     // A microtask later: child effects run before their parent's, and the
     // home screen's outlook request (the hero, first on screen) must not
     // queue behind these eleven on the browser's per-host connection limit.
@@ -219,7 +222,13 @@ export function DashboardPanel({
   );
 
   if (!visible) return null;
-  if (data === null) return <DashboardSkeleton />;
+  if (data === null) {
+    return load.failed ? (
+      <SectionsLoadError retrying={load.pending} onRetry={() => setAttempt((a) => a + 1)} />
+    ) : (
+      <DashboardSkeleton />
+    );
+  }
   return (
     <DashboardSections
       data={data}
@@ -529,6 +538,30 @@ function DashboardSections({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The sections' own load failure: calm, with a retry for them alone. */
+function SectionsLoadError({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="bg-card flex flex-col items-start gap-3 rounded-xl border border-[color:var(--card-border)] p-4 shadow-[var(--card-shadow)] sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="text-body flex items-center gap-2">
+        <WarningCircleIcon weight="fill" className="text-attention-text size-5 shrink-0" />
+        לא הצלחנו לטעון את שאר הנתונים של החודש.
+      </p>
+      <Button
+        variant="outline"
+        className="h-11 gap-1.5 md:h-9"
+        disabled={retrying}
+        onClick={onRetry}
+      >
+        <ArrowsClockwiseIcon className="size-4" />
+        {retrying ? "טוען..." : "נסה שוב"}
+      </Button>
     </div>
   );
 }

@@ -80,7 +80,9 @@ export function FirstSyncHero({
 }) {
   const ours = stream.starting || stream.syncing || Object.keys(stream.bankStates).length > 0;
   const live = stream.starting || stream.syncing;
-  const elsewhere = !ours && outlook.progress.running;
+  // A finished or refused run of ours leaves its rows behind; a run live
+  // elsewhere still takes over the view, as the home screen's polling does.
+  const elsewhere = !live && outlook.progress.running;
   const { banksDone, banksTotal } = outlook.progress;
 
   return (

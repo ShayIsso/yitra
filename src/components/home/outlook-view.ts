@@ -33,6 +33,7 @@ export function closedVerdict(o: ClosedOutlook): ClosedVerdict {
           : "even";
   const target =
     o.target === null ? null : o.overBy !== null ? { over: o.overBy } : { within: o.target };
+  // A display magnitude, not a total: the sign is told in words (`balance`).
   return { balance, by: Math.abs(o.net), target };
 }
 

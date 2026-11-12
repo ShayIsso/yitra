@@ -90,7 +90,38 @@ describe("monthLoadView", () => {
 
   it("reports a failure for the requested month", () => {
     const view = monthLoadView(run([request(1, "2026-11"), fail(1, "2026-11")]));
-    expect(view).toEqual({ data: null, current: true, failed: true, pending: false });
+    expect(view).toEqual({ data: null, current: false, failed: true, pending: false });
+  });
+
+  it("keeps the month's data on screen when its refetch fails", () => {
+    const view = monthLoadView(
+      run([
+        request(1, "2026-11"),
+        ok(1, "2026-11", "before"),
+        request(2, "2026-11"),
+        fail(2, "2026-11"),
+      ]),
+    );
+    expect(view).toEqual({ data: "before", current: true, failed: true, pending: false });
+  });
+
+  it("drops a failure once another month is requested", () => {
+    const view = monthLoadView(
+      run([request(1, "2026-11"), fail(1, "2026-11"), request(2, "2026-10")]),
+    );
+    expect(view).toMatchObject({ failed: false, pending: true });
+  });
+
+  it("lands again after an earlier month's failure", () => {
+    const view = monthLoadView(
+      run([
+        request(1, "2026-11"),
+        fail(1, "2026-11"),
+        request(2, "2026-10"),
+        ok(2, "2026-10", "oct"),
+      ]),
+    );
+    expect(view).toEqual({ data: "oct", current: true, failed: false, pending: false });
   });
 
   it("is pending again while a failed month retries", () => {

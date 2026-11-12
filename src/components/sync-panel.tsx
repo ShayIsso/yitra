@@ -74,7 +74,7 @@ export function resolveBankDisplay(
 
 // ── SSE-over-fetch framing (#246 — EventSource can't read the 409 status) ───
 
-export { takeFrames, formatRelativeAge };
+export { takeFrames };
 
 type SyncPanelProps = {
   banks: Bank[];

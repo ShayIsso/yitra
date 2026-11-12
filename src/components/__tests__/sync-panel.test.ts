@@ -4,12 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   SyncPanelSkeleton,
   resolveBankDisplay,
-  formatRelativeAge,
   takeFrames,
   hasSyncComplete,
   type BankSyncState,
   type ClientSyncEvent,
 } from "@/components/sync-panel";
+import { formatRelativeAge } from "@/components/relative-age";
 import type { SyncRunSummary } from "@/lib/sync/runs";
 
 function persistedRun(overrides: Partial<SyncRunSummary> = {}): SyncRunSummary {

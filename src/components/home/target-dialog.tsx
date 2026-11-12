@@ -124,12 +124,12 @@ export default function TargetDialog({
               אפשר לשנות אותו בכל עת בהגדרות, תחת יעדים חודשיים.
             </p>
             {error && (
-              <p id={`${inputId}-error`} role="alert" className="text-attention-text text-body">
+              <p id={`${inputId}-error`} role="alert" className="text-destructive text-body">
                 {error}
               </p>
             )}
             {savings.status === "failed" && (
-              <p role="alert" className="text-attention-text text-body">
+              <p role="alert" className="text-destructive text-body">
                 לא הצלחנו לקרוא את היעדים הקיימים, ולכן אי אפשר לשמור כרגע. נסו שוב מאוחר יותר.
               </p>
             )}

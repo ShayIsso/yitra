@@ -163,6 +163,23 @@ describe.each([
   });
 });
 
+/**
+ * Non-text marks (WCAG 1.4.11, 3:1): the coral status glyphs on the hero
+ * (a failed bank or a code request in the first sync, home/first-sync-hero.tsx).
+ */
+const MARK_PAIRS: [mark: string, surface: string][] = [["--attention", "--hero"]];
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("non-text contrast (%s)", (_theme, tokens) => {
+  it.each(MARK_PAIRS)("%s on %s meets 3:1", (mark, surface) => {
+    expect(
+      contrast(channels(hex(tokens, mark)), channels(hex(tokens, surface))),
+    ).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe("dark scope", () => {
   // A var() inside a custom property resolves where it is declared, so an
   // alias declared only on :root keeps its light value inside a nested
