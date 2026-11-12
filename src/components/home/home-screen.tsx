@@ -248,6 +248,12 @@ export function HomeScreen({
   const answered = (outlook.data !== null || outlook.failed) && runs !== null;
   /** The outlook failed for the month shown: the hero shows its error, the chart nothing. */
   const outlookFailed = outlook.failed && !outlook.current;
+  /** The next month is loading over the last one's figures, still on screen. */
+  const busy = outlook.pending && !outlook.current && !outlook.failed && shown !== null;
+  const forecast =
+    shown?.outlook.state === "active" || shown?.outlook.state === "thin-history"
+      ? shown.outlook
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -258,7 +264,7 @@ export function HomeScreen({
 
       <MonthHero
         month={month}
-        busy={outlook.pending && !outlook.current && !outlook.failed && shown !== null}
+        busy={busy}
         onStep={(delta) => select(shiftMonth(month, delta))}
         indicator={
           !welcoming && (
@@ -301,9 +307,9 @@ export function HomeScreen({
         </p>
       )}
 
-      {shown?.outlook.state === "active" && !outlookFailed && (
+      {shown && forecast && !outlookFailed && (
         <div key={monthKey(shown.month)} className="enter">
-          <ForecastChart outlook={shown.outlook} month={shown.month} busy={!outlook.current} />
+          <ForecastChart outlook={forecast} month={shown.month} busy={busy} />
         </div>
       )}
 

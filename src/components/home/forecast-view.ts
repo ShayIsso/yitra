@@ -65,8 +65,15 @@ const KEY_STEP: Record<string, number> = {
   PageDown: -7,
 };
 
-/** The day a key moves the scrub to from `day`, or null for a key that doesn't scrub. */
-export function scrubDay(v: ForecastView, day: number, key: string): number | null {
+export type KeyPress = Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">;
+
+/**
+ * The day a key moves the scrub to from `day`, or null for a key that doesn't
+ * scrub. A modified key is the browser's (Alt+Arrow is Back), never a scrub.
+ */
+export function scrubDay(v: ForecastView, day: number, press: KeyPress): number | null {
+  if (press.altKey || press.ctrlKey || press.metaKey || press.shiftKey) return null;
+  const { key } = press;
   if (key === "Home") return 1;
   if (key === "End") return v.daysInMonth;
   const step = KEY_STEP[key];
@@ -114,6 +121,44 @@ export function forecastGeometry(v: ForecastView, box: PlotBox): ForecastGeometr
     actualPath: path(v.actual, 1),
     projectedPath: path(v.projected, v.today),
   };
+}
+
+const WEEK_MARKS = [8, 15, 22];
+/** A label this close to today gives way to today's own label. */
+const TICK_CLEARANCE = 3;
+
+/**
+ * An axis label at `at`'s x. "right"/"left" are physical: the plot's ends,
+ * where the label sits flush inside the edge instead of centred over it.
+ */
+export type AxisTick = {
+  at: number;
+  label: number | "today";
+  align: "center" | "right" | "left";
+};
+
+/**
+ * Both ends of the month, the week marks and today. Today near an end takes
+ * that end's place flush with the edge, so its label never spills past the plot.
+ */
+export function axisTicks(v: ForecastView): AxisTick[] {
+  const { today, daysInMonth } = v;
+  const nearFirst = today - 1 < TICK_CLEARANCE;
+  const nearLast = !nearFirst && daysInMonth - today < TICK_CLEARANCE;
+  const ticks: AxisTick[] = [
+    { at: 1, label: nearFirst ? "today" : 1, align: "right" },
+    ...WEEK_MARKS.filter((d) => Math.abs(d - today) >= TICK_CLEARANCE).map(
+      (d): AxisTick => ({ at: d, label: d, align: "center" }),
+    ),
+    { at: daysInMonth, label: nearLast ? "today" : daysInMonth, align: "left" },
+  ];
+  if (!nearFirst && !nearLast) ticks.push({ at: today, label: "today", align: "center" });
+  return ticks;
+}
+
+/** How much history a projection needs, in words (`THIN_HISTORY_MIN_FULL_MONTHS`). */
+export function thinHistoryNeed(minFullMonths: number): string {
+  return minFullMonths === 1 ? "חודש מלא אחד" : `${minFullMonths} חודשים מלאים`;
 }
 
 /** The day under a pointer `offsetFromRight` pixels from the plot's right edge. */

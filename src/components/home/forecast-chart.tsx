@@ -3,18 +3,23 @@
 import * as React from "react";
 import { ChartLineUpIcon, WarningCircleIcon } from "@/components/icons";
 import { Amount, formatAmount } from "@/components/ui/amount";
+import { useMeasuredSize } from "@/components/use-measured-size";
+import { THIN_HISTORY_MIN_FULL_MONTHS } from "@/lib/budgets/thin-history";
 import { cn } from "@/lib/utils";
 import {
+  axisTicks,
   dayAtOffset,
   forecastGeometry,
   forecastPoint,
   forecastView,
   scrubDay,
+  thinHistoryNeed,
+  type AxisTick,
   type ForecastPoint,
   type ForecastView,
 } from "./forecast-view";
 import { monthName, type HomeMonth } from "./month";
-import type { ActiveOutlook } from "./outlook-view";
+import type { ActiveOutlook, OutlookOf } from "./outlook-view";
 
 /*
  * The month forecast (#318): actual cumulative spend, the target and the
@@ -24,9 +29,6 @@ import type { ActiveOutlook } from "./outlook-view";
 
 const PLOT_TOP = 8;
 const PLOT_BOTTOM = 6;
-const TICK_DAYS = [1, 8, 15, 22];
-/** A fixed tick this close to today gives way to today's own tick. */
-const TICK_CLEARANCE = 3;
 
 /** Early in the month the projection is mostly history: it is named so, not a prediction. */
 const BASIS_COPY = {
@@ -46,39 +48,29 @@ function pointKind(point: ForecastPoint, view: ForecastView): string {
   return point.kind === "actual" ? "בפועל" : BASIS_COPY[view.basis].mark;
 }
 
-function useMeasuredSize<T extends HTMLElement>() {
-  const ref = React.useRef<T | null>(null);
-  const [size, setSize] = React.useState({ width: 0, height: 0 });
-  // Layout effect: the first measurement lands before paint, so the plot never
-  // flashes empty inside its reserved box.
-  React.useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const read = (width: number, height: number) =>
-      setSize((s) => (s.width === width && s.height === height ? s : { width, height }));
-    const rect = el.getBoundingClientRect();
-    read(rect.width, rect.height);
-    const ro = new ResizeObserver(([entry]) => {
-      if (entry) read(entry.contentRect.width, entry.contentRect.height);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, size] as const;
-}
-
+/**
+ * The forecast section for an outlook that can have one: active, or thin
+ * history (no target yet), which, like an active month without a projection,
+ * gets the plain explanation instead of a chart.
+ */
 export function ForecastChart({
   outlook,
   month,
   busy = false,
 }: {
-  outlook: ActiveOutlook;
+  outlook: ActiveOutlook | OutlookOf<"thin-history">;
   month: HomeMonth;
-  /** The next month is loading: this one stays, dimmed. */
+  /**
+   * The next month is loading: this one stays, dimmed and inert, so it can't
+   * be scrubbed or read out as if it were the month asked for.
+   */
   busy?: boolean;
 }) {
   const titleId = React.useId();
-  const view = React.useMemo(() => forecastView(outlook, month), [outlook, month]);
+  const view = React.useMemo(
+    () => (outlook.state === "active" ? forecastView(outlook, month) : null),
+    [outlook, month],
+  );
   return (
     <section
       aria-labelledby={titleId}
@@ -89,9 +81,9 @@ export function ForecastChart({
       )}
     >
       {view === null ? (
-        <ThinHistory titleId={titleId} />
+        <ThinHistory titleId={titleId} hasTarget={outlook.state === "active"} />
       ) : (
-        <Forecast view={view} titleId={titleId} />
+        <Forecast view={view} titleId={titleId} busy={busy} />
       )}
     </section>
   );
@@ -105,7 +97,7 @@ function Title({ id }: { id: string }) {
   );
 }
 
-function ThinHistory({ titleId }: { titleId: string }) {
+function ThinHistory({ titleId, hasTarget }: { titleId: string; hasTarget: boolean }) {
   return (
     <>
       <Title id={titleId} />
@@ -114,16 +106,16 @@ function ThinHistory({ titleId }: { titleId: string }) {
           <ChartLineUpIcon weight="duotone" className="size-5" />
         </span>
         <p className="text-muted-foreground text-body max-w-prose text-pretty">
-          כדי להראות לאן החודש הולך צריך לפחות חודש מלא אחד של היסטוריה מכל החשבונות המחוברים. עד אז
-          אין כאן צפי, רק מה שכבר יצא וכמה נשאר.
+          {`כדי להעריך לאן החודש הולך צריך לפחות ${thinHistoryNeed(THIN_HISTORY_MIN_FULL_MONTHS)} של היסטוריה מכל החשבונות המחוברים. עד אז מוצג רק מה שכבר יצא${hasTarget ? " וכמה נשאר" : ""}.`}
         </p>
       </div>
     </>
   );
 }
 
-function Forecast({ view, titleId }: { view: ForecastView; titleId: string }) {
-  const [scrubbed, setScrubbed] = React.useState<number | null>(null);
+function Forecast({ view, titleId, busy }: { view: ForecastView; titleId: string; busy: boolean }) {
+  const [scrub, setScrubbed] = React.useState<number | null>(null);
+  const scrubbed = busy ? null : scrub;
   const readoutId = React.useId();
   const point = forecastPoint(view, scrubbed ?? view.today);
   const copy = BASIS_COPY[view.basis];
@@ -164,6 +156,7 @@ function Forecast({ view, titleId }: { view: ForecastView; titleId: string }) {
 
       <Plot
         view={view}
+        busy={busy}
         scrubbed={scrubbed}
         point={point}
         readoutId={readoutId}
@@ -175,12 +168,14 @@ function Forecast({ view, titleId }: { view: ForecastView; titleId: string }) {
 
 function Plot({
   view,
+  busy,
   scrubbed,
   point,
   readoutId,
   onScrub,
 }: {
   view: ForecastView;
+  busy: boolean;
   scrubbed: number | null;
   point: ForecastPoint;
   readoutId: string;
@@ -200,14 +195,15 @@ function Plot({
     return dayAtOffset(view, rect.right - e.clientX, rect.width);
   }
 
-  const ticks = [
-    ...TICK_DAYS.filter((d) => d < view.daysInMonth && Math.abs(d - view.today) >= TICK_CLEARANCE),
-    view.today,
-    ...(view.daysInMonth - view.today >= TICK_CLEARANCE ? [view.daysInMonth] : []),
-  ];
+  // Pointer scrubbing never takes focus (see onMouseDown), so focus means the
+  // keyboard: a released pointer returns a focused slider to today, the value
+  // it announces, and otherwise clears the marker.
+  function release(el: HTMLElement) {
+    onScrub(document.activeElement === el ? view.today : null);
+  }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div inert={busy} className="flex flex-col gap-1.5">
       <div
         ref={ref}
         role="slider"
@@ -220,7 +216,7 @@ function Plot({
         aria-valuenow={point.day}
         aria-valuetext={`${dayLabel(point.day, view)}: ${formatAmount(point.amount, "ILS", 0)}, ${pointKind(point, view)}`}
         onKeyDown={(e) => {
-          const next = scrubDay(view, scrubbed ?? view.today, e.key);
+          const next = scrubDay(view, scrubbed ?? view.today, e);
           if (next === null) return;
           e.preventDefault();
           onScrub(next);
@@ -229,6 +225,7 @@ function Plot({
         // announced value never disagree.
         onFocus={() => onScrub((day) => day ?? view.today)}
         onBlur={() => onScrub(null)}
+        onMouseDown={(e) => e.preventDefault()}
         onPointerDown={(e) => {
           // Keep a touch drag on the plot even when it strays off it.
           if (e.pointerType !== "mouse") e.currentTarget.setPointerCapture(e.pointerId);
@@ -237,11 +234,13 @@ function Plot({
         onPointerMove={(e) => {
           if (e.pointerType === "mouse" || e.buttons > 0) onScrub(dayAt(e));
         }}
-        onPointerLeave={(e) => {
-          if (e.pointerType !== "mouse") return;
-          onScrub(e.currentTarget === document.activeElement ? view.today : null);
+        onPointerUp={(e) => {
+          if (e.pointerType !== "mouse") release(e.currentTarget);
         }}
-        onPointerCancel={() => onScrub(null)}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") release(e.currentTarget);
+        }}
+        onPointerCancel={(e) => release(e.currentTarget)}
         className="focus-visible:ring-ring/50 relative h-28 w-full cursor-crosshair touch-pan-y rounded-lg outline-none select-none focus-visible:ring-3 sm:h-36"
       >
         {geometry && (
@@ -307,23 +306,30 @@ function Plot({
         className="text-muted-foreground text-caption relative h-4 tabular-nums"
       >
         {geometry &&
-          ticks.map((d) => (
+          axisTicks(view).map((t) => (
             <span
-              key={d}
+              key={t.at}
               className={cn(
                 "absolute top-0 whitespace-nowrap",
-                d === 1 ? "-translate-x-full" : d === view.daysInMonth ? "" : "-translate-x-1/2",
-                d === view.today && "text-foreground font-semibold",
+                TICK_ALIGN[t.align],
+                t.label === "today" && "text-foreground font-semibold",
               )}
-              style={{ left: geometry.x(d) }}
+              style={{ left: geometry.x(t.at) }}
             >
-              {d === view.today ? "היום" : d}
+              {t.label === "today" ? "היום" : t.label}
             </span>
           ))}
       </div>
     </div>
   );
 }
+
+/** Day 1's x is the plot's right edge, the last day's its left edge. */
+const TICK_ALIGN: Record<AxisTick["align"], string> = {
+  right: "-translate-x-full",
+  center: "-translate-x-1/2",
+  left: "",
+};
 
 function Swatch({ className }: { className: string }) {
   return <span aria-hidden="true" className={cn("inline-block w-4 border-t-2", className)} />;

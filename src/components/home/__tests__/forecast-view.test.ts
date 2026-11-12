@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  axisTicks,
   dayAtOffset,
   forecastGeometry,
   forecastPoint,
   forecastView,
   scrubDay,
+  thinHistoryNeed,
 } from "@/components/home/forecast-view";
 import type { ActiveOutlook } from "@/components/home/outlook-view";
 
@@ -97,33 +99,59 @@ describe("forecastPoint", () => {
 
 describe("scrubDay", () => {
   const view = forecastView(active(), NOV)!;
+  const press = (
+    key: string,
+    mods: Partial<Record<"altKey" | "ctrlKey" | "metaKey" | "shiftKey", boolean>> = {},
+  ) => ({
+    key,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    ...mods,
+  });
 
   it("moves to a later day on the left arrow, the way time runs in RTL", () => {
-    expect(scrubDay(view, 10, "ArrowLeft")).toBe(11);
+    expect(scrubDay(view, 10, press("ArrowLeft"))).toBe(11);
   });
 
   it("moves to an earlier day on the right arrow", () => {
-    expect(scrubDay(view, 10, "ArrowRight")).toBe(9);
+    expect(scrubDay(view, 10, press("ArrowRight"))).toBe(9);
   });
 
   it("moves later on up and earlier on down", () => {
-    expect([scrubDay(view, 10, "ArrowUp"), scrubDay(view, 10, "ArrowDown")]).toEqual([11, 9]);
+    expect([scrubDay(view, 10, press("ArrowUp")), scrubDay(view, 10, press("ArrowDown"))]).toEqual([
+      11, 9,
+    ]);
   });
 
   it("jumps a week on page up and page down", () => {
-    expect([scrubDay(view, 10, "PageUp"), scrubDay(view, 10, "PageDown")]).toEqual([17, 3]);
+    expect([scrubDay(view, 10, press("PageUp")), scrubDay(view, 10, press("PageDown"))]).toEqual([
+      17, 3,
+    ]);
   });
 
   it("jumps to the month's first and last day on home and end", () => {
-    expect([scrubDay(view, 10, "Home"), scrubDay(view, 10, "End")]).toEqual([1, 30]);
+    expect([scrubDay(view, 10, press("Home")), scrubDay(view, 10, press("End"))]).toEqual([1, 30]);
   });
 
   it("stops at the month's edges", () => {
-    expect([scrubDay(view, 30, "ArrowLeft"), scrubDay(view, 2, "PageDown")]).toEqual([30, 1]);
+    expect([scrubDay(view, 30, press("ArrowLeft")), scrubDay(view, 2, press("PageDown"))]).toEqual([
+      30, 1,
+    ]);
   });
 
   it("ignores other keys", () => {
-    expect(scrubDay(view, 10, "Enter")).toBeNull();
+    expect(scrubDay(view, 10, press("Enter"))).toBeNull();
+  });
+
+  it("leaves modified keys to the browser", () => {
+    expect([
+      scrubDay(view, 10, press("ArrowLeft", { altKey: true })),
+      scrubDay(view, 10, press("Home", { ctrlKey: true })),
+      scrubDay(view, 10, press("ArrowRight", { shiftKey: true })),
+      scrubDay(view, 10, press("End", { metaKey: true })),
+    ]).toEqual([null, null, null, null]);
   });
 });
 
@@ -196,5 +224,63 @@ describe("dayAtOffset", () => {
 
   it("reads today on a plot that has no width yet", () => {
     expect(dayAtOffset(view, 0, 0)).toBe(4);
+  });
+});
+
+describe("axisTicks", () => {
+  const on = (today: number) => {
+    const actual = Array.from({ length: today }, (_, i) => 100 * (i + 1));
+    const projected = Array.from({ length: 31 - today }, (_, i) => 100 * (today + i));
+    return axisTicks(
+      forecastView(
+        active({ projection: { total: projected[projected.length - 1], actual, projected } }),
+        NOV,
+      )!,
+    );
+  };
+
+  it("labels both ends, the week marks and today mid-month", () => {
+    expect(on(12)).toEqual([
+      { at: 1, label: 1, align: "right" },
+      { at: 8, label: 8, align: "center" },
+      { at: 15, label: 15, align: "center" },
+      { at: 22, label: 22, align: "center" },
+      { at: 30, label: 30, align: "left" },
+      { at: 12, label: "today", align: "center" },
+    ]);
+  });
+
+  it("drops a week mark that would crowd today", () => {
+    expect(on(14).map((t) => t.label)).toEqual([1, 8, 22, 30, "today"]);
+  });
+
+  it("puts today flush on the right end when it is within a few days of day 1", () => {
+    expect(on(2)).toEqual([
+      { at: 1, label: "today", align: "right" },
+      { at: 8, label: 8, align: "center" },
+      { at: 15, label: 15, align: "center" },
+      { at: 22, label: 22, align: "center" },
+      { at: 30, label: 30, align: "left" },
+    ]);
+  });
+
+  it("puts today flush on the left end when it is within a few days of the last day", () => {
+    expect(on(29)).toEqual([
+      { at: 1, label: 1, align: "right" },
+      { at: 8, label: 8, align: "center" },
+      { at: 15, label: 15, align: "center" },
+      { at: 22, label: 22, align: "center" },
+      { at: 30, label: "today", align: "left" },
+    ]);
+  });
+});
+
+describe("thinHistoryNeed", () => {
+  it("asks for one full month in words", () => {
+    expect(thinHistoryNeed(1)).toBe("חודש מלא אחד");
+  });
+
+  it("counts several full months", () => {
+    expect(thinHistoryNeed(3)).toBe("3 חודשים מלאים");
   });
 });

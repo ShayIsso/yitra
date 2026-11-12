@@ -181,6 +181,8 @@ function SpentSoFar({ spent }: { spent: number }) {
   );
 }
 
+const NO_TARGET_NOTE = "עוד אין יעד הוצאות חודשי. עם יעד אפשר לראות כמה נשאר לך החודש.";
+
 const NOTE =
   "bg-hero-foreground/10 mt-5 flex flex-col gap-3 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between";
 
@@ -211,7 +213,7 @@ export function NoTargetBody({
               עם יעד אפשר לראות כמה נשאר לך החודש.
             </>
           ) : (
-            "עוד אין יעד הוצאות חודשי. עם יעד אפשר לראות כמה נשאר לך החודש."
+            NO_TARGET_NOTE
           )}
         </p>
         <button type="button" onClick={onSetTarget} className={cn(HERO_BUTTON, "shrink-0")}>
@@ -236,10 +238,8 @@ export function ThinHistoryBody({
       <SpentSoFar spent={outlook.spent} />
       <AsOf asOf={outlook.asOf} nowMs={nowMs} />
       <div className={NOTE}>
-        <p className="text-body max-w-prose text-pretty">
-          כדי להעריך איך החודש ייגמר צריך לפחות חודש מלא אחד של היסטוריה מכל החשבונות המחוברים. עד
-          אז מוצג כאן רק מה שכבר יצא.
-        </p>
+        {/* Why there is no estimate yet is the forecast section's to say, right below. */}
+        <p className="text-body max-w-prose text-pretty">{NO_TARGET_NOTE}</p>
         <button
           type="button"
           onClick={onSetTarget}
