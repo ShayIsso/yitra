@@ -21,7 +21,7 @@ import {
   type RollupCategory,
   type TransactionWithCategory,
 } from "@/lib/analytics";
-import { isMonthHistoryComplete } from "@/lib/budgets/outlook";
+import { isMonthHistoryComplete } from "@/lib/budgets";
 import { buildTrendsReport, type TrendsReport } from "./trends";
 
 const HOME_TREND_MONTHS = 12;
@@ -188,7 +188,9 @@ function rowsByMonth(rows: readonly HomeTrendRow[]): (m: InsightMonth) => HomeTr
   const byIndex = new Map<number, HomeTrendRow[]>();
   for (const r of rows) {
     const index = monthIndex(monthOf(r.date));
-    byIndex.set(index, [...(byIndex.get(index) ?? []), r]);
+    const list = byIndex.get(index);
+    if (list) list.push(r);
+    else byIndex.set(index, [r]);
   }
   return (m) => byIndex.get(monthIndex(m)) ?? [];
 }

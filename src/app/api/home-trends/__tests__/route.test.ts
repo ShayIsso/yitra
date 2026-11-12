@@ -6,7 +6,8 @@ vi.mock("@/lib/analytics", async (importOriginal) => ({
   getRollupCategories: vi.fn(async () => []),
 }));
 
-vi.mock("@/lib/budgets", () => ({
+vi.mock("@/lib/budgets", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/budgets")>()),
   getHistoryCompleteSince: vi.fn(async () => null),
 }));
 

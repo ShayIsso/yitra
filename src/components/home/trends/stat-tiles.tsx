@@ -118,12 +118,16 @@ export function StatTiles({
             <TileHead tile={tile} />
             <p className="text-title font-extrabold tracking-tight">
               <TileValue tile={tile} totals={totals} />
+              {tile.key === "investment" && totals.investment < 0 && (
+                // Net deployment below zero: more came back than went in (CONTEXT.md "net outflow").
+                <span className="text-caption text-muted-foreground ms-2 font-normal tracking-normal">
+                  משיכה נטו
+                </span>
+              )}
             </p>
             <p className="text-caption text-muted-foreground flex min-h-5 items-center">
               {tile.key === "savingsRate" && totals.savingsRate === null ? (
                 rateExplainer(totals)
-              ) : tile.key === "investment" && totals.investment < 0 ? (
-                "משיכה נטו מהשקעות"
               ) : change && comparedTo ? (
                 <DeltaChip change={change} good={tile.good} comparedTo={comparedTo} />
               ) : null}

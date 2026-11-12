@@ -52,5 +52,9 @@ export function monthToDateWindow<R extends { date: string }>(
     return { basis: "whole-month", month: [...rows.month], previous: [...rows.previous] };
   }
   const upTo = (list: readonly R[]) => list.filter((r) => dayOf(r) <= position.day);
-  return { basis: "month-to-date", month: upTo(rows.month), previous: upTo(rows.previous) };
+  return {
+    basis: "month-to-date",
+    month: countedThroughToday(month, today, rows.month),
+    previous: upTo(rows.previous),
+  };
 }

@@ -5,6 +5,7 @@ import { CaretDownIcon, CaretLeftIcon, ChartPieSliceIcon } from "@/components/ic
 import { Amount } from "@/components/ui/amount";
 import { CategoryDot } from "@/components/category-dot";
 import { DeltaChip } from "@/components/reports/parts";
+import { Bone } from "../sections/parts";
 import { formatPercent } from "@/components/reports/format";
 import { cn } from "@/lib/utils";
 import type { HomeCategoryTrend, QuietCategory } from "@/lib/reports/home-trends";
@@ -16,7 +17,7 @@ const CATEGORY_ROWS_VISIBLE = 6;
 
 const CARD =
   "bg-card overflow-hidden rounded-xl border border-[color:var(--card-border)] shadow-[var(--card-shadow)]";
-const ROW = "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2 text-start";
+const CATEGORY_ROW = "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2 text-start";
 
 function CategoryRow({
   row,
@@ -89,7 +90,7 @@ function GroupRow({
         aria-controls={childrenId}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          ROW,
+          CATEGORY_ROW,
           "hover:bg-muted/60 focus-visible:ring-ring/50 outline-none focus-visible:ring-3",
         )}
       >
@@ -102,7 +103,7 @@ function GroupRow({
       </button>
       <ul id={childrenId} hidden={!open} className="ps-7">
         {row.children.map((c) => (
-          <li key={c.categoryId} className={ROW}>
+          <li key={c.categoryId} className={CATEGORY_ROW}>
             <CategoryRow row={c} selectedIndex={selectedIndex} comparedTo={comparedTo} child />
           </li>
         ))}
@@ -168,7 +169,7 @@ export function CategoryList({
                   comparedTo={comparedTo}
                 />
               ) : (
-                <li key={row.categoryId} className={cn(ROW, "ps-10")}>
+                <li key={row.categoryId} className={cn(CATEGORY_ROW, "ps-10")}>
                   <CategoryRow row={row} selectedIndex={selectedIndex} comparedTo={comparedTo} />
                 </li>
               ),
@@ -218,18 +219,22 @@ export function CategoryListSkeleton() {
   return (
     <div aria-hidden className={CARD}>
       <p className="text-body flex items-baseline justify-between gap-3 px-4 pt-4 pb-1">
-        <span className="bg-muted inline-block h-4 w-28 animate-pulse rounded-lg" />
-        <span className="bg-muted inline-block h-4 w-16 animate-pulse rounded-lg" />
+        <Bone className="w-28" />
+        <Bone className="w-16" />
       </p>
       <ul className="p-1.5">
         {Array.from({ length: CATEGORY_ROWS_VISIBLE }, (_, i) => (
-          <li key={i} className={cn(ROW, "ps-10")}>
+          <li key={i} className={cn(CATEGORY_ROW, "ps-10")}>
             <span className="flex min-w-0 flex-1 flex-col gap-2">
-              <span className="bg-muted h-4 w-24 animate-pulse rounded-lg" />
+              <span className="text-body">
+                <Bone className="w-24" />
+              </span>
               <span className="bg-muted h-1.5 w-full animate-pulse rounded-full" />
             </span>
             <span className="bg-muted h-6 w-12 shrink-0 animate-pulse rounded-lg sm:w-16" />
-            <span className="bg-muted h-4 w-[5.5rem] shrink-0 animate-pulse rounded-lg" />
+            <span className="text-body w-[5.5rem] shrink-0 text-end">
+              <Bone className="w-16" />
+            </span>
           </li>
         ))}
       </ul>

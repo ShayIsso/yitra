@@ -1,5 +1,11 @@
 import type { MonthChange } from "@/lib/analytics/month-metrics";
-import { HEBREW_MONTHS, formatPointsDelta, formatSignedPercent } from "@/components/reports/format";
+import { toAgorot } from "@/lib/analytics/agorot";
+import {
+  formatPointsDelta,
+  formatSignedILS,
+  formatSignedPercent,
+} from "@/components/reports/format";
+import { monthName } from "../month";
 import type { DeltaView } from "@/components/reports/parts";
 
 /**
@@ -8,14 +14,6 @@ import type { DeltaView } from "@/components/reports/parts";
  * computed from `/api/home-trends`; these helpers only word and place them,
  * and `DeltaChip` judges them.
  */
-
-const SIGNED_ILS = new Intl.NumberFormat("he-IL", {
-  style: "currency",
-  currency: "ILS",
-  signDisplay: "exceptZero",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 const FLAT: DeltaView = { direction: "flat", label: "ללא שינוי" };
 
@@ -31,7 +29,7 @@ export function changeView(change: MonthChange): DeltaView {
     label:
       change.percent !== null && Math.round(change.percent) !== 0
         ? formatSignedPercent(change.percent)
-        : SIGNED_ILS.format(Math.round(change.amount)),
+        : formatSignedILS(change.amount),
   };
 }
 
@@ -55,13 +53,11 @@ export function comparisonLabel({
   basis: "month-to-date" | "whole-month";
   previousMonth: { year: number; month: number };
 }): string {
-  const name = HEBREW_MONTHS[previousMonth.month - 1];
+  const name = monthName(previousMonth);
   return basis === "month-to-date" ? `אותם ימים ב${name}` : name;
 }
 
 export type SparkPoint = { x: number; y: number } | null;
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Where each of `values` sits in a `width` × `height` box: the oldest at the
@@ -83,11 +79,11 @@ export function sparklinePoints(
     v === null
       ? null
       : {
-          x: round2(width - i * step),
+          x: toAgorot(width - i * step),
           y:
             max === min
               ? height / 2
-              : round2(height - pad - ((v - min) / (max - min)) * (height - 2 * pad)),
+              : toAgorot(height - pad - ((v - min) / (max - min)) * (height - 2 * pad)),
         },
   );
 }

@@ -6,6 +6,7 @@ import { formatILS, HEBREW_MONTHS, HEBREW_MONTHS_SHORT } from "@/components/repo
 import { cn } from "@/lib/utils";
 import type { HomeTrendPoint } from "@/lib/reports/home-trends";
 import { homeHref, isBrowsable, sameMonth, type HomeMonth, type MonthRange } from "../month";
+import { Bone } from "../sections/parts";
 import { chartColumns } from "./trends-view";
 
 const CHART_CARD =
@@ -163,10 +164,14 @@ export function YearChartSkeleton() {
     <div aria-hidden className={CHART_CARD}>
       <div className={HEAD}>
         <div className={LINE}>
-          <span className="bg-muted inline-block h-3 w-40 animate-pulse rounded-lg" />
+          <span className="text-caption">
+            <Bone className="w-40" />
+          </span>
         </div>
         <div className={LINE}>
-          <span className="bg-muted inline-block h-3 w-32 animate-pulse rounded-lg" />
+          <span className="text-caption">
+            <Bone className="w-32" />
+          </span>
         </div>
       </div>
       <div className={PLOT}>
